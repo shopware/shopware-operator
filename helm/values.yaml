@@ -1,0 +1,52 @@
+# Default values for the operator.
+# This is a YAML-formatted file.
+# Declare variables that will be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/shopware/shopware-operator
+  # if not set appVersion field from Chart.yaml is used
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# rbac: settings for deployer RBAC creation
+rbac:
+  # rbac.create: if false, RBAC resources should be in place
+  create: true
+
+# serviceAccount: settings for Service Accounts used by the deployer
+serviceAccount:
+  # serviceAccount.create: Whether to create the Service Accounts or not
+  create: true
+
+# These are the defaults of the operator SDK. Feel free to adjust to your needs.
+resources:
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  requests:
+    cpu: 10m
+    memory: 64Mi
+
+tolerations: []
+# affinity:
+#   nodeAffinity:
+#     requiredDuringSchedulingIgnoredDuringExecution:
+#       nodeSelectorTerms:
+#       - matchExpressions:
+#         - key: kubernetes.io/arch
+#           operator: In
+#           values:
+#           - amd64
+#           - arm64
+#         - key: kubernetes.io/os
+#           operator: In
+#           values:
+#           - linux
+
+labels: {}
+podAnnotations: {}
+
+logStructured: false
+logLevel: "INFO"
