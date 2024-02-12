@@ -1,0 +1,146 @@
+package job
+
+import (
+	"context"
+	"fmt"
+
+	v1 "github.com/shopware/shopware-operator/api/v1"
+	"github.com/shopware/shopware-operator/internal/util"
+	"golang.org/x/exp/maps"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+func GetSetupJob(ctx context.Context, client client.Client, store *v1.Store) (*batchv1.Job, error) {
+	setup := SetupJob(store)
+	search := &batchv1.Job{
+		ObjectMeta: setup.ObjectMeta,
+	}
+	err := client.Get(ctx, types.NamespacedName{
+		Namespace: setup.Namespace,
+		Name:      setup.Name,
+	}, search)
+	return search, err
+}
+
+func SetupJob(store *v1.Store) *batchv1.Job {
+	parallelism := int32(1)
+	completions := int32(1)
+
+	labels := map[string]string{
+		"type": "setup",
+	}
+	maps.Copy(labels, util.GetDefaultLabels(store))
+
+	var command string
+	if store.Spec.SetupHook.Before != "" {
+		command = fmt.Sprintf("%s && ", store.Spec.SetupHook.Before)
+	}
+	command = fmt.Sprintf("%s /setup", command)
+	if store.Spec.SetupHook.After != "" {
+		command = fmt.Sprintf("%s && %s", command, store.Spec.SetupHook.After)
+	}
+
+	envs := append(store.GetEnv(),
+		corev1.EnvVar{
+			Name: "INSTALL_ADMIN_PASSWORD",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: store.GetSecretName(),
+					},
+					Key: "admin-password",
+				},
+			},
+		},
+		corev1.EnvVar{
+			Name:  "INSTALL_ADMIN_USERNAME",
+			Value: store.Spec.AdminCredentials.Username,
+		},
+	)
+
+	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
+		Name:            "shopware-setup",
+		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
+		Image:           store.Spec.Container.Image,
+		Command:         []string{"sh", "-c"},
+		Args:            []string{command},
+		Env:             envs,
+	})
+
+	return &batchv1.Job{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Job",
+			APIVersion: "batch/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        GetSetupJobName(store),
+			Namespace:   store.Namespace,
+			Labels:      labels,
+			Annotations: store.Spec.Container.Annotations,
+		},
+		Spec: batchv1.JobSpec{
+			Parallelism: &parallelism,
+			Completions: &completions,
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: corev1.PodSpec{
+					Volumes:                   store.Spec.Container.Volumes,
+					TopologySpreadConstraints: store.Spec.Container.TopologySpreadConstraints,
+					NodeSelector:              store.Spec.Container.NodeSelector,
+					ImagePullSecrets:          store.Spec.Container.ImagePullSecrets,
+					RestartPolicy:             "Never",
+					Containers:                containers,
+					SecurityContext:           store.Spec.Container.SecurityContext,
+				},
+			},
+		},
+	}
+}
+
+func GetSetupJobName(store *v1.Store) string {
+	return fmt.Sprintf("%s-setup", store.Name)
+}
+
+func DeleteSetupJob(ctx context.Context, c client.Client, store *v1.Store) error {
+	job, err := GetSetupJob(ctx, c, store)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	return c.Delete(ctx, job, client.PropagationPolicy("Foreground"))
+}
+
+// This is just a soft check, use container check for a clean check
+func IsSetupJobCompleted(
+	ctx context.Context,
+	c client.Client,
+	store *v1.Store,
+) (bool, error) {
+	setup, err := GetSetupJob(ctx, c, store)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	if setup == nil {
+		return false, nil
+	}
+
+	// No active jobs are running and more of them are succeeded
+	if setup.Status.Active <= 0 && setup.Status.Succeeded >= 1 {
+		return true, nil
+	}
+	return false, nil
+}

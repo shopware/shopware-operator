@@ -1,0 +1,96 @@
+# This is an example .goreleaser.yml file with some sensible defaults.
+# Make sure to check the documentation at https://goreleaser.com
+
+# The lines below are called `modelines`. See `:help modeline`
+# Feel free to remove those if you don't want/need to use them.
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+project_name: shopware-operator
+version: 1
+
+before:
+  hooks:
+    - go mod tidy
+    - make generate
+    - make manifests
+    - make licenses path=.
+
+builds:
+  - id: manager
+    binary: manager
+    main: ./cmd
+    goamd64:
+      - v3
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+
+dockers:
+  - id: operator-amd64
+    goarch: amd64
+    use: buildx
+    extra_files:
+      - LICENSE
+      - third-party-licenses.md
+    goamd64: v3
+    dockerfile: build/Dockerfile
+    image_templates:
+      - "ghcr.io/shopware/{{.ProjectName}}:{{.Version}}-amd64"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      #TODO: Can maybe removed in the future. Ask Patrick Weyck
+      #- "--builder=buildx-builder"
+
+  - id: operator-arm64
+    goarch: arm64
+    use: buildx
+    extra_files:
+      - LICENSE
+      - third-party-licenses.md
+    goamd64: v3
+    dockerfile: build/Dockerfile
+    image_templates:
+      - "ghcr.io/shopware/{{.ProjectName}}:{{.Version}}-arm64"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      #TODO: Can maybe removed in the future. Ask Patrick Weyck
+      #- "--builder=buildx-builder"
+
+docker_manifests:
+  - id: operator-merge
+    name_template: "ghcr.io/shopware/{{.ProjectName}}:{{.Version}}"
+    image_templates:
+      - "ghcr.io/shopware/{{.ProjectName}}:{{.Version}}-amd64"
+      - "ghcr.io/shopware/{{.ProjectName}}:{{.Version}}-arm64"
+
+archives:
+  - format: tar.gz
+    # this name template makes the OS and Arch compatible with the results of `uname`.
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    # use zip for windows archives
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - release/*
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+release:
+  make_latest: true
+  disable: false
+  skip_upload: false
+  mode: append
