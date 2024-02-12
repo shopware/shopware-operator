@@ -1,0 +1,42 @@
+name: Bug Report
+description: Make a bug report.
+labels: ["bug", "triage"]
+projects: ["shopware-redstone/1"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Tell us, how we can reproduce the issue?
+    validations:
+      required: false
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What should happened?
+      description: Tell us, what did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: what-actually
+    attributes:
+      label: What actually happened?
+      description: Tell us, what actually happen?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Please copy and paste any relevant log output. This will be automatically formatted into code, so no need for backticks.
+      render: shell
+  - type: textarea
+    id: crd
+    attributes:
+      label: Your custom resource
+      description: Please copy and paste the custom resource for the operator. This will be automatically formatted into code, so no need for backticks. Please make sure to remove Credentials!!!
+      render: shell

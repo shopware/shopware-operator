@@ -1,0 +1,146 @@
+# The name of this file is used in the helm charts repo for octo-sts.
+# Please keep that in mind if you want to rename this file.
+name: Build and push
+
+on:
+  push:
+    branches:
+      - 'main'
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.get_tag.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: paulhatch/semantic-version@v5.3.0
+        with:
+          # The prefix to use to identify tags
+          tag_prefix: ""
+          # A string which, if present in a git commit, indicates that a change represents a
+          # major (breaking) change, supports regular expressions wrapped with '/'
+          major_pattern: "(MAJOR)"
+          # A string which indicates the flags used by the `major_pattern` regular expression. Supported flags: idgs
+          major_regexp_flags: ""
+          # Same as above except indicating a minor change, supports regular expressions wrapped with '/'
+          minor_pattern: "(MINOR)"
+          # A string which indicates the flags used by the `minor_pattern` regular expression. Supported flags: idgs
+          minor_regexp_flags: ""
+          # A string to determine the format of the version output
+          version_format: "${major}.${minor}.${patch}-prerelease${increment}"
+          # Optional path to check for changes. If any changes are detected in the path the
+          # 'changed' output will true. Enter multiple paths separated by spaces.
+          #change_path: "src/my-service"
+          # Named version, will be used as suffix for name version tag
+          #namespace: my-service
+          # If this is set to true, *every* commit will be treated as a new version.
+          bump_each_commit: false
+          # If bump_each_commit is also set to true, setting this value will cause the version to increment only if the pattern specified is matched.
+          bump_each_commit_patch_pattern: ""
+          # If true, the body of commits will also be searched for major/minor patterns to determine the version type.
+          search_commit_body: true
+          # The output method used to generate list of users, 'csv' or 'json'.
+          user_format_type: "csv"
+          # Prevents pre-v1.0.0 version from automatically incrementing the major version.
+          # If enabled, when the major version is 0, major releases will be treated as minor and minor as patch. Note that the version_type output is unchanged.
+          enable_prerelease_mode: false
+          # If enabled, diagnostic information will be added to the action output.
+          debug: false
+          # If true, the branch will be used to select the maximum version.
+          version_from_branch: false
+
+      - name: Run goreleaser on release branch
+        id: goreleaser
+        if: ${{ startsWith(github.ref, 'refs/heads/main') }}
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v1'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run goreleaser on developer branch
+        if: ${{ ! startsWith(github.ref, 'refs/heads/main') }}
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v1'
+          args: release --clean --snapshot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set tag and build resources
+        if: ${{ startsWith(github.ref, 'refs/heads/main') }}
+        id: get_tag
+        run: |
+          echo ${{ toJSON(steps.goreleaser.outputs.metadata) }}
+          set -eux
+          DATA=$(echo ${{ toJSON(steps.goreleaser.outputs.metadata) }} | jq -r '.tag')
+          echo "tag=$DATA" >> "$GITHUB_OUTPUT"
+          make resources path=release
+
+      - name: Update release with kube generated files
+        if: ${{ startsWith(github.ref, 'refs/heads/main') }}
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ steps.get_tag.outputs.tag }}
+          overwrite: true
+          file_glob: true
+          file: release/*.yaml
+
+  release-helm-chart:
+    runs-on: ubuntu-latest
+    if: ${{ startsWith(github.ref, 'refs/heads/main') }}
+    needs: [goreleaser]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: octo-sts/action@v1.0.0
+        id: octo-sts
+        with:
+          scope: shopware/helm-charts
+          identity: shopware-operator
+
+      - name: make pr on helm-charts for this release
+        run: |
+          tag=${{ needs.goreleaser.outputs.tag }}
+          git clone https://oauth2:${GITHUB_TOKEN}@github.com/shopware/helm-charts.git
+          rm -rf helm-charts/charts/shopware-operator
+          make helm version=${tag} path=helm-charts/charts/shopware-operator
+          cd helm-charts
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+          git checkout -b auto-release-${tag}
+          git add .
+          git commit -m "New shopware operator image"
+          git push origin auto-release-${tag}
+          gh pr create --title "Autorelease from shopware operator" --body "Auto pr from shopware operator" --head "auto-release-${tag}" --base main
+        env:
+          GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
