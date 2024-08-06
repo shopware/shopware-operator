@@ -1,7 +1,7 @@
 name: Bug Report
 description: Make a bug report.
 labels: ["bug", "triage"]
-projects: ["shopware-redstone/1"]
+projects: ["shopware/17"]
 body:
   - type: markdown
     attributes:
