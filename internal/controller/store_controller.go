@@ -19,6 +19,8 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -32,6 +34,8 @@ import (
 // StoreReconciler reconciles a Store object
 type StoreReconciler struct {
 	client.Client
+	Clientset            *kubernetes.Clientset
+	RestConfig           *rest.Config
 	Scheme               *runtime.Scheme
 	Recorder             record.EventRecorder
 	DisableServiceChecks bool
@@ -53,7 +57,10 @@ func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *StoreReconciler) findStoreForReconcile(ctx context.Context, secret client.Object) []reconcile.Request {
+func (r *StoreReconciler) findStoreForReconcile(
+	ctx context.Context,
+	secret client.Object,
+) []reconcile.Request {
 	stores := &v1.StoreList{}
 	err := r.List(ctx, stores)
 	if err != nil {
@@ -63,7 +70,8 @@ func (r *StoreReconciler) findStoreForReconcile(ctx context.Context, secret clie
 	var requests []reconcile.Request
 	for _, store := range stores.Items {
 		if store.Spec.Database.PasswordSecretRef.Name == secret.GetName() {
-			log.FromContext(ctx).Info("Do reconcile on store because db secret has changed", "Store", store.Name)
+			log.FromContext(ctx).
+				Info("Do reconcile on store because db secret has changed", "Store", store.Name)
 			requests = append(requests, reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Namespace: store.Namespace,
@@ -85,7 +93,10 @@ func (r *StoreReconciler) findStoreForReconcile(ctx context.Context, secret clie
 //+kubebuilder:rbac:groups="batch",namespace=default,resources=jobs,verbs=get;list;watch;create;delete
 //+kubebuilder:rbac:groups="networking.k8s.io",namespace=default,resources=ingresses,verbs=get;list;watch;create;patch
 
-func (r *StoreReconciler) Reconcile(ctx context.Context, req ctrl.Request) (rr ctrl.Result, err error) {
+func (r *StoreReconciler) Reconcile(
+	ctx context.Context,
+	req ctrl.Request,
+) (rr ctrl.Result, err error) {
 	log := log.FromContext(ctx)
 
 	rr = ctrl.Result{RequeueAfter: 10 * time.Second}
@@ -277,20 +288,26 @@ func (r *StoreReconciler) ensureAppSecrets(ctx context.Context, store *v1.Store)
 }
 
 func (r *StoreReconciler) reconcileServices(ctx context.Context, store *v1.Store) (err error) {
-	var changed bool
-	obj := service.StoreService(store)
-
-	if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
-		return fmt.Errorf("reconcile unready svc: %w", err)
+	objs := []*corev1.Service{
+		service.StorefrontService(store),
+		service.AdminService(store),
 	}
 
-	if changed {
-		r.Recorder.Event(store, "Normal", "Diff service hash",
-			fmt.Sprintf("Update Store %s service in namespace %s. Diff hash",
-				store.Name,
-				store.Namespace))
-		if err := k8s.EnsureService(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
+	var changed bool
+	for _, obj := range objs {
+		if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
 			return fmt.Errorf("reconcile unready svc: %w", err)
+		}
+
+		if changed {
+			r.Recorder.Event(store, "Normal", "Diff service hash",
+				fmt.Sprintf("Update Store %s service in namespace %s for %s. Diff hash",
+					store.Name,
+					store.Namespace,
+					obj.Labels["app"]))
+			if err := k8s.EnsureService(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
+				return fmt.Errorf("reconcile unready deployment: %w", err)
+			}
 		}
 	}
 
@@ -320,26 +337,38 @@ func (r *StoreReconciler) reconcileIngress(ctx context.Context, store *v1.Store)
 
 func (r *StoreReconciler) reconcileDeployment(ctx context.Context, store *v1.Store) (err error) {
 	var changed bool
-	obj := deployment.StoreDeployment(store)
 
-	if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
-		return fmt.Errorf("reconcile unready deployment: %w", err)
+	objs := []*appsv1.Deployment{
+		deployment.StorefrontDeployment(store),
+		deployment.AdminDeployment(store),
+		deployment.WorkerDeployment(store),
 	}
 
-	if changed {
-		r.Recorder.Event(store, "Normal", "Diff ingress hash",
-			fmt.Sprintf("Update Store %s deployment in namespace %s. Diff hash",
-				store.Name,
-				store.Namespace))
-		if err := k8s.EnsureDeployment(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
+	for _, obj := range objs {
+
+		if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
 			return fmt.Errorf("reconcile unready deployment: %w", err)
+		}
+
+		if changed {
+			r.Recorder.Event(store, "Normal", "Diff ingress hash",
+				fmt.Sprintf("Update Store %s deployment in namespace %s for %s. Diff hash",
+					store.Name,
+					store.Namespace,
+					obj.Labels["app"]))
+			if err := k8s.EnsureDeployment(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
+				return fmt.Errorf("reconcile unready deployment: %w", err)
+			}
 		}
 	}
 
 	return nil
 }
 
-func (r *StoreReconciler) reconcileHoizontalPodAutoscaler(ctx context.Context, store *v1.Store) (err error) {
+func (r *StoreReconciler) reconcileHoizontalPodAutoscaler(
+	ctx context.Context,
+	store *v1.Store,
+) (err error) {
 	if !store.Spec.HorizontalPodAutoscaler.Enabled {
 		return nil
 	}
