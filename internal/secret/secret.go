@@ -39,11 +39,15 @@ func GenerateStoreSecret(ctx context.Context, store *v1.Store, secret *corev1.Se
 	}
 
 	if _, ok := secret.Data["admin-password"]; !ok {
-		admin, err := generatePass(20)
-		if err != nil {
-			return fmt.Errorf("generate admin secret: %w", err)
+		if store.Spec.AdminCredentials.Password != "" {
+			secret.Data["admin-password"] = []byte(store.Spec.AdminCredentials.Password)
+		} else {
+			admin, err := generatePass(20)
+			if err != nil {
+				return fmt.Errorf("generate admin secret: %w", err)
+			}
+			secret.Data["admin-password"] = admin
 		}
-		secret.Data["admin-password"] = admin
 	}
 
 	if _, ok := secret.Data["jwt-private-key"]; !ok {
