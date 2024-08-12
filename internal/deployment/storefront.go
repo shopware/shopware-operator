@@ -16,8 +16,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func GetStoreDeployment(ctx context.Context, store *v1.Store, client client.Client) (*appsv1.Deployment, error) {
-	setup := StoreDeployment(store)
+func GetStorefrontDeployment(
+	ctx context.Context,
+	store *v1.Store,
+	client client.Client,
+) (*appsv1.Deployment, error) {
+	setup := StorefrontDeployment(store)
 	search := &appsv1.Deployment{
 		ObjectMeta: setup.ObjectMeta,
 	}
@@ -31,27 +35,8 @@ func GetStoreDeployment(ctx context.Context, store *v1.Store, client client.Clie
 	return search, err
 }
 
-func GetStoreDeploymentImage(ctx context.Context, store *v1.Store, client client.Client) (string, error) {
-	setup := StoreDeployment(store)
-	search := &appsv1.Deployment{
-		ObjectMeta: setup.ObjectMeta,
-	}
-	err := client.Get(ctx, types.NamespacedName{
-		Namespace: setup.Namespace,
-		Name:      setup.Name,
-	}, search)
-	if err != nil && errors.IsNotFound(err) {
-		return "", nil
-	}
-	if err != nil {
-		return "", err
-	}
-
-	return search.Spec.Template.Spec.Containers[0].Image, err
-}
-
-func StoreDeployment(store *v1.Store) *appsv1.Deployment {
-	appName := "shopware"
+func StorefrontDeployment(store *v1.Store) *appsv1.Deployment {
+	appName := "shopware-storefront"
 	labels := map[string]string{
 		"app": appName,
 	}
@@ -84,7 +69,7 @@ func StoreDeployment(store *v1.Store) *appsv1.Deployment {
 			TimeoutSeconds:      5,
 			InitialDelaySeconds: 5,
 		},
-		Name:            "shopware-app",
+		Name:            appName,
 		Image:           store.Spec.Container.Image,
 		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
 		Env:             store.GetEnv(),
@@ -104,7 +89,7 @@ func StoreDeployment(store *v1.Store) *appsv1.Deployment {
 			APIVersion: "apps/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        GetDeploymentName(store),
+			Name:        GetStorefrontDeploymentName(store),
 			Namespace:   store.Namespace,
 			Labels:      labels,
 			Annotations: store.Spec.Container.Annotations,
@@ -147,6 +132,6 @@ func StoreDeployment(store *v1.Store) *appsv1.Deployment {
 	}
 }
 
-func GetDeploymentName(store *v1.Store) string {
-	return fmt.Sprintf("%s-store", store.Name)
+func GetStorefrontDeploymentName(store *v1.Store) string {
+	return fmt.Sprintf("%s-storefront", store.Name)
 }

@@ -10,9 +10,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-func StoreService(store *v1.Store) *corev1.Service {
+func StorefrontService(store *v1.Store) *corev1.Service {
 	port := int32(8000)
-	appName := "shopware"
+	appName := "shopware-storefront"
 
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -20,7 +20,7 @@ func StoreService(store *v1.Store) *corev1.Service {
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ServiceName(store),
+			Name:      GetStorefrontServiceName(store),
 			Namespace: store.Namespace,
 			Labels:    util.GetDefaultLabels(store),
 		},
@@ -42,6 +42,6 @@ func StoreService(store *v1.Store) *corev1.Service {
 	}
 }
 
-func ServiceName(store *v1.Store) string {
-	return fmt.Sprintf("store-%s", store.Name)
+func GetStorefrontServiceName(store *v1.Store) string {
+	return fmt.Sprintf("%s-storefront", store.Name)
 }

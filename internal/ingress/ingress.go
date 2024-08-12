@@ -15,7 +15,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func GetStoreIngress(ctx context.Context, store *v1.Store, client client.Client) (*appsv1.Deployment, error) {
+func GetStoreIngress(
+	ctx context.Context,
+	store *v1.Store,
+	client client.Client,
+) (*appsv1.Deployment, error) {
 	ingress := StoreIngress(store)
 	search := &appsv1.Deployment{
 		ObjectMeta: ingress.ObjectMeta,
@@ -50,11 +54,47 @@ func StoreIngress(store *v1.Store) *networkingv1.Ingress {
 						HTTP: &networkingv1.HTTPIngressRuleValue{
 							Paths: []networkingv1.HTTPIngressPath{
 								{
+									Path:     "/api",
+									PathType: &pathType,
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: service.GetAdminServiceName(store),
+											Port: networkingv1.ServiceBackendPort{
+												Number: store.Spec.Network.Port,
+											},
+										},
+									},
+								},
+								{
+									Path:     "/admin",
+									PathType: &pathType,
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: service.GetAdminServiceName(store),
+											Port: networkingv1.ServiceBackendPort{
+												Number: store.Spec.Network.Port,
+											},
+										},
+									},
+								},
+								{
+									Path:     "/store-api",
+									PathType: &pathType,
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: service.GetStorefrontServiceName(store),
+											Port: networkingv1.ServiceBackendPort{
+												Number: store.Spec.Network.Port,
+											},
+										},
+									},
+								},
+								{
 									Path:     "/",
 									PathType: &pathType,
 									Backend: networkingv1.IngressBackend{
 										Service: &networkingv1.IngressServiceBackend{
-											Name: service.ServiceName(store),
+											Name: service.GetStorefrontServiceName(store),
 											Port: networkingv1.ServiceBackendPort{
 												Number: store.Spec.Network.Port,
 											},

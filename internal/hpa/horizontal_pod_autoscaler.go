@@ -30,7 +30,7 @@ func GetStoreHPA(ctx context.Context, store *v1.Store, client client.Client) (*a
 }
 
 func StoreHPA(store *v1.Store) *autoscaling.HorizontalPodAutoscaler {
-	dep := deployment.StoreDeployment(store)
+	dep := deployment.StorefrontDeployment(store)
 
 	if len(store.Spec.HorizontalPodAutoscaler.Metrics) == 0 {
 		util := int32(70)

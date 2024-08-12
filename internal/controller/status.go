@@ -21,7 +21,11 @@ import (
 
 const Error = "Error"
 
-func (r *StoreReconciler) reconcileCRStatus(ctx context.Context, store *v1.Store, reconcileError error) error {
+func (r *StoreReconciler) reconcileCRStatus(
+	ctx context.Context,
+	store *v1.Store,
+	reconcileError error,
+) error {
 	if store == nil || store.ObjectMeta.DeletionTimestamp != nil {
 		return nil
 	}
@@ -96,7 +100,10 @@ func (r *StoreReconciler) reconcileCRStatus(ctx context.Context, store *v1.Store
 	}, store.Status)
 }
 
-func (r *StoreReconciler) checkExternalServices(ctx context.Context, store *v1.Store) v1.StatefulAppState {
+func (r *StoreReconciler) checkExternalServices(
+	ctx context.Context,
+	store *v1.Store,
+) v1.StatefulAppState {
 	con := v1.ShopCondition{
 		Type:               v1.StateWait,
 		LastTransitionTime: metav1.Time{},
@@ -122,7 +129,11 @@ func (r *StoreReconciler) checkExternalServices(ctx context.Context, store *v1.S
 	var ok bool
 	var secretAccessKey []byte
 	if secretAccessKey, ok = secret.Data[store.Spec.S3Storage.SecretAccessKeyRef.Key]; !ok {
-		con.Reason = fmt.Sprintf("The SecretAccessKeyRef dosn't contain the specified key '%s' in the secret '%s'", store.Spec.S3Storage.SecretAccessKeyRef.Key, store.Spec.S3Storage.SecretAccessKeyRef.Name)
+		con.Reason = fmt.Sprintf(
+			"The SecretAccessKeyRef dosn't contain the specified key '%s' in the secret '%s'",
+			store.Spec.S3Storage.SecretAccessKeyRef.Key,
+			store.Spec.S3Storage.SecretAccessKeyRef.Name,
+		)
 		con.Status = Error
 		return v1.StateWait
 	}
@@ -139,7 +150,11 @@ func (r *StoreReconciler) checkExternalServices(ctx context.Context, store *v1.S
 
 	var accessKey []byte
 	if accessKey, ok = secret.Data[store.Spec.S3Storage.AccessKeyRef.Key]; !ok {
-		con.Reason = fmt.Sprintf("The AccessKeyRef doesn't contain the specified key '%s' in the secret '%s'", store.Spec.S3Storage.AccessKeyRef.Key, store.Spec.S3Storage.AccessKeyRef.Name)
+		con.Reason = fmt.Sprintf(
+			"The AccessKeyRef doesn't contain the specified key '%s' in the secret '%s'",
+			store.Spec.S3Storage.AccessKeyRef.Key,
+			store.Spec.S3Storage.AccessKeyRef.Name,
+		)
 		con.Status = Error
 		return v1.StateWait
 	}
@@ -166,7 +181,11 @@ func (r *StoreReconciler) checkExternalServices(ctx context.Context, store *v1.S
 
 	var password []byte
 	if password, ok = secret.Data[store.Spec.Database.PasswordSecretRef.Key]; !ok {
-		con.Reason = fmt.Sprintf("PasswordSecretRef doesn't contain the specified key '%s' in the secret '%s'", store.Spec.Database.PasswordSecretRef.Key, store.Spec.Database.PasswordSecretRef.Name)
+		con.Reason = fmt.Sprintf(
+			"PasswordSecretRef doesn't contain the specified key '%s' in the secret '%s'",
+			store.Spec.Database.PasswordSecretRef.Key,
+			store.Spec.Database.PasswordSecretRef.Name,
+		)
 		con.Status = Error
 		return v1.StateWait
 	}
@@ -268,7 +287,10 @@ func (r *StoreReconciler) stateMigration(ctx context.Context, store *v1.Store) v
 	return v1.StateMigration
 }
 
-func (r *StoreReconciler) stateInitializing(ctx context.Context, store *v1.Store) v1.StatefulAppState {
+func (r *StoreReconciler) stateInitializing(
+	ctx context.Context,
+	store *v1.Store,
+) v1.StatefulAppState {
 	con := v1.ShopCondition{
 		Type:               v1.StateInitializing,
 		LastTransitionTime: metav1.Time{},
@@ -281,7 +303,7 @@ func (r *StoreReconciler) stateInitializing(ctx context.Context, store *v1.Store
 		store.Status.AddCondition(con)
 	}()
 
-	deployment, err := deployment.GetStoreDeployment(ctx, store, r.Client)
+	deployment, err := deployment.GetStorefrontDeployment(ctx, store, r.Client)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return v1.StateInitializing
@@ -340,7 +362,12 @@ func (r *StoreReconciler) stateReady(ctx context.Context, store *v1.Store) v1.St
 	}
 }
 
-func writeStatus(ctx context.Context, cl client.Client, nn types.NamespacedName, status v1.StoreStatus) error {
+func writeStatus(
+	ctx context.Context,
+	cl client.Client,
+	nn types.NamespacedName,
+	status v1.StoreStatus,
+) error {
 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		cr := &v1.Store{}
 		if err := cl.Get(ctx, nn, cr); err != nil {
