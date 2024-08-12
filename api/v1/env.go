@@ -117,6 +117,24 @@ func (f *FPMSpec) getFPMConfiguration() []corev1.EnvVar {
 	}
 }
 
+// https://symfony.com/doc/current/messenger.html#transport-configuration
+func (s *Store) getWorker() []corev1.EnvVar {
+	if s.Spec.Worker.Adapter == "redis" {
+		return []corev1.EnvVar{
+			{
+				Name: "MESSENGER_TRANSPORT_DSN",
+				Value: fmt.Sprintf(
+					"rediss://%s:%d/messages/symfony/consumer?auto_setup=true&serializer=1&stream_max_entries=0&dbindex=%d",
+					s.Spec.AppCache.RedisHost,
+					s.Spec.AppCache.RedisPort,
+					s.Spec.AppCache.RedisIndex,
+				),
+			},
+		}
+	}
+	return []corev1.EnvVar{}
+}
+
 // TODO: blackfire and otel together not working
 func (s *Store) getOtel() []corev1.EnvVar {
 	if s.Spec.Otel.Enabled {
@@ -291,6 +309,7 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 	c = append(c, s.getOtel()...)
 	c = append(c, s.getBlackfire()...)
 	c = append(c, s.getStorage()...)
+	c = append(c, s.getWorker()...)
 	c = append(c, s.Spec.FPM.getFPMConfiguration()...)
 
 	return append(c, s.Spec.Container.ExtraEnvs...)
