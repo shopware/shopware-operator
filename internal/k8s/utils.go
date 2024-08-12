@@ -1,3 +1,19 @@
+/*
+Copyright 2024.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package k8s
 
 import (
@@ -47,7 +63,10 @@ func GetOperatorNamespace() (string, error) {
 		return strings.TrimSpace(string(nsBytes)), nil
 	}
 
-	return "", fmt.Errorf("Eigther set the namespace via env `%s` or run the operator as a pod", "OPERATOR_NAMESPACE")
+	return "", fmt.Errorf(
+		"Eigther set the namespace via env `%s` or run the operator as a pod",
+		"OPERATOR_NAMESPACE",
+	)
 }
 
 func GetStore(
@@ -63,7 +82,11 @@ func GetStore(
 	return cr, nil
 }
 
-func GetSecret(ctx context.Context, cl client.Client, nn types.NamespacedName) (*corev1.Secret, error) {
+func GetSecret(
+	ctx context.Context,
+	cl client.Client,
+	nn types.NamespacedName,
+) (*corev1.Secret, error) {
 	cr := new(corev1.Secret)
 	if err := cl.Get(ctx, nn, cr); err != nil {
 		return nil, errors.Wrapf(err, "get %v", nn.String())
@@ -72,7 +95,12 @@ func GetSecret(ctx context.Context, cl client.Client, nn types.NamespacedName) (
 	return cr, nil
 }
 
-func ObjectExists(ctx context.Context, cl client.Reader, nn types.NamespacedName, o client.Object) (bool, error) {
+func ObjectExists(
+	ctx context.Context,
+	cl client.Reader,
+	nn types.NamespacedName,
+	o client.Object,
+) (bool, error) {
 	if err := cl.Get(ctx, nn, o); err != nil {
 		if k8serrors.IsNotFound(err) {
 			return false, nil
@@ -387,7 +415,8 @@ func EnsureObjectWithHash(
 }
 
 func objectMetaEqual(old, new metav1.Object) bool {
-	return util.SSMapEqual(old.GetLabels(), new.GetLabels()) && util.SSMapEqual(old.GetAnnotations(), new.GetAnnotations())
+	return util.SSMapEqual(old.GetLabels(), new.GetLabels()) &&
+		util.SSMapEqual(old.GetAnnotations(), new.GetAnnotations())
 }
 
 func ObjectHash(obj runtime.Object) (string, error) {
