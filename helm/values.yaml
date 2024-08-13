@@ -4,9 +4,11 @@
 
 replicaCount: 1
 
-# The version is equal with the appVersion of the helm chart, you can overwrite it:
-# imageVersion: latest
-imagePullPolicy: IfNotPresent
+image:
+  repository: ghcr.io/shopware/shopware-operator
+  # if not set appVersion field from Chart.yaml is used
+  tag: ""
+  pullPolicy: IfNotPresent
 
 # rbac: settings for deployer RBAC creation
 rbac:
