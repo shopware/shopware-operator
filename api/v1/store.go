@@ -47,10 +47,13 @@ type StoreSpec struct {
 	// +kubebuilder:default={adapter: "builtin"}
 	AppCache AppCacheSpec `json:"appCache"`
 
+	// +kubebuilder:default={adapter: "builtin"}
+	Worker WorkerSpec `json:"worker"`
+
 	// +kubebuilder:default=store-secret
 	SecretName string `json:"secretName"`
 
-	// +kubebuilder:default={username: "admin", password: "shopware-k8s"}
+	// +kubebuilder:default={username: "admin", password: ""}
 	AdminCredentials Credentials `json:"adminCredentials"`
 
 	SetupHook Hook `json:"setupHook,omitempty"`
@@ -151,6 +154,13 @@ type SessionCacheSpec struct {
 	// +kubebuilder:validation:Enum=builtin;redis
 	Adapter  string `json:"adapter"`
 	SavePath string `json:"savePath,omitempty"`
+}
+
+type WorkerSpec struct {
+	RedisSpec `json:",inline"`
+
+	// +kubebuilder:validation:Enum=builtin;redis
+	Adapter string `json:"adapter"`
 }
 
 type AppCacheSpec struct {
