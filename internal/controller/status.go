@@ -358,6 +358,9 @@ func (r *StoreReconciler) stateReady(ctx context.Context, store *v1.Store) v1.St
 	if currentImage == store.Spec.Container.Image {
 		return v1.StateReady
 	} else {
+		log.FromContext(ctx).
+			WithValues("currentImage", currentImage, "containerImage", store.Spec.Container.Image).
+			Info("Change to state migration")
 		return v1.StateMigration
 	}
 }
