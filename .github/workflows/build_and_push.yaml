@@ -3,15 +3,10 @@
 name: Build and push
 
 on:
-  push:
-    branches:
-      - 'main'
+  workflow_dispatch:
 
 permissions:
   contents: write
-  issues: write
-  pull-requests: write
-  id-token: write
   packages: write
 
 env:
@@ -35,25 +30,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Bump version and push tag
-        id: tag_version
-        uses: mathieudutour/github-tag-action@v6.2
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Run goreleaser on release branch
-        id: goreleaser
-        if: ${{ startsWith(github.ref, 'refs/heads/main') }}
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: '~> v1'
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Run goreleaser on developer branch
-        if: ${{ ! startsWith(github.ref, 'refs/heads/main') }}
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
@@ -61,56 +38,3 @@ jobs:
           args: release --clean --snapshot
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set tag and build resources
-        if: ${{ startsWith(github.ref, 'refs/heads/main') }}
-        id: get_tag
-        run: |
-          echo ${{ toJSON(steps.goreleaser.outputs.metadata) }}
-          set -eux
-          DATA=$(echo ${{ toJSON(steps.goreleaser.outputs.metadata) }} | jq -r '.tag')
-          echo "tag=$DATA" >> "$GITHUB_OUTPUT"
-          make resources path=release
-
-      - name: Update release with kube generated files
-        if: ${{ startsWith(github.ref, 'refs/heads/main') }}
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ steps.get_tag.outputs.tag }}
-          overwrite: true
-          file_glob: true
-          file: release/*.yaml
-
-  release-helm-chart:
-    runs-on: ubuntu-latest
-    if: ${{ startsWith(github.ref, 'refs/heads/main') }}
-    needs: [goreleaser]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: octo-sts/action@v1.0.0
-        id: octo-sts
-        with:
-          scope: shopware/helm-charts
-          identity: shopware-operator
-
-      - name: make pr on helm-charts for this release
-        run: |
-          tag=${{ needs.goreleaser.outputs.tag }}
-          git clone https://oauth2:${GITHUB_TOKEN}@github.com/shopware/helm-charts.git
-          rm -rf helm-charts/charts/shopware-operator
-          make helm version=${tag} path=helm-charts/charts/shopware-operator
-          cd helm-charts
-          git config user.name "$GITHUB_ACTOR"
-          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-          git checkout -b auto-release-${tag}
-          git add .
-          git commit -m "New shopware operator image"
-          git push origin auto-release-${tag}
-          gh pr create --title "Autorelease from shopware operator" --body "Auto pr from shopware operator" --head "auto-release-${tag}" --base main
-        env:
-          GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
