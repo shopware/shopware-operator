@@ -56,6 +56,11 @@ For a helm installation check out our [charts repository](https://github.com/sho
 > [!IMPORTANT]
 > This will install the Operator in the default namespace, if you want to change this use `kubectl -n <namespace> apply -f ...`
 
+## Limitations and Issues
+#### Sidecars
+When using sidecars, please ensure they are properly terminated. Unfortunately, Kubernetes does not provide a reliable mechanism for
+managing the shutdown of jobs (such as setup and migration jobs). As a result, we cannot guarantee that containers within the pod will
+be stopped correctly. To address this, the job will be deleted once the operator container has completed its task.
 
 ## Contributing
 
