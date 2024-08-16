@@ -5,7 +5,7 @@ name: Build and push
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - '*.*.*'
 
 permissions:
   contents: write
