@@ -16,6 +16,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+var MigrationJobIdentifyer = map[string]string{"type": "migration"}
+
 func GetMigrationJob(
 	ctx context.Context,
 	client client.Client,
@@ -37,10 +39,10 @@ func MigrationJob(store *v1.Store) *batchv1.Job {
 	completions := int32(1)
 
 	labels := map[string]string{
-		"type": "migration",
 		"hash": GetMigrateHash(store),
 	}
 	maps.Copy(labels, util.GetDefaultLabels(store))
+	maps.Copy(labels, MigrationJobIdentifyer)
 
 	// Write images to annotations because they are longer then 63 characters which
 	// is the limit for labels
@@ -108,15 +110,8 @@ func GetMigrateHash(store *v1.Store) string {
 	return fmt.Sprintf("%x", md5.Sum(data))
 }
 
-func DeleteMigrationJob(ctx context.Context, c client.Client, store *v1.Store) error {
-	job, err := GetMigrationJob(ctx, c, store)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			return nil
-		}
-		return err
-	}
-	return c.Delete(ctx, job, client.PropagationPolicy("Foreground"))
+func DeleteAllMigrationJobs(ctx context.Context, c client.Client, store *v1.Store) error {
+	return deleteJobsByLabel(ctx, c, store.Namespace, MigrationJobIdentifyer)
 }
 
 // This is just a soft check, use container check for a clean check

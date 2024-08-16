@@ -232,19 +232,17 @@ func (r *StoreReconciler) completeJobs(ctx context.Context, store *v1.Store) err
 		}
 	}
 
-	// TODO: This will not work, because the image has changed already, so the migration
-	// job is differently.
-	// done, err = job.IsMigrationJobCompleted(ctx, r.Client, store)
-	// if err != nil {
-	// 	return err
-	// }
-	//
-	// // The job is not completed because active containers are running
-	// if !done {
-	// 	if err = job.DeleteSetupJob(ctx, r.Client, store); err != nil {
-	// 		return err
-	// 	}
-	// }
+	done, err = job.IsMigrationJobCompleted(ctx, r.Client, store)
+	if err != nil {
+		return err
+	}
+
+	// The job is not completed because active containers are running
+	if !done {
+		if err = job.DeleteAllMigrationJobs(ctx, r.Client, store); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }

@@ -26,7 +26,7 @@ func IsJobContainerDone(
 		if container.Name == job.Name {
 			selector, err := labels.ValidatedSelectorFromSet(job.Labels)
 			if err != nil {
-				return false, err
+				return false, fmt.Errorf("get selector: %w", err)
 			}
 
 			listOptions := client.ListOptions{
@@ -37,8 +37,7 @@ func IsJobContainerDone(
 			var pods corev1.PodList
 			err = c.List(ctx, &pods, &listOptions)
 			if err != nil {
-				log.FromContext(ctx).Error(err, "Failed to get pod")
-				return false, err
+				return false, fmt.Errorf("get pods: %w", err)
 			}
 
 			for _, pod := range pods.Items {
@@ -68,4 +67,38 @@ func IsJobContainerDone(
 	}
 
 	return false, nil
+}
+
+func deleteJobsByLabel(
+	ctx context.Context,
+	c client.Client,
+	namespace string,
+	la map[string]string,
+) error {
+	selector, err := labels.ValidatedSelectorFromSet(la)
+	if err != nil {
+		return fmt.Errorf("get selector: %w", err)
+	}
+
+	listOptions := client.ListOptions{
+		LabelSelector: selector,
+		Namespace:     namespace,
+	}
+
+	var jobs batchv1.JobList
+	err = c.List(ctx, &jobs, &listOptions)
+	if err != nil {
+		return fmt.Errorf("get jobs: %w", err)
+	}
+
+	log.FromContext(ctx).WithValues("jobs", jobs.Items).Info("Delete jobs")
+
+	for _, job := range jobs.Items {
+		err = c.Delete(ctx, &job, client.PropagationPolicy("Foreground"))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
