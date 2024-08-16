@@ -8,13 +8,16 @@ import (
 	"github.com/shopware/shopware-operator/internal/deployment"
 	"github.com/shopware/shopware-operator/internal/util"
 	autoscaling "k8s.io/api/autoscaling/v2"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func GetStoreHPA(ctx context.Context, store *v1.Store, client client.Client) (*autoscaling.HorizontalPodAutoscaler, error) {
+func GetStoreHPA(
+	ctx context.Context,
+	store *v1.Store,
+	client client.Client,
+) (*autoscaling.HorizontalPodAutoscaler, error) {
 	hpa := StoreHPA(store)
 	search := &autoscaling.HorizontalPodAutoscaler{
 		ObjectMeta: hpa.ObjectMeta,
@@ -23,9 +26,6 @@ func GetStoreHPA(ctx context.Context, store *v1.Store, client client.Client) (*a
 		Namespace: hpa.Namespace,
 		Name:      hpa.Name,
 	}, search)
-	if err != nil && errors.IsNotFound(err) {
-		return nil, nil
-	}
 	return search, err
 }
 
@@ -34,16 +34,19 @@ func StoreHPA(store *v1.Store) *autoscaling.HorizontalPodAutoscaler {
 
 	if len(store.Spec.HorizontalPodAutoscaler.Metrics) == 0 {
 		util := int32(70)
-		store.Spec.HorizontalPodAutoscaler.Metrics = append(store.Spec.HorizontalPodAutoscaler.Metrics, autoscaling.MetricSpec{
-			Type: autoscaling.ResourceMetricSourceType,
-			Resource: &autoscaling.ResourceMetricSource{
-				Name: "cpu",
-				Target: autoscaling.MetricTarget{
-					Type:               "Utilization",
-					AverageUtilization: &util,
+		store.Spec.HorizontalPodAutoscaler.Metrics = append(
+			store.Spec.HorizontalPodAutoscaler.Metrics,
+			autoscaling.MetricSpec{
+				Type: autoscaling.ResourceMetricSourceType,
+				Resource: &autoscaling.ResourceMetricSource{
+					Name: "cpu",
+					Target: autoscaling.MetricTarget{
+						Type:               "Utilization",
+						AverageUtilization: &util,
+					},
 				},
 			},
-		})
+		)
 	}
 
 	return &autoscaling.HorizontalPodAutoscaler{

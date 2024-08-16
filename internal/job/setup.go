@@ -9,13 +9,13 @@ import (
 	"golang.org/x/exp/maps"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func GetSetupJob(ctx context.Context, store *v1.Store, client client.Client) (*batchv1.Job, error) {
+func GetSetupJob(ctx context.Context, client client.Client, store *v1.Store) (*batchv1.Job, error) {
 	setup := SetupJob(store)
 	search := &batchv1.Job{
 		ObjectMeta: setup.ObjectMeta,
@@ -24,9 +24,6 @@ func GetSetupJob(ctx context.Context, store *v1.Store, client client.Client) (*b
 		Namespace: setup.Namespace,
 		Name:      setup.Name,
 	}, search)
-	if err != nil && errors.IsNotFound(err) {
-		return nil, nil
-	}
 	return search, err
 }
 
@@ -66,40 +63,84 @@ func SetupJob(store *v1.Store) *batchv1.Job {
 		},
 	)
 
+	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
+		Name:            "shopware-setup",
+		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
+		Image:           store.Spec.Container.Image,
+		Command:         []string{"sh", "-c"},
+		Args:            []string{command},
+		Env:             envs,
+	})
+
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Job",
 			APIVersion: "batch/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      SetupJobName(store),
-			Namespace: store.Namespace,
-			Labels:    labels,
+			Name:        GetSetupJobName(store),
+			Namespace:   store.Namespace,
+			Labels:      labels,
+			Annotations: store.Spec.Container.Annotations,
 		},
 		Spec: batchv1.JobSpec{
 			Parallelism: &parallelism,
 			Completions: &completions,
 			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
 				Spec: corev1.PodSpec{
-					NodeSelector:     store.Spec.Container.NodeSelector,
-					ImagePullSecrets: store.Spec.Container.ImagePullSecrets,
-					RestartPolicy:    "Never",
-					Containers: []corev1.Container{
-						{
-							Name:            "shopware-setup",
-							ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
-							Image:           store.Spec.Container.Image,
-							Command:         []string{"sh", "-c"},
-							Args:            []string{command},
-							Env:             envs,
-						},
-					},
+					Volumes:                   store.Spec.Container.Volumes,
+					TopologySpreadConstraints: store.Spec.Container.TopologySpreadConstraints,
+					NodeSelector:              store.Spec.Container.NodeSelector,
+					ImagePullSecrets:          store.Spec.Container.ImagePullSecrets,
+					RestartPolicy:             "Never",
+					Containers:                containers,
+					SecurityContext:           store.Spec.Container.SecurityContext,
 				},
 			},
 		},
 	}
 }
 
-func SetupJobName(store *v1.Store) string {
+func GetSetupJobName(store *v1.Store) string {
 	return fmt.Sprintf("%s-setup", store.Name)
+}
+
+func DeleteSetupJob(ctx context.Context, c client.Client, store *v1.Store) error {
+	job, err := GetSetupJob(ctx, c, store)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	return c.Delete(ctx, job, client.PropagationPolicy("Foreground"))
+}
+
+// This is just a soft check, use container check for a clean check
+func IsSetupJobCompleted(
+	ctx context.Context,
+	c client.Client,
+	store *v1.Store,
+) (bool, error) {
+	setup, err := GetSetupJob(ctx, c, store)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	if setup == nil {
+		return false, nil
+	}
+
+	// No active jobs are running and more of them are succeeded
+	if setup.Status.Active <= 0 && setup.Status.Succeeded >= 1 {
+		return true, nil
+	}
+	return false, nil
 }

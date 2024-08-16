@@ -81,7 +81,7 @@ func (r *StoreReconciler) reconcileCRStatus(
 
 	if store.IsState(v1.StateMigration) {
 		store.Status.State = r.stateMigration(ctx, store)
-		if store.IsState(v1.StateReady) {
+		if store.IsState(v1.StateInitializing) {
 			log.FromContext(ctx).Info("Update current image tag")
 			r.Recorder.Event(store, "Normal", "Finish Migration",
 				fmt.Sprintf("Migration in Store %s/%s finished. From tag %s to %s ",
@@ -214,7 +214,7 @@ func (r *StoreReconciler) stateSetup(ctx context.Context, store *v1.Store) v1.St
 		store.Status.AddCondition(con)
 	}()
 
-	setup, err := job.GetSetupJob(ctx, store, r.Client)
+	setup, err := job.GetSetupJob(ctx, r.Client, store)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return v1.StateSetup
@@ -224,19 +224,26 @@ func (r *StoreReconciler) stateSetup(ctx context.Context, store *v1.Store) v1.St
 		return v1.StateSetup
 	}
 
-	// This can be nil, even if err is not nil :shrug:
+	// Controller is to fast so we need to check the setup job
 	if setup == nil {
 		return v1.StateSetup
 	}
 
-	if setup.Status.Succeeded >= 1 {
+	done, err := job.IsJobContainerDone(ctx, r.Client, setup)
+	if err != nil {
+		con.Reason = err.Error()
+		con.Status = Error
+		return v1.StateSetup
+	}
+
+	if done {
 		con.Message = "Setup finished"
 		con.LastTransitionTime = metav1.Now()
 		return v1.StateInitializing
 	}
 
 	con.Message = fmt.Sprintf(
-		"Waiting for setup job to finish. Active jobs: %d, Failed jobs: %d",
+		"Waiting for setup job to finish (Notice sidecars are counted). Active jobs: %d, Failed jobs: %d",
 		setup.Status.Active,
 		setup.Status.Failed,
 	)
@@ -257,9 +264,10 @@ func (r *StoreReconciler) stateMigration(ctx context.Context, store *v1.Store) v
 		store.Status.AddCondition(con)
 	}()
 
-	setup, err := job.GetMigrationJob(ctx, store, r.Client)
+	migration, err := job.GetMigrationJob(ctx, r.Client, store)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
+			log.FromContext(ctx).Info("Migration job is not found")
 			return v1.StateMigration
 		}
 		con.Reason = err.Error()
@@ -267,21 +275,29 @@ func (r *StoreReconciler) stateMigration(ctx context.Context, store *v1.Store) v
 		return v1.StateMigration
 	}
 
-	// This can be nil, even if err is not nil :shrug:
-	if setup == nil {
+	// Controller is to fast so we need to check the migration job
+	if migration == nil {
+		log.FromContext(ctx).Info("Migration is nil")
 		return v1.StateMigration
 	}
 
-	if setup.Status.Succeeded >= 1 {
+	done, err := job.IsJobContainerDone(ctx, r.Client, migration)
+	if err != nil {
+		con.Reason = err.Error()
+		con.Status = Error
+		return v1.StateMigration
+	}
+
+	if done {
 		con.Message = "Migration finished"
 		con.LastTransitionTime = metav1.Now()
-		return v1.StateReady
+		return v1.StateInitializing
 	}
 
 	con.Message = fmt.Sprintf(
 		"Waiting for migration job to finish. Active jobs: %d, Failed jobs: %d",
-		setup.Status.Active,
-		setup.Status.Failed,
+		migration.Status.Active,
+		migration.Status.Failed,
 	)
 
 	return v1.StateMigration

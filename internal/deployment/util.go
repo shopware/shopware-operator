@@ -6,7 +6,6 @@ import (
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -24,9 +23,6 @@ func GetStoreDeploymentImage(
 		Namespace: setup.Namespace,
 		Name:      setup.Name,
 	}, search)
-	if err != nil && errors.IsNotFound(err) {
-		return "", nil
-	}
 	if err != nil {
 		return "", err
 	}
