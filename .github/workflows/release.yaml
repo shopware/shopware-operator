@@ -43,8 +43,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+
+      - name: Create resources for release
+        run: |
+          make resources path=release
+
       - name: Update release with kube generated files
-        if: ${{ startsWith(github.ref, 'refs/heads/main') }}
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
@@ -70,6 +74,7 @@ jobs:
 
       - name: make pr on helm-charts for this release
         run: |
+          make manifests
           tag=${{ github.ref_name }}
           git clone https://oauth2:${GITHUB_TOKEN}@github.com/shopware/helm-charts.git
           rm -rf helm-charts/charts/shopware-operator
