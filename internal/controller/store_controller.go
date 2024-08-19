@@ -89,6 +89,7 @@ func (r *StoreReconciler) findStoreForReconcile(
 //+kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=stores/finalizers,verbs=update
 //+kubebuilder:rbac:groups="",namespace=default,resources=secrets,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="",namespace=default,resources=services,verbs=get;list;watch;create;patch
+//+kubebuilder:rbac:groups="",namespace=default,resources=pods,verbs=get;list;watch;
 //+kubebuilder:rbac:groups="apps",namespace=default,resources=deployments,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="batch",namespace=default,resources=jobs,verbs=get;list;watch;create;delete
 //+kubebuilder:rbac:groups="networking.k8s.io",namespace=default,resources=ingresses,verbs=get;list;watch;create;patch
