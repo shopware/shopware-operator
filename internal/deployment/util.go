@@ -28,7 +28,7 @@ func GetStoreDeploymentImage(
 	}
 
 	for _, container := range search.Spec.Template.Spec.Containers {
-		if container.Name == GetStorefrontDeploymentName(store) {
+		if container.Name == DEPLOYMENT_STOREFRONT_CONTAINER_NAME {
 			return container.Image, nil
 		}
 	}
