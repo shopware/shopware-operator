@@ -15,6 +15,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const DEPLOYMENT_STOREFRONT_CONTAINER_NAME = "shopware-storefront"
+
 func GetStorefrontDeployment(
 	ctx context.Context,
 	store *v1.Store,
@@ -39,6 +41,7 @@ func StorefrontDeployment(store *v1.Store) *appsv1.Deployment {
 	maps.Copy(labels, util.GetDefaultLabels(store))
 
 	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
+		Name: DEPLOYMENT_STOREFRONT_CONTAINER_NAME,
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
@@ -65,7 +68,6 @@ func StorefrontDeployment(store *v1.Store) *appsv1.Deployment {
 			TimeoutSeconds:      5,
 			InitialDelaySeconds: 5,
 		},
-		Name:            appName,
 		Image:           store.Spec.Container.Image,
 		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
 		Env:             store.GetEnv(),

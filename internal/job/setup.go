@@ -15,6 +15,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const CONTAINER_NAME_SETUP_JOB = "shopware-setup"
+
 func GetSetupJob(ctx context.Context, client client.Client, store *v1.Store) (*batchv1.Job, error) {
 	setup := SetupJob(store)
 	search := &batchv1.Job{
@@ -64,7 +66,7 @@ func SetupJob(store *v1.Store) *batchv1.Job {
 	)
 
 	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
-		Name:            "shopware-setup",
+		Name:            CONTAINER_NAME_SETUP_JOB,
 		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
 		Image:           store.Spec.Container.Image,
 		Command:         []string{"sh", "-c"},

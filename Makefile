@@ -67,8 +67,8 @@ help: ## Display this help.
 licenses: path go-licenses
 	mkdir -p $(path)
 	@cd cmd; \
-	$(GOLICENSES) report . --template ../build/licenses.tpl > ../third-party-licenses.md
-	mv third-party-licenses.md $(path)
+	$(GOLICENSES) report . --template ../build/licenses.tpl > ../tpl.md
+	mv tpl.md $(path)/third-party-licenses.md
 
 ##@ Development
 
