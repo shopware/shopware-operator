@@ -13,6 +13,7 @@ before:
     - go mod tidy
     - make generate
     - make manifests
+    - make licenses path=.
 
 builds:
   - id: manager
@@ -30,7 +31,9 @@ dockers:
   - id: operator-amd64
     goarch: amd64
     use: buildx
-
+    extra_files:
+      - "LICENSE"
+      - "third-party-licenses.md"
     goamd64: v3
     dockerfile: build/Dockerfile
     image_templates:
@@ -43,6 +46,9 @@ dockers:
   - id: operator-arm64
     goarch: arm64
     use: buildx
+    extra_files:
+      - "LICENSE"
+      - "third-party-licenses.md"
     goamd64: v3
     dockerfile: build/Dockerfile
     image_templates:

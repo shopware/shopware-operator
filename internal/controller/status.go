@@ -229,7 +229,7 @@ func (r *StoreReconciler) stateSetup(ctx context.Context, store *v1.Store) v1.St
 		return v1.StateSetup
 	}
 
-	done, err := job.IsJobContainerDone(ctx, r.Client, setup)
+	done, err := job.IsJobContainerDone(ctx, r.Client, setup, job.CONTAINER_NAME_SETUP_JOB)
 	if err != nil {
 		con.Reason = err.Error()
 		con.Status = Error
@@ -281,7 +281,7 @@ func (r *StoreReconciler) stateMigration(ctx context.Context, store *v1.Store) v
 		return v1.StateMigration
 	}
 
-	done, err := job.IsJobContainerDone(ctx, r.Client, migration)
+	done, err := job.IsJobContainerDone(ctx, r.Client, migration, job.MigrateJobName(store))
 	if err != nil {
 		con.Reason = err.Error()
 		con.Status = Error
@@ -369,6 +369,7 @@ func (r *StoreReconciler) stateReady(ctx context.Context, store *v1.Store) v1.St
 		}
 		con.Status = Error
 		con.Reason = fmt.Sprintf("get deployment: %s", err.Error())
+		return v1.StateReady
 	}
 
 	if currentImage == store.Spec.Container.Image {
