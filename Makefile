@@ -16,6 +16,7 @@ ZAP_PRETTY ?= $(LOCALBIN)/zap-pretty
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 HELMIFY ?= $(LOCALBIN)/helmify
 YQ ?= $(LOCALBIN)/yq
+GOLICENSES ?= $(LOCALBIN)/go-licenses
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.2.1
@@ -61,6 +62,11 @@ all: build
 .PHONY: help
 help: ## Display this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+
+.PHONY: licenses
+licenses:
+	@cd cmd; \
+	go-licenses report . --template ../build/licenses.tpl > ../third-party-licenses.md
 
 ##@ Development
 
@@ -211,6 +217,12 @@ yq: $(YQ) ## Download locally if necessary. If wrong version is installed, it wi
 $(YQ): $(LOCALBIN)
 	test -s $(LOCALBIN)/yq && $(LOCALBIN)/yq --version | grep -q $(YQ_VERSION) || \
 	GOBIN=$(LOCALBIN) go install github.com/mikefarah/yq/v4@v$(YQ_VERSION)
+
+.PHONY: go-licenses
+go-licenses: $(GOLICENSES) ## Download locally if necessary. If wrong version is installed, it will be overwritten.
+$(GOLICENSES): $(LOCALBIN)
+	test -s $(LOCALBIN)/go-licenses || \
+	GOBIN=$(LOCALBIN) go install github.com/google/go-licenses@latest
 
 .PHONY: helmify
 helmify: $(HELMIFY) ## Download locally if necessary. If wrong version is installed, it will be overwritten.

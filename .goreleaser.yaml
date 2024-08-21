@@ -13,6 +13,7 @@ before:
     - go mod tidy
     - make generate
     - make manifests
+    - make licenses
 
 builds:
   - id: manager
