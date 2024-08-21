@@ -1,6 +1,6 @@
 package util
 
-func SSMapEqual(a, b map[string]string) bool {
+func MapEqual(a, b map[string]string) bool {
 	if len(a) != len(b) {
 		return false
 	}

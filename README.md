@@ -2,12 +2,10 @@
 
 ![Shopware Kubernetes Operator](shopware.svg)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-<!-- ![Docker Pulls](https://img.shields.io/docker/pulls/percona/percona-xtradb-cluster-operator) -->
-<!-- ![Docker Image Size (latest by date)](https://img.shields.io/docker/image-size/percona/percona-xtradb-cluster-operator) -->
-<!-- ![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/percona/percona-xtradb-cluster-operator) -->
-<!-- ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/percona/percona-xtradb-cluster-operator) -->
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/shopware/shopware-operator)
+![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/shopware/shopware-operator)
+[![Go Report Card](https://goreportcard.com/badge/github.com/shopware/shopware-operator)](https://goreportcard.com/report/github.com/shopware/shopware-operator)
 
 ## Overview
 

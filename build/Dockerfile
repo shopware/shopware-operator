@@ -5,6 +5,7 @@ FROM gcr.io/distroless/static:nonroot
 ENV NAMESPACE=default
 
 COPY manager /
+COPY LICENSE /LICENSE
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]
