@@ -6,6 +6,7 @@ ENV NAMESPACE=default
 
 COPY manager /
 COPY LICENSE /LICENSE
+COPY third-party-licenses.md /third-party-licenses.md
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]
