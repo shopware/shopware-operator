@@ -30,7 +30,7 @@ dockers:
     goarch: amd64
     use: buildx
     extra_files:
-      - "LICENSES"
+      - "LICENSE"
       - "third-party-licenses.md"
     dockerfile: build/Dockerfile
     image_templates:
@@ -44,7 +44,7 @@ dockers:
     goarch: arm64
     use: buildx
     extra_files:
-      - "LICENSES"
+      - "LICENSE"
       - "third-party-licenses.md"
     dockerfile: build/Dockerfile
     image_templates:
