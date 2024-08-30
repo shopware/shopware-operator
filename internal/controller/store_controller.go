@@ -165,8 +165,9 @@ func (r *StoreReconciler) doReconcile(
 		// Check if sidecars are active
 		if len(store.Spec.Container.ExtraContainers) > 0 {
 			log.Info("Delete setup job because sidecars are used")
-			err := r.completeJobs(ctx, store)
-			return fmt.Errorf("Can't cleanup setup and migration jobs: %w", err)
+			if err := r.completeJobs(ctx, store); err != nil {
+				return fmt.Errorf("Can't cleanup setup and migration jobs: %w", err)
+			}
 		}
 
 		log.Info("reconcile deployment")
