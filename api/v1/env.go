@@ -295,10 +295,6 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 			Value: "0",
 		},
 		{
-			Name:  "COMPOSER_PLUGIN_LOADER",
-			Value: "1",
-		},
-		{
 			Name:  "APP_URL",
 			Value: fmt.Sprintf("https://%s", s.Spec.Network.Host),
 		},
