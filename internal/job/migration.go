@@ -63,6 +63,7 @@ func MigrationJob(store *v1.Store) *batchv1.Job {
 
 	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
 		Name:            MigrateJobName(store),
+		VolumeMounts:    store.Spec.Container.VolumeMounts,
 		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
 		Image:           store.Spec.Container.Image,
 		Command:         []string{"sh", "-c"},
