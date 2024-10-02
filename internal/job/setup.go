@@ -67,6 +67,7 @@ func SetupJob(store *v1.Store) *batchv1.Job {
 
 	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
 		Name:            CONTAINER_NAME_SETUP_JOB,
+		VolumeMounts:    store.Spec.Container.VolumeMounts,
 		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
 		Image:           store.Spec.Container.Image,
 		Command:         []string{"sh", "-c"},
