@@ -125,9 +125,9 @@ func (s *Store) getWorker() []corev1.EnvVar {
 				Name: "MESSENGER_TRANSPORT_DSN",
 				Value: fmt.Sprintf(
 					"rediss://%s:%d/messages/symfony/consumer?auto_setup=true&serializer=1&stream_max_entries=0&dbindex=%d",
-					s.Spec.AppCache.RedisHost,
-					s.Spec.AppCache.RedisPort,
-					s.Spec.AppCache.RedisIndex,
+					s.Spec.Worker.RedisHost,
+					s.Spec.Worker.RedisPort,
+					s.Spec.Worker.RedisIndex,
 				),
 			},
 		}

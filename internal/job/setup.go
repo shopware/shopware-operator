@@ -38,13 +38,13 @@ func SetupJob(store *v1.Store) *batchv1.Job {
 	}
 	maps.Copy(labels, util.GetDefaultLabels(store))
 
-	var command string
+	var command []string
 	if store.Spec.SetupHook.Before != "" {
-		command = fmt.Sprintf("%s && ", store.Spec.SetupHook.Before)
+		command = append(command, store.Spec.SetupHook.Before)
 	}
-	command = fmt.Sprintf("%s /setup", command)
+	command = append(command, " /setup")
 	if store.Spec.SetupHook.After != "" {
-		command = fmt.Sprintf("%s && %s", command, store.Spec.SetupHook.After)
+		command = append(command, store.Spec.SetupHook.After)
 	}
 
 	envs := append(store.GetEnv(),
@@ -71,7 +71,7 @@ func SetupJob(store *v1.Store) *batchv1.Job {
 		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
 		Image:           store.Spec.Container.Image,
 		Command:         []string{"sh", "-c"},
-		Args:            []string{command},
+		Args:            command,
 		Env:             envs,
 	})
 
