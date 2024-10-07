@@ -162,13 +162,15 @@ func (r *StoreReconciler) doReconcile(
 	// State Initializing
 	if store.IsState(v1.StateInitializing) {
 		// When setup job is still running we will kill it now. This happens when sidecars are used
+		// EDIT: This makes more problems then it will help. So we process the way of terminating to
+		// the user to close all sidecars correctly.
 		// Check if sidecars are active
-		if len(store.Spec.Container.ExtraContainers) > 0 {
-			log.Info("Delete setup job because sidecars are used")
-			if err := r.completeJobs(ctx, store); err != nil {
-				return fmt.Errorf("Can't cleanup setup and migration jobs: %w", err)
-			}
-		}
+		// if len(store.Spec.Container.ExtraContainers) > 0 {
+		// 	log.Info("Delete setup job because sidecars are used")
+		// 	if err := r.completeJobs(ctx, store); err != nil {
+		// 		return fmt.Errorf("Can't cleanup setup and migration jobs: %w", err)
+		// 	}
+		// }
 
 		log.Info("reconcile deployment")
 		if err := r.reconcileDeployment(ctx, store); err != nil {
@@ -216,34 +218,6 @@ func (r *StoreReconciler) doReconcile(
 	log.Info("reconcile horizontalPodAutoscaler")
 	if err := r.reconcileHoizontalPodAutoscaler(ctx, store); err != nil {
 		return fmt.Errorf("hpa: %w", err)
-	}
-
-	return nil
-}
-
-func (r *StoreReconciler) completeJobs(ctx context.Context, store *v1.Store) error {
-	done, err := job.IsSetupJobCompleted(ctx, r.Client, store)
-	if err != nil {
-		return err
-	}
-
-	// The job is not completed because active containers are running
-	if !done {
-		if err = job.DeleteSetupJob(ctx, r.Client, store); err != nil {
-			return err
-		}
-	}
-
-	done, err = job.IsMigrationJobCompleted(ctx, r.Client, store)
-	if err != nil {
-		return err
-	}
-
-	// The job is not completed because active containers are running
-	if !done {
-		if err = job.DeleteAllMigrationJobs(ctx, r.Client, store); err != nil {
-			return err
-		}
 	}
 
 	return nil
