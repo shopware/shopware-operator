@@ -11,23 +11,35 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+type JobState struct {
+	ExitCode int
+	Running  bool
+}
+
+func (s JobState) HasErrors() bool {
+	return s.ExitCode != 0
+}
+
+func (s JobState) IsDone() bool {
+	return !s.Running
+}
+
 // This is used when sidecars are able to run. We should always use this method for checking
 func IsJobContainerDone(
 	ctx context.Context,
 	c client.Client,
 	job *batchv1.Job,
 	containerName string,
-) (bool, error) {
-
+) (JobState, error) {
 	if job == nil {
-		return false, fmt.Errorf("job to check is nil")
+		return JobState{}, fmt.Errorf("job to check is nil")
 	}
 
 	for _, container := range job.Spec.Template.Spec.Containers {
 		if container.Name == containerName {
 			selector, err := labels.ValidatedSelectorFromSet(job.Labels)
 			if err != nil {
-				return false, fmt.Errorf("get selector: %w", err)
+				return JobState{}, fmt.Errorf("get selector: %w", err)
 			}
 
 			listOptions := client.ListOptions{
@@ -38,40 +50,44 @@ func IsJobContainerDone(
 			var pods corev1.PodList
 			err = c.List(ctx, &pods, &listOptions)
 			if err != nil {
-				return false, fmt.Errorf("get pods: %w", err)
+				return JobState{}, fmt.Errorf("get pods: %w", err)
 			}
 
-			var isOneFinished bool
 			for _, pod := range pods.Items {
 				for _, c := range pod.Status.ContainerStatuses {
 					if c.Name == containerName {
+						log.FromContext(ctx).Info(fmt.Sprintf("Found container for job `%s`", c.Name))
 						if c.State.Terminated == nil {
 							log.FromContext(ctx).Info("Job not terminated still running")
-							continue
+							return JobState{
+								ExitCode: -1,
+								Running:  true,
+							}, nil
 						}
 						if c.State.Terminated.ExitCode != 0 {
 							log.FromContext(ctx).
-								Info("Job has not 0 as exit code, check job")
-							continue
+								Info("Job has not 0 as exit code, check job", "exitcode", c.State.Terminated.ExitCode)
+							return JobState{
+								ExitCode: int(c.State.Terminated.ExitCode),
+								Running:  false,
+							}, nil
 						}
 						if c.State.Terminated.Reason == "Completed" {
 							log.FromContext(ctx).Info("Job completed")
-							isOneFinished = true
+							return JobState{
+								ExitCode: 0,
+								Running:  false,
+							}, nil
 						}
 					}
 				}
-			}
-			if isOneFinished {
-				return true, nil
-			} else {
-				return false, nil
 			}
 		}
 	}
 
 	err := fmt.Errorf("job not found in container")
 	log.FromContext(ctx).Error(err, "job not found in container")
-	return false, err
+	return JobState{}, err
 }
 
 func deleteJobsByLabel(

@@ -229,14 +229,22 @@ func (r *StoreReconciler) stateSetup(ctx context.Context, store *v1.Store) v1.St
 		return v1.StateSetup
 	}
 
-	done, err := job.IsJobContainerDone(ctx, r.Client, setup, job.CONTAINER_NAME_SETUP_JOB)
+	jobState, err := job.IsJobContainerDone(ctx, r.Client, setup, job.CONTAINER_NAME_SETUP_JOB)
 	if err != nil {
 		con.Reason = err.Error()
 		con.Status = Error
 		return v1.StateSetup
 	}
 
-	if done {
+	if jobState.IsDone() && jobState.HasErrors() {
+		con.Message = "Setup is Done but has Errors. Check logs for more details"
+		con.Reason = fmt.Sprintf("Exit code: %d", jobState.ExitCode)
+		con.Status = Error
+		con.LastTransitionTime = metav1.Now()
+		return v1.StateSetup
+	}
+
+	if jobState.IsDone() && !jobState.HasErrors() {
 		con.Message = "Setup finished"
 		con.LastTransitionTime = metav1.Now()
 		return v1.StateInitializing
@@ -281,14 +289,22 @@ func (r *StoreReconciler) stateMigration(ctx context.Context, store *v1.Store) v
 		return v1.StateMigration
 	}
 
-	done, err := job.IsJobContainerDone(ctx, r.Client, migration, job.MigrateJobName(store))
+	jobState, err := job.IsJobContainerDone(ctx, r.Client, migration, job.MigrateJobName(store))
 	if err != nil {
 		con.Reason = err.Error()
 		con.Status = Error
 		return v1.StateMigration
 	}
 
-	if done {
+	if jobState.IsDone() && jobState.HasErrors() {
+		con.Message = "Migration is Done but has Errors. Check logs for more details"
+		con.Reason = fmt.Sprintf("Exit code: %d", jobState.ExitCode)
+		con.Status = Error
+		con.LastTransitionTime = metav1.Now()
+		return v1.StateMigration
+	}
+
+	if jobState.IsDone() && !jobState.HasErrors() {
 		con.Message = "Migration finished"
 		con.LastTransitionTime = metav1.Now()
 		return v1.StateInitializing
