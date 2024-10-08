@@ -32,19 +32,20 @@ func GetSetupJob(ctx context.Context, client client.Client, store *v1.Store) (*b
 func SetupJob(store *v1.Store) *batchv1.Job {
 	parallelism := int32(1)
 	completions := int32(1)
+	sharedProcessNamespace := true
 
 	labels := map[string]string{
 		"type": "setup",
 	}
 	maps.Copy(labels, util.GetDefaultLabels(store))
 
-	var command []string
+	var stringCommand string
 	if store.Spec.SetupHook.Before != "" {
-		command = append(command, store.Spec.SetupHook.Before)
+		stringCommand = fmt.Sprintf("%s %s", stringCommand, store.Spec.SetupHook.Before)
 	}
-	command = append(command, " /setup")
+	stringCommand = fmt.Sprintf("%s sleep 5", stringCommand)
 	if store.Spec.SetupHook.After != "" {
-		command = append(command, store.Spec.SetupHook.After)
+		stringCommand = fmt.Sprintf("%s %s", stringCommand, store.Spec.SetupHook.After)
 	}
 
 	envs := append(store.GetEnv(),
@@ -70,8 +71,8 @@ func SetupJob(store *v1.Store) *batchv1.Job {
 		VolumeMounts:    store.Spec.Container.VolumeMounts,
 		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
 		Image:           store.Spec.Container.Image,
-		Command:         []string{"sh", "-c"},
-		Args:            command,
+		Command:         []string{"sh"},
+		Args:            []string{"-c", stringCommand},
 		Env:             envs,
 	})
 
@@ -94,6 +95,7 @@ func SetupJob(store *v1.Store) *batchv1.Job {
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
+					ShareProcessNamespace:     &sharedProcessNamespace,
 					Volumes:                   store.Spec.Container.Volumes,
 					TopologySpreadConstraints: store.Spec.Container.TopologySpreadConstraints,
 					NodeSelector:              store.Spec.Container.NodeSelector,
@@ -124,6 +126,7 @@ func DeleteSetupJob(ctx context.Context, c client.Client, store *v1.Store) error
 }
 
 // This is just a soft check, use container check for a clean check
+// Will return true if container is stopped (Completed, Error)
 func IsSetupJobCompleted(
 	ctx context.Context,
 	c client.Client,
@@ -137,13 +140,10 @@ func IsSetupJobCompleted(
 		return false, err
 	}
 
-	if setup == nil {
-		return false, nil
+	state, err := IsJobContainerDone(ctx, c, setup, CONTAINER_NAME_SETUP_JOB)
+	if err != nil {
+		return false, err
 	}
 
-	// No active jobs are running and more of them are succeeded
-	if setup.Status.Active <= 0 && setup.Status.Succeeded >= 1 {
-		return true, nil
-	}
-	return false, nil
+	return state.IsDone(), nil
 }

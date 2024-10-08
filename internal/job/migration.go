@@ -18,6 +18,8 @@ import (
 
 var MigrationJobIdentifyer = map[string]string{"type": "migration"}
 
+const CONTAINER_NAME_MIGRATION_JOB = "shopware-migration"
+
 func GetMigrationJob(
 	ctx context.Context,
 	client client.Client,
@@ -37,6 +39,7 @@ func GetMigrationJob(
 func MigrationJob(store *v1.Store) *batchv1.Job {
 	parallelism := int32(1)
 	completions := int32(1)
+	sharedProcessNamespace := true
 
 	labels := map[string]string{
 		"hash": GetMigrateHash(store),
@@ -52,22 +55,22 @@ func MigrationJob(store *v1.Store) *batchv1.Job {
 	}
 	maps.Copy(annotations, store.Spec.Container.Annotations)
 
-	var command []string
-	if store.Spec.SetupHook.Before != "" {
-		command = append(command, store.Spec.MigrationHook.Before)
+	var stringCommand string
+	if store.Spec.MigrationHook.Before != "" {
+		stringCommand = fmt.Sprintf("%s %s", stringCommand, store.Spec.MigrationHook.Before)
 	}
-	command = append(command, " /setup")
-	if store.Spec.SetupHook.After != "" {
-		command = append(command, store.Spec.MigrationHook.After)
+	stringCommand = fmt.Sprintf("%s /setup", stringCommand)
+	if store.Spec.MigrationHook.After != "" {
+		stringCommand = fmt.Sprintf("%s %s", stringCommand, store.Spec.MigrationHook.After)
 	}
 
 	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
-		Name:            MigrateJobName(store),
+		Name:            CONTAINER_NAME_MIGRATION_JOB,
 		VolumeMounts:    store.Spec.Container.VolumeMounts,
 		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
 		Image:           store.Spec.Container.Image,
-		Command:         []string{"sh", "-c"},
-		Args:            command,
+		Command:         []string{"sh"},
+		Args:            []string{"-c", stringCommand},
 		Env:             store.GetEnv(),
 	})
 
@@ -89,6 +92,7 @@ func MigrationJob(store *v1.Store) *batchv1.Job {
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
+					ShareProcessNamespace:     &sharedProcessNamespace,
 					Volumes:                   store.Spec.Container.Volumes,
 					TopologySpreadConstraints: store.Spec.Container.TopologySpreadConstraints,
 					NodeSelector:              store.Spec.Container.NodeSelector,
@@ -116,12 +120,13 @@ func DeleteAllMigrationJobs(ctx context.Context, c client.Client, store *v1.Stor
 }
 
 // This is just a soft check, use container check for a clean check
+// Will return true if container is stopped (Completed, Error)
 func IsMigrationJobCompleted(
 	ctx context.Context,
 	c client.Client,
 	store *v1.Store,
 ) (bool, error) {
-	setup, err := GetMigrationJob(ctx, c, store)
+	migration, err := GetMigrationJob(ctx, c, store)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return false, nil
@@ -129,13 +134,10 @@ func IsMigrationJobCompleted(
 		return false, err
 	}
 
-	if setup == nil {
-		return false, nil
+	state, err := IsJobContainerDone(ctx, c, migration, CONTAINER_NAME_MIGRATION_JOB)
+	if err != nil {
+		return false, err
 	}
 
-	// No active jobs are running and more of them are succeeded
-	if setup.Status.Active <= 0 && setup.Status.Succeeded >= 1 {
-		return true, nil
-	}
-	return false, nil
+	return state.IsDone(), nil
 }
