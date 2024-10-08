@@ -390,7 +390,7 @@ func EnsureObjectWithHash(
 				err := cl.Get(ctx, types.NamespacedName{
 					Namespace: obj.GetNamespace(),
 					Name:      obj.GetName(),
-				}, obj)
+				}, nil)
 				if err != nil {
 					if k8serrors.IsNotFound(err) {
 						break
