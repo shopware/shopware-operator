@@ -33,6 +33,16 @@ func GetStoreIngress(
 func StoreIngress(store *v1.Store) *networkingv1.Ingress {
 	pathType := networkingv1.PathTypePrefix
 
+	var tls []networkingv1.IngressTLS
+	if store.Spec.Network.TLSSecretName != "" {
+		tls = append(tls, networkingv1.IngressTLS{
+			Hosts: []string{
+				store.Spec.Network.Host,
+			},
+			SecretName: store.Spec.Network.TLSSecretName,
+		})
+	}
+
 	return &networkingv1.Ingress{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
@@ -102,22 +112,11 @@ func StoreIngress(store *v1.Store) *networkingv1.Ingress {
 					},
 				},
 			},
-			TLS: []networkingv1.IngressTLS{
-				{
-					Hosts: []string{
-						store.Spec.Network.Host,
-					},
-					SecretName: GetTLSStoreSecretName(store),
-				},
-			},
+			TLS: tls,
 		},
 	}
 }
 
 func GetStoreIngressName(store *v1.Store) string {
 	return fmt.Sprintf("store-%s", store.Name)
-}
-
-func GetTLSStoreSecretName(store *v1.Store) string {
-	return fmt.Sprintf("store-tls-%s", store.Name)
 }
