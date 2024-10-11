@@ -99,6 +99,9 @@ type NetworkSpec struct {
 	IngressClassName string            `json:"ingressClassName,omitempty"`
 	Annotations      map[string]string `json:"annotations,omitempty"`
 	Labels           map[string]string `json:"labels,omitempty"`
+
+	// +kubebuilder:default=store-tls
+	TLSSecretName string `json:"tlsSecretName,omitempty"`
 }
 
 type ContainerSpec struct {
