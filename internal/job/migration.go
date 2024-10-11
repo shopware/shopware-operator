@@ -55,22 +55,13 @@ func MigrationJob(store *v1.Store) *batchv1.Job {
 	}
 	maps.Copy(annotations, store.Spec.Container.Annotations)
 
-	var commandString string
-	if store.Spec.SetupHook.Before != "" {
-		commandString = store.Spec.SetupHook.Before
-	}
-	commandString = fmt.Sprintf("%s %s", commandString, "/setup;")
-	if store.Spec.SetupHook.After != "" {
-		commandString = fmt.Sprintf("%s %s", commandString, store.Spec.SetupHook.After)
-	}
-
 	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
 		Name:            CONTAINER_NAME_MIGRATION_JOB,
 		VolumeMounts:    store.Spec.Container.VolumeMounts,
 		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
 		Image:           store.Spec.Container.Image,
-		Command:         []string{"sh"},
-		Args:            []string{"-c", commandString},
+		Command:         []string{"sh", "-c"},
+		Args:            []string{store.Spec.MigrationScript},
 		Env:             store.GetEnv(),
 	})
 

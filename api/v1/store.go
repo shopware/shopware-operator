@@ -56,9 +56,15 @@ type StoreSpec struct {
 	// +kubebuilder:default={username: "admin", password: ""}
 	AdminCredentials Credentials `json:"adminCredentials"`
 
+	//+kubebuilder:deprecatedversion
 	SetupHook Hook `json:"setupHook,omitempty"`
+	// +kubebuilder:default=/setup
+	SetupScript string `json:"setupScript,omitempty"`
 
+	//+kubebuilder:deprecatedversion
 	MigrationHook Hook `json:"migrationHook,omitempty"`
+	// +kubebuilder:default=/setup
+	MigrationScript string `json:"migrationScript,omitempty"`
 }
 
 func init() {
