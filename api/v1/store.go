@@ -71,8 +71,8 @@ type Credentials struct {
 }
 
 type Hook struct {
-	After  string `json:"after"`
-	Before string `json:"before"`
+	After  string `json:"after,omitempty"`
+	Before string `json:"before,omitempty"`
 }
 
 type HPASpec struct {
