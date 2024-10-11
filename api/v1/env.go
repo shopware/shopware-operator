@@ -185,7 +185,7 @@ func (s *Store) getBlackfire() []corev1.EnvVar {
 // TODO: Minio should use bucketname before URL. So we have public.domain.com see:
 // https://min.io/docs/minio/linux/administration/object-management.html#minio-object-management-path-virtual-access
 func (s *Store) getStorage() []corev1.EnvVar {
-	return []corev1.EnvVar{
+	envVars := []corev1.EnvVar{
 		{
 			Name:  "K8S_FILESYSTEM_PUBLIC_BUCKET",
 			Value: s.Spec.S3Storage.PublicBucketName,
@@ -207,7 +207,10 @@ func (s *Store) getStorage() []corev1.EnvVar {
 			Name:  "K8S_FILESYSTEM_ENDPOINT",
 			Value: s.Spec.S3Storage.EndpointURL,
 		},
-		{
+	}
+
+	if s.Spec.S3Storage.AccessKeyRef.Name != "" {
+		envVars = append(envVars, corev1.EnvVar{
 			Name: "AWS_ACCESS_KEY_ID",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
@@ -217,8 +220,11 @@ func (s *Store) getStorage() []corev1.EnvVar {
 					Key: s.Spec.S3Storage.AccessKeyRef.Key,
 				},
 			},
-		},
-		{
+		})
+	}
+
+	if s.Spec.S3Storage.SecretAccessKeyRef.Key != "" {
+		envVars = append(envVars, corev1.EnvVar{
 			Name: "AWS_SECRET_ACCESS_KEY",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
@@ -228,8 +234,10 @@ func (s *Store) getStorage() []corev1.EnvVar {
 					Key: s.Spec.S3Storage.SecretAccessKeyRef.Key,
 				},
 			},
-		},
+		})
 	}
+
+	return envVars
 }
 
 func (s *Store) GetEnv() []corev1.EnvVar {
