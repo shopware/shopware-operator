@@ -39,15 +39,6 @@ func SetupJob(store *v1.Store) *batchv1.Job {
 	}
 	maps.Copy(labels, util.GetDefaultLabels(store))
 
-	var commandString string
-	if store.Spec.SetupHook.Before != "" {
-		commandString = store.Spec.SetupHook.Before
-	}
-	commandString = fmt.Sprintf("%s %s", commandString, "/setup;")
-	if store.Spec.SetupHook.After != "" {
-		commandString = fmt.Sprintf("%s %s", commandString, store.Spec.SetupHook.After)
-	}
-
 	envs := append(store.GetEnv(),
 		corev1.EnvVar{
 			Name: "INSTALL_ADMIN_PASSWORD",
@@ -71,8 +62,8 @@ func SetupJob(store *v1.Store) *batchv1.Job {
 		VolumeMounts:    store.Spec.Container.VolumeMounts,
 		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
 		Image:           store.Spec.Container.Image,
-		Command:         []string{"sh"},
-		Args:            []string{"-c", commandString},
+		Command:         []string{"sh", "-c"},
+		Args:            []string{store.Spec.SetupScript},
 		Env:             envs,
 	})
 

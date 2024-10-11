@@ -141,6 +141,7 @@ func (r *StoreReconciler) doReconcile(
 		WithValues("state", store.Status.State)
 	log.Info("Do reconcile on store")
 
+	log.Info("reconcile app secrets")
 	if err := r.ensureAppSecrets(ctx, store); err != nil {
 		return fmt.Errorf("app secrets: %w", err)
 	}
@@ -318,7 +319,7 @@ func (r *StoreReconciler) reconcileServices(ctx context.Context, store *v1.Store
 					store.Namespace,
 					obj.Labels["app"]))
 			if err := k8s.EnsureService(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
-				return fmt.Errorf("reconcile unready deployment: %w", err)
+				return fmt.Errorf("reconcile unready services: %w", err)
 			}
 		}
 	}
