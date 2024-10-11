@@ -55,13 +55,13 @@ func MigrationJob(store *v1.Store) *batchv1.Job {
 	}
 	maps.Copy(annotations, store.Spec.Container.Annotations)
 
-	var stringCommand string
-	if store.Spec.MigrationHook.Before != "" {
-		stringCommand = fmt.Sprintf("%s %s", stringCommand, store.Spec.MigrationHook.Before)
+	var commandString string
+	if store.Spec.SetupHook.Before != "" {
+		commandString = store.Spec.SetupHook.Before
 	}
-	stringCommand = fmt.Sprintf("%s /setup", stringCommand)
-	if store.Spec.MigrationHook.After != "" {
-		stringCommand = fmt.Sprintf("%s %s", stringCommand, store.Spec.MigrationHook.After)
+	commandString = fmt.Sprintf("%s %s", commandString, "/setup;")
+	if store.Spec.SetupHook.After != "" {
+		commandString = fmt.Sprintf("%s %s", commandString, store.Spec.SetupHook.After)
 	}
 
 	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
@@ -70,7 +70,7 @@ func MigrationJob(store *v1.Store) *batchv1.Job {
 		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
 		Image:           store.Spec.Container.Image,
 		Command:         []string{"sh"},
-		Args:            []string{"-c", stringCommand},
+		Args:            []string{"-c", commandString},
 		Env:             store.GetEnv(),
 	})
 
