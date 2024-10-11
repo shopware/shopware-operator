@@ -233,8 +233,8 @@ type S3Storage struct {
 	PublicBucketName string `json:"publicBucketName"`
 	Region           string `json:"region,omitempty"`
 
-	AccessKeyRef       SecretRef `json:"accessKeyRef"`
-	SecretAccessKeyRef SecretRef `json:"secretAccessKeyRef"`
+	AccessKeyRef       SecretRef `json:"accessKeyRef,omitempty"`
+	SecretAccessKeyRef SecretRef `json:"secretAccessKeyRef,omitempty"`
 }
 
 type DatabaseSpec struct {
