@@ -123,6 +123,7 @@ func StorefrontDeployment(store *v1.Store) *appsv1.Deployment {
 					ImagePullSecrets:          store.Spec.Container.ImagePullSecrets,
 					RestartPolicy:             store.Spec.Container.RestartPolicy,
 					Containers:                containers,
+					ServiceAccountName:        util.GetServiceAccountName(store),
 					SecurityContext:           store.Spec.Container.SecurityContext,
 				},
 			},

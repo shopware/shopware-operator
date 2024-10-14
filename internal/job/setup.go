@@ -102,6 +102,7 @@ func SetupJob(store *v1.Store) *batchv1.Job {
 					ImagePullSecrets:          store.Spec.Container.ImagePullSecrets,
 					RestartPolicy:             "Never",
 					Containers:                containers,
+					ServiceAccountName:        util.GetServiceAccountName(store),
 					SecurityContext:           store.Spec.Container.SecurityContext,
 				},
 			},

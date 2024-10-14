@@ -93,6 +93,7 @@ func AdminDeployment(store *v1.Store) *appsv1.Deployment {
 		Spec: appsv1.DeploymentSpec{
 			ProgressDeadlineSeconds: &store.Spec.Container.ProgressDeadlineSeconds,
 			Replicas:                &store.Spec.Container.Replicas,
+
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"app": appName,
@@ -121,6 +122,7 @@ func AdminDeployment(store *v1.Store) *appsv1.Deployment {
 					ImagePullSecrets:          store.Spec.Container.ImagePullSecrets,
 					RestartPolicy:             store.Spec.Container.RestartPolicy,
 					Containers:                containers,
+					ServiceAccountName:        util.GetServiceAccountName(store),
 					SecurityContext:           store.Spec.Container.SecurityContext,
 				},
 			},
