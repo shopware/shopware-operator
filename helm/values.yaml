@@ -49,4 +49,4 @@ labels: {}
 podAnnotations: {}
 
 logStructured: false
-logLevel: "INFO"
+debug: false

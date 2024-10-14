@@ -61,6 +61,12 @@ spec:
       containers:
       - args:
         - --leader-elect
+        {{- if .Values.logStructured }}
+        - --log-structured
+        {{- end }}
+        {{- if .Values.debug }}
+        - --debug
+        {{- end }}
         command:
         - /manager
         env:

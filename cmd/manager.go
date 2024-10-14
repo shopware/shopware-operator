@@ -20,7 +20,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -33,10 +32,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/go-logr/logr"
-	"go.uber.org/zap/zapcore"
+	"github.com/go-logr/zapr"
+	"go.uber.org/zap"
 
 	shopv1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/controller"
@@ -59,6 +57,7 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var debug bool
+	var logStructured bool
 	var disableChecks bool
 	var probeAddr string
 	var namespace string
@@ -66,35 +65,33 @@ func main() {
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&namespace, "namespace", "default", "The namespace in which the operator is running in")
 	flag.BoolVar(&debug, "debug", false, "Set's the logger to debug with more logging output")
+	flag.BoolVar(&logStructured, "log-structured", false, "Set's the logger to output with human logs")
 	flag.BoolVar(&disableChecks, "disable-checks", false,
 		"Disable the s3 connection check and the database connection check")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	opts := zap.Options{
-		Development: true,
-	}
-	opts.BindFlags(flag.CommandLine)
+
 	flag.Parse()
 
-	var logger logr.Logger
-	if debug {
-		logger = zap.New()
-		logger.Info("Use development logger")
+	var cfg zap.Config
+
+	if logStructured {
+		cfg = zap.NewProductionConfig()
 	} else {
-		logger = zap.New(zap.UseFlagOptions(&opts), func(o *zap.Options) {
-			o.EncoderConfigOptions = append(o.EncoderConfigOptions,
-				func(c *zapcore.EncoderConfig) {
-					c.EncodeTime = zapcore.TimeEncoderOfLayout(time.DateTime)
-				}, func(c *zapcore.EncoderConfig) {
-					c.EncodeLevel = func(level zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
-						enc.AppendString("[" + level.CapitalString() + "]")
-					}
-				})
-		},
-		)
+		cfg = zap.NewDevelopmentConfig()
 	}
 
+	if debug {
+		cfg.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
+	}
+
+	zlogger, err := cfg.Build()
+	if err != nil {
+		setupLog.Error(err, "setup zap logger")
+		return
+	}
+	logger := zapr.NewLogger(zlogger)
 	ctrl.SetLogger(logger)
 
 	// Overwrite namespace when env is set, which is always set running in a cluster
@@ -153,6 +150,12 @@ func main() {
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
+
+	defer func() {
+		if err := recover(); err != nil {
+			zlogger.Fatal("Panic occurred", zap.Any("error", err))
+		}
+	}()
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
