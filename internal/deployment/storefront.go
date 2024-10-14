@@ -81,7 +81,7 @@ func StorefrontDeployment(store *v1.Store) *appsv1.Deployment {
 		Resources: store.Spec.Container.Resources,
 	})
 
-	return &appsv1.Deployment{
+	deployment := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Deployment",
 			APIVersion: "apps/v1",
@@ -123,12 +123,17 @@ func StorefrontDeployment(store *v1.Store) *appsv1.Deployment {
 					ImagePullSecrets:          store.Spec.Container.ImagePullSecrets,
 					RestartPolicy:             store.Spec.Container.RestartPolicy,
 					Containers:                containers,
-					ServiceAccountName:        util.GetServiceAccountName(store),
 					SecurityContext:           store.Spec.Container.SecurityContext,
 				},
 			},
 		},
 	}
+
+	if store.Spec.ServiceAccountName != "" {
+		deployment.Spec.Template.Spec.ServiceAccountName = store.Spec.ServiceAccountName
+	}
+
+	return deployment
 }
 
 func GetStorefrontDeploymentName(store *v1.Store) string {

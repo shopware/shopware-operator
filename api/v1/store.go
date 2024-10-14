@@ -37,6 +37,7 @@ type StoreSpec struct {
 	Otel                    OtelSpec      `json:"otel,omitempty"`
 	FPM                     FPMSpec       `json:"fpm,omitempty"`
 	HorizontalPodAutoscaler HPASpec       `json:"horizontalPodAutoscaler,omitempty"`
+	ServiceAccountName      string        `json:"serviceAccountName,omitempty"`
 
 	// +kubebuilder:default=false
 	DisableChecks bool `json:"disableChecks,omitempty"`

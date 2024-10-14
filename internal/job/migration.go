@@ -74,7 +74,7 @@ func MigrationJob(store *v1.Store) *batchv1.Job {
 		Env:             store.GetEnv(),
 	})
 
-	return &batchv1.Job{
+	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Job",
 			APIVersion: "batch/v1"},
@@ -99,12 +99,17 @@ func MigrationJob(store *v1.Store) *batchv1.Job {
 					ImagePullSecrets:          store.Spec.Container.ImagePullSecrets,
 					RestartPolicy:             "Never",
 					Containers:                containers,
-					ServiceAccountName:        util.GetServiceAccountName(store),
 					SecurityContext:           store.Spec.Container.SecurityContext,
 				},
 			},
 		},
 	}
+
+	if store.Spec.ServiceAccountName != "" {
+		job.Spec.Template.Spec.ServiceAccountName = store.Spec.ServiceAccountName
+	}
+
+	return job
 }
 
 func MigrateJobName(store *v1.Store) string {
