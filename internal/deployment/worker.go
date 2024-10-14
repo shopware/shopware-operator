@@ -63,7 +63,7 @@ func WorkerDeployment(store *v1.Store) *appsv1.Deployment {
 		Resources: store.Spec.Container.Resources,
 	})
 
-	return &appsv1.Deployment{
+	deployment := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Deployment",
 			APIVersion: "apps/v1",
@@ -110,6 +110,12 @@ func WorkerDeployment(store *v1.Store) *appsv1.Deployment {
 			},
 		},
 	}
+
+	if store.Spec.ServiceAccountName != "" {
+		deployment.Spec.Template.Spec.ServiceAccountName = store.Spec.ServiceAccountName
+	}
+
+	return deployment
 }
 
 func GetWorkerDeploymentName(store *v1.Store) string {

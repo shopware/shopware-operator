@@ -67,7 +67,7 @@ func SetupJob(store *v1.Store) *batchv1.Job {
 		Env:             envs,
 	})
 
-	return &batchv1.Job{
+	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Job",
 			APIVersion: "batch/v1",
@@ -98,6 +98,12 @@ func SetupJob(store *v1.Store) *batchv1.Job {
 			},
 		},
 	}
+
+	if store.Spec.ServiceAccountName != "" {
+		job.Spec.Template.Spec.ServiceAccountName = store.Spec.ServiceAccountName
+	}
+
+	return job
 }
 
 func GetSetupJobName(store *v1.Store) string {
