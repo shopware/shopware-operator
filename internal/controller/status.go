@@ -289,7 +289,7 @@ func (r *StoreReconciler) stateMigration(ctx context.Context, store *v1.Store) v
 		return v1.StateMigration
 	}
 
-	jobState, err := job.IsJobContainerDone(ctx, r.Client, migration, job.MigrateJobName(store))
+	jobState, err := job.IsJobContainerDone(ctx, r.Client, migration, job.CONTAINER_NAME_MIGRATION_JOB)
 	if err != nil {
 		con.Reason = err.Error()
 		con.Status = Error
