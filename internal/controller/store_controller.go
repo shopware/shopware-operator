@@ -162,17 +162,6 @@ func (r *StoreReconciler) doReconcile(
 
 	// State Initializing
 	if store.IsState(v1.StateInitializing) {
-		// When setup job is still running we will kill it now. This happens when sidecars are used
-		// EDIT: This makes more problems then it will help. So we process the way of terminating to
-		// the user to close all sidecars correctly.
-		// Check if sidecars are active
-		if len(store.Spec.Container.ExtraContainers) > 0 {
-			log.Info("Delete setup/migration job if they are finished because sidecars are used")
-			if err := r.completeJobs(ctx, store); err != nil {
-				log.Error(err, "Can't cleanup setup and migration jobs")
-			}
-		}
-
 		log.Info("reconcile deployment")
 		if err := r.reconcileDeployment(ctx, store); err != nil {
 			return fmt.Errorf("deployment: %w", err)
@@ -198,6 +187,17 @@ func (r *StoreReconciler) doReconcile(
 			}
 			log.Info("wait for migration to finish")
 			return nil
+		}
+	}
+
+	// When setup job is still running we will kill it now. This happens when sidecars are used
+	// EDIT: This makes more problems then it will help. So we process the way of terminating to
+	// the user to close all sidecars correctly.
+	// Check if sidecars are active
+	if len(store.Spec.Container.ExtraContainers) > 0 {
+		log.Info("Delete setup/migration job if they are finished because sidecars are used")
+		if err := r.completeJobs(ctx, store); err != nil {
+			log.Error(err, "Can't cleanup setup and migration jobs")
 		}
 	}
 
@@ -454,7 +454,7 @@ func (r *StoreReconciler) completeJobs(ctx context.Context, store *v1.Store) err
 		return err
 	}
 	// The job is not completed because active containers are running
-	if !done {
+	if done {
 		if err = job.DeleteSetupJob(ctx, r.Client, store); err != nil {
 			return err
 		}
@@ -464,7 +464,7 @@ func (r *StoreReconciler) completeJobs(ctx context.Context, store *v1.Store) err
 		return err
 	}
 	// The job is not completed because active containers are running
-	if !done {
+	if done {
 		if err = job.DeleteAllMigrationJobs(ctx, r.Client, store); err != nil {
 			return err
 		}
