@@ -40,7 +40,8 @@ type StoreSpec struct {
 	ServiceAccountName      string        `json:"serviceAccountName,omitempty"`
 
 	// +kubebuilder:default=false
-	DisableChecks bool `json:"disableChecks,omitempty"`
+	DisableChecks      bool `json:"disableChecks,omitempty"`
+	DisableJobDeletion bool `json:"disableJobDeletion,omitempty"`
 
 	// +kubebuilder:default={adapter: "builtin"}
 	SessionCache SessionCacheSpec `json:"sessionCache"`
