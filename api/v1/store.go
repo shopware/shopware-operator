@@ -249,8 +249,8 @@ type S3Storage struct {
 }
 
 type DatabaseSpec struct {
-	// +kubebuilder:validation:MinLength=1
-	Host string `json:"host"`
+	Host    string    `json:"host,omitempty"`
+	HostRef SecretRef `json:"hostRef,omitempty"`
 	// +kubebuilder:default=3306
 	Port int32 `json:"port"`
 	// +kubebuilder:validation:MinLength=1
