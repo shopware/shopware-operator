@@ -11,13 +11,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func GenerateDatabaseURLForShopware(db *v1.DatabaseSpec, p []byte) []byte {
+func GenerateDatabaseURLForShopware(db *v1.DatabaseSpec, dbHost string, p []byte) []byte {
 	urlP := url.QueryEscape(string(p))
 	plain := fmt.Sprintf(
 		"mysql://%s:%s@%s:%d/%s?serverVersion=%s",
 		db.User,
 		urlP,
-		db.Host,
+		dbHost,
 		db.Port,
 		db.Name,
 		db.Version,
