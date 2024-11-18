@@ -17,4 +17,22 @@ resources:
   kind: Store
   path: github.com/shopware/shopware-operator/api/v1
   version: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: shopware.com
+  group: shop
+  kind: StoreExec
+  path: github.com/shopware/shopware-operator/api/v1
+  version: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: shopware.com
+  group: shop
+  kind: StoreSnapshot
+  path: github.com/shopware/shopware-operator/api/v1
+  version: v1
 version: "3"
