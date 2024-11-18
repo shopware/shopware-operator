@@ -1,0 +1,27 @@
+# permissions for end users to view storeexecs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: storeexec-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: shopware-operator
+    app.kubernetes.io/part-of: shopware-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: storeexec-viewer-role
+rules:
+- apiGroups:
+  - shop.shopware.com
+  resources:
+  - storeexecs
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - shop.shopware.com
+  resources:
+  - storeexecs/status
+  verbs:
+  - get

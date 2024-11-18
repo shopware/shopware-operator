@@ -1,0 +1,12 @@
+apiVersion: shop.shopware.com/v1
+kind: StoreExec
+metadata:
+  labels:
+    app.kubernetes.io/name: storeexec
+    app.kubernetes.io/instance: storeexec-sample
+    app.kubernetes.io/part-of: shopware-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: shopware-operator
+  name: storeexec-sample
+spec:
+  # TODO(user): Add fields here

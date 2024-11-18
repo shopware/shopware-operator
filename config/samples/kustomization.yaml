@@ -1,0 +1,5 @@
+## Append samples of your project ##
+resources:
+- shop_v1_storeexec.yaml
+- shop_v1_storesnapshot.yaml
+#+kubebuilder:scaffold:manifestskustomizesamples

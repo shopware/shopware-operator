@@ -104,11 +104,11 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 
 .PHONY: build
 build: manifests generate ## Build manager binary.
-	go build -o bin/manager cmd/manager.go
+	go build -o bin/manager cmd/main.go
 
 .PHONY: run
 run: manifests generate zap-pretty ## Run a controller from your host.
-	go run ./cmd/manager.go --namespace ${NAMESPACE} --disable-checks --debug 2>&1 | $(ZAP_PRETTY) --all
+	go run ./cmd/main.go --namespace ${NAMESPACE} --disable-checks --debug 2>&1 | $(ZAP_PRETTY) --all
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
