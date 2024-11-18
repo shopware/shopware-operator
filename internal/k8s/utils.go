@@ -87,6 +87,32 @@ func GetStore(
 	return cr, nil
 }
 
+func GetStoreExec(
+	ctx context.Context,
+	cl client.Client,
+	nn types.NamespacedName,
+) (*v1.StoreExec, error) {
+	cr := new(v1.StoreExec)
+	if err := cl.Get(ctx, nn, cr); err != nil {
+		return nil, errors.Wrapf(err, "get %v", nn.String())
+	}
+
+	return cr, nil
+}
+
+func GetStoreSnapshot(
+	ctx context.Context,
+	cl client.Client,
+	nn types.NamespacedName,
+) (*v1.StoreSnapshot, error) {
+	cr := new(v1.StoreSnapshot)
+	if err := cl.Get(ctx, nn, cr); err != nil {
+		return nil, errors.Wrapf(err, "get %v", nn.String())
+	}
+
+	return cr, nil
+}
+
 func GetSecret(
 	ctx context.Context,
 	cl client.Client,

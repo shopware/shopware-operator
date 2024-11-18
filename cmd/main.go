@@ -149,6 +149,20 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Store")
 		os.Exit(1)
 	}
+	if err = (&controller.StoreExecReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "StoreExec")
+		os.Exit(1)
+	}
+	if err = (&controller.StoreSnapshotReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "StoreSnapshot")
+		os.Exit(1)
+	}
 	//+kubebuilder:scaffold:builder
 
 	defer func() {
