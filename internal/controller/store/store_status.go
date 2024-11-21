@@ -1,4 +1,4 @@
-package controller
+package store
 
 import (
 	"context"
@@ -32,7 +32,7 @@ func (r *StoreReconciler) reconcileCRStatus(
 
 	if reconcileError != nil {
 		store.Status.AddCondition(
-			v1.ShopCondition{
+			v1.StoreCondition{
 				Type:               store.Status.State,
 				LastTransitionTime: metav1.Time{},
 				LastUpdateTime:     metav1.NewTime(time.Now()),
@@ -104,7 +104,7 @@ func (r *StoreReconciler) checkExternalServices(
 	ctx context.Context,
 	store *v1.Store,
 ) v1.StatefulAppState {
-	con := v1.ShopCondition{
+	con := v1.StoreCondition{
 		Type:               v1.StateWait,
 		LastTransitionTime: metav1.Time{},
 		LastUpdateTime:     metav1.Now(),
@@ -202,7 +202,7 @@ func (r *StoreReconciler) checkExternalServices(
 }
 
 func (r *StoreReconciler) stateSetup(ctx context.Context, store *v1.Store) v1.StatefulAppState {
-	con := v1.ShopCondition{
+	con := v1.StoreCondition{
 		Type:               v1.StateSetup,
 		LastTransitionTime: metav1.Time{},
 		LastUpdateTime:     metav1.Now(),
@@ -260,7 +260,7 @@ func (r *StoreReconciler) stateSetup(ctx context.Context, store *v1.Store) v1.St
 }
 
 func (r *StoreReconciler) stateMigration(ctx context.Context, store *v1.Store) v1.StatefulAppState {
-	con := v1.ShopCondition{
+	con := v1.StoreCondition{
 		Type:               v1.StateMigration,
 		LastTransitionTime: metav1.Time{},
 		LastUpdateTime:     metav1.Now(),
@@ -323,7 +323,7 @@ func (r *StoreReconciler) stateInitializing(
 	ctx context.Context,
 	store *v1.Store,
 ) v1.StatefulAppState {
-	con := v1.ShopCondition{
+	con := v1.StoreCondition{
 		Type:               v1.StateInitializing,
 		LastTransitionTime: metav1.Time{},
 		LastUpdateTime:     metav1.Now(),
@@ -366,7 +366,7 @@ func (r *StoreReconciler) stateInitializing(
 }
 
 func (r *StoreReconciler) stateReady(ctx context.Context, store *v1.Store) v1.StatefulAppState {
-	con := v1.ShopCondition{
+	con := v1.StoreCondition{
 		Type:               v1.StateReady,
 		LastTransitionTime: metav1.Time{},
 		LastUpdateTime:     metav1.Now(),

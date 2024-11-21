@@ -37,7 +37,9 @@ import (
 	"go.uber.org/zap"
 
 	shopv1 "github.com/shopware/shopware-operator/api/v1"
-	"github.com/shopware/shopware-operator/internal/controller"
+	"github.com/shopware/shopware-operator/internal/controller/exec"
+	"github.com/shopware/shopware-operator/internal/controller/snapshot"
+	"github.com/shopware/shopware-operator/internal/controller/store"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -140,27 +142,29 @@ func main() {
 
 	nsClient := client.NewNamespacedClient(mgr.GetClient(), namespace)
 
-	if err = (&controller.StoreReconciler{
+	if err = (&store.StoreReconciler{
 		Client:               nsClient,
 		Scheme:               mgr.GetScheme(),
 		Recorder:             mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", namespace)),
 		DisableServiceChecks: disableChecks,
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Store")
+		setupLog.Error(err, "unable to create store controller", "controller", "Store")
 		os.Exit(1)
 	}
-	if err = (&controller.StoreExecReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+	if err = (&exec.StoreExecReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", namespace)),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "StoreExec")
+		setupLog.Error(err, "unable to create exec controller", "controller", "StoreExec")
 		os.Exit(1)
 	}
-	if err = (&controller.StoreSnapshotReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+	if err = (&snapshot.StoreSnapshotReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", namespace)),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "StoreSnapshot")
+		setupLog.Error(err, "unable to create snapshot controller", "controller", "StoreSnapshot")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
