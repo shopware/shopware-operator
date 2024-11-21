@@ -14,23 +14,25 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controller
+package snapshot
 
 import (
 	"context"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	shopv1 "github.com/shopware/shopware-operator/api/v1"
+	v1 "github.com/shopware/shopware-operator/api/v1"
 )
 
 // StoreSnapshotReconciler reconciles a StoreSnapshot object
 type StoreSnapshotReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 //+kubebuilder:rbac:groups=shop.shopware.com,resources=storesnapshots,verbs=get;list;watch;create;update;patch;delete
@@ -57,6 +59,6 @@ func (r *StoreSnapshotReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 // SetupWithManager sets up the controller with the Manager.
 func (r *StoreSnapshotReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&shopv1.StoreSnapshot{}).
+		For(&v1.StoreSnapshot{}).
 		Complete(r)
 }
