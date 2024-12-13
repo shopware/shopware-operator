@@ -46,7 +46,10 @@ type StoreSpec struct {
 	Otel                    OtelSpec      `json:"otel,omitempty"`
 	FPM                     FPMSpec       `json:"fpm,omitempty"`
 	HorizontalPodAutoscaler HPASpec       `json:"horizontalPodAutoscaler,omitempty"`
-	ServiceAccountName      string        `json:"serviceAccountName,omitempty"`
+
+	//+kubebuilder:deprecatedversion
+	// Use ServiceAccountName in container spec
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
 	// +kubebuilder:default={currency: "EURO", locale: "en-GB"}
 	ShopConfiguration Configuration `json:"shopConfiguration,omitempty"`
@@ -170,7 +173,7 @@ type ContainerSpec struct {
 	// SchedulerName                 string              `json:"schedulerName,omitempty"`
 	// RuntimeClassName              *string             `json:"runtimeClassName,omitempty"`
 
-	// ServiceAccountName string                     `json:"serviceAccountName,omitempty"`
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
 	// Configuration string `json:"configuration,omitempty"`
 	ExtraEnvs []corev1.EnvVar `json:"extraEnvs,omitempty"`

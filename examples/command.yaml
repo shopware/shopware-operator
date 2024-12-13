@@ -1,0 +1,10 @@
+apiVersion: shop.shopware.com/v1
+kind: StoreExec
+metadata:
+  name: test
+  namespace: test
+spec:
+  storeRef: my-shop
+  script: |
+    echo "Hello World"
+    /setup

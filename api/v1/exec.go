@@ -1,21 +1,27 @@
 package v1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type StatefulState string
 
 const (
-	ExecStateEmpty        StatefulState = ""
-	ExecStateInitializing StatefulState = "initializing"
-	ExecStateRunning      StatefulState = "running"
-	ExecStateDone         StatefulState = "done"
-	ExecStateError        StatefulState = "error"
+	ExecStateEmpty   StatefulState = ""
+	ExecStateRunning StatefulState = "running"
+	ExecStateDone    StatefulState = "done"
+	ExecStateError   StatefulState = "error"
 )
 
 type StoreExecSpec struct {
-	Foo string `json:"foo,omitempty"`
+	StoreRef     string `json:"storeRef"`
+	CronSchedule string `json:"cronSchedule,omitempty"`
+	Script       string `json:"script"`
+
+	ExtraEnvs []corev1.EnvVar `json:"extraEnvs,omitempty"`
+
+	Container ContainerSpec `json:"container,omitempty"`
 }
 
 // +kubebuilder:object:root=true
