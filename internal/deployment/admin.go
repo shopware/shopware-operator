@@ -134,8 +134,13 @@ func AdminDeployment(st *v1.Store) *appsv1.Deployment {
 		},
 	}
 
+	// Old way
 	if store.Spec.ServiceAccountName != "" {
 		deployment.Spec.Template.Spec.ServiceAccountName = store.Spec.ServiceAccountName
+	}
+	// New way
+	if store.Spec.Container.ServiceAccountName != "" {
+		deployment.Spec.Template.Spec.ServiceAccountName = store.Spec.Container.ServiceAccountName
 	}
 
 	return deployment

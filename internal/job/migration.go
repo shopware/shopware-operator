@@ -102,8 +102,13 @@ func MigrationJob(st *v1.Store) *batchv1.Job {
 		},
 	}
 
+	// Old way
 	if store.Spec.ServiceAccountName != "" {
 		job.Spec.Template.Spec.ServiceAccountName = store.Spec.ServiceAccountName
+	}
+	// New way
+	if store.Spec.Container.ServiceAccountName != "" {
+		job.Spec.Template.Spec.ServiceAccountName = store.Spec.Container.ServiceAccountName
 	}
 
 	return job
