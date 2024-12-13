@@ -241,7 +241,6 @@ func (s *Store) getStorage() []corev1.EnvVar {
 }
 
 func (s *Store) GetEnv() []corev1.EnvVar {
-
 	// TODO: Use map for overwriting when using ENVs from customer
 	c := []corev1.EnvVar{
 		{
