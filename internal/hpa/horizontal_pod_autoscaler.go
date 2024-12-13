@@ -54,7 +54,7 @@ func StoreHPA(store *v1.Store) *autoscaling.HorizontalPodAutoscaler {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        GetStoreHPAName(store),
 			Namespace:   store.GetNamespace(),
-			Labels:      util.GetDefaultLabels(store),
+			Labels:      util.GetDefaultStoreLabels(store),
 			Annotations: store.Spec.HorizontalPodAutoscaler.Annotations,
 		},
 		Spec: autoscaling.HorizontalPodAutoscalerSpec{

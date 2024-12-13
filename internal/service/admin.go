@@ -22,7 +22,7 @@ func AdminService(store *v1.Store) *corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      GetAdminServiceName(store),
 			Namespace: store.Namespace,
-			Labels:    util.GetDefaultLabels(store),
+			Labels:    util.GetDefaultStoreLabels(store),
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{

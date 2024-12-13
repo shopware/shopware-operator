@@ -41,7 +41,7 @@ func CommandJob(store *v1.Store, ex *v1.StoreExec) *batchv1.Job {
 	completions := int32(1)
 	sharedProcessNamespace := true
 
-	labels := util.GetDefaultStoreExecLabels(ex)
+	labels := util.GetDefaultStoreExecLabels(store, ex)
 	maps.Copy(labels, CommandJobIdendtifier)
 
 	annotations := map[string]string{}

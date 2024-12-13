@@ -39,7 +39,7 @@ func SetupJob(st *v1.Store) *batchv1.Job {
 	labels := map[string]string{
 		"type": "setup",
 	}
-	maps.Copy(labels, util.GetDefaultLabels(store))
+	maps.Copy(labels, util.GetDefaultStoreLabels(store))
 
 	// Merge Overwritten jobContainer fields into container fields
 	store.Spec.Container.Merge(store.Spec.SetupJobContainer)

@@ -38,7 +38,7 @@ func AdminDeployment(st *v1.Store) *appsv1.Deployment {
 	labels := map[string]string{
 		"app": appName,
 	}
-	maps.Copy(labels, util.GetDefaultLabels(store))
+	maps.Copy(labels, util.GetDefaultStoreLabels(store))
 
 	// Merge Overwritten adminContainer fields into container fields
 	store.Spec.Container.Merge(store.Spec.AdminDeploymentContainer)

@@ -46,7 +46,7 @@ func MigrationJob(st *v1.Store) *batchv1.Job {
 	labels := map[string]string{
 		"hash": GetMigrateHash(store),
 	}
-	maps.Copy(labels, util.GetDefaultLabels(store))
+	maps.Copy(labels, util.GetDefaultStoreLabels(store))
 	maps.Copy(labels, MigrationJobIdentifyer)
 
 	// Merge Overwritten jobContainer fields into container fields
