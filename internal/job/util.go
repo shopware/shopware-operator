@@ -86,7 +86,7 @@ func IsJobContainerDone(
 	}
 
 	err := fmt.Errorf("job not found in container: %s", containerName)
-	log.FromContext(ctx).Error(err, err.Error())
+	log.FromContext(ctx).Info(err.Error())
 	return JobState{}, err
 }
 
