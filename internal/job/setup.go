@@ -37,7 +37,7 @@ func SetupJob(store *v1.Store) *batchv1.Job {
 	labels := map[string]string{
 		"type": "setup",
 	}
-	maps.Copy(labels, util.GetDefaultLabels(store))
+	maps.Copy(labels, util.GetDefaultStoreLabels(store))
 
 	envs := append(store.GetEnv(),
 		corev1.EnvVar{

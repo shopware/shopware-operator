@@ -44,7 +44,7 @@ func MigrationJob(store *v1.Store) *batchv1.Job {
 	labels := map[string]string{
 		"hash": GetMigrateHash(store),
 	}
-	maps.Copy(labels, util.GetDefaultLabels(store))
+	maps.Copy(labels, util.GetDefaultStoreLabels(store))
 	maps.Copy(labels, MigrationJobIdentifyer)
 
 	// Write images to annotations because they are longer then 63 characters which

@@ -36,7 +36,7 @@ func WorkerDeployment(store *v1.Store) *appsv1.Deployment {
 	labels := map[string]string{
 		"app": appName,
 	}
-	maps.Copy(labels, util.GetDefaultLabels(store))
+	maps.Copy(labels, util.GetDefaultStoreLabels(store))
 
 	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
 		Name:            appName,
