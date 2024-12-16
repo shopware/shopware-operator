@@ -46,6 +46,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func GetWatchNamespace() (string, error) {
@@ -354,8 +355,21 @@ func EnsureObjectWithHash(
 		obj.SetAnnotations(annotations)
 	}
 
-	if oldObject.GetAnnotations()["shopware.com/last-config-hash"] != hash ||
-		!objectMetaEqual(obj, oldObject) {
+	hashChanged := oldObject.GetAnnotations()["shopware.com/last-config-hash"] != hash
+	objectMetaChanged := !objectMetaEqual(obj, oldObject)
+
+	if hashChanged || objectMetaChanged {
+		if hashChanged {
+			log.FromContext(ctx).Info("Object last-config-hash has changed", "old", oldObject.GetAnnotations()["shopware.com/last-config-hash"], "new", hash)
+		} else {
+			log.FromContext(ctx).Info(
+				"Object meta has changed",
+				"oldAnnotations", oldObject.GetAnnotations(),
+				"newAnnotations", obj.GetAnnotations(),
+				"oldLabels", oldObject.GetLabels(),
+				"newLabels", obj.GetLabels(),
+			)
+		}
 
 		obj.SetResourceVersion(oldObject.GetResourceVersion())
 		switch object := obj.(type) {
