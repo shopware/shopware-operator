@@ -31,12 +31,18 @@ func GetWorkerDeployment(
 	return search, err
 }
 
-func WorkerDeployment(store *v1.Store) *appsv1.Deployment {
+func WorkerDeployment(st *v1.Store) *appsv1.Deployment {
+	store := st.DeepCopy()
+
 	appName := "shopware-worker"
 	labels := map[string]string{
 		"app": appName,
 	}
 	maps.Copy(labels, util.GetDefaultLabels(store))
+
+	// Merge Overwritten storefrontContainer fields into container fields
+	store.Spec.Container.Merge(store.Spec.WorkerDeploymentContainer)
+	maps.Copy(labels, store.Spec.Container.Labels)
 
 	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
 		Name:            appName,
