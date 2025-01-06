@@ -8,6 +8,14 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - secrets
   verbs:
   - create
@@ -61,7 +69,6 @@ rules:
   - stores
   verbs:
   - create
-  - delete
   - get
   - list
   - patch
