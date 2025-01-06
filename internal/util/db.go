@@ -14,13 +14,14 @@ import (
 func GenerateDatabaseURLForShopware(db *v1.DatabaseSpec, dbHost string, p []byte) []byte {
 	urlP := url.QueryEscape(string(p))
 	plain := fmt.Sprintf(
-		"mysql://%s:%s@%s:%d/%s?serverVersion=%s",
+		"mysql://%s:%s@%s:%d/%s?serverVersion=%s&sslMode=%s",
 		db.User,
 		urlP,
 		dbHost,
 		db.Port,
 		db.Name,
 		db.Version,
+		db.SSLMode,
 	)
 	return []byte(plain)
 }
