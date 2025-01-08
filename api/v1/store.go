@@ -1,6 +1,8 @@
 package v1
 
 import (
+	"maps"
+
 	autoscalerv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,8 +30,15 @@ type StoreList struct {
 }
 
 type StoreSpec struct {
-	Database                DatabaseSpec  `json:"database"`
-	Container               ContainerSpec `json:"container"`
+	Database DatabaseSpec `json:"database"`
+
+	Container                     ContainerSpec      `json:"container"`
+	AdminDeploymentContainer      ContainerMergeSpec `json:"adminDeploymentContainer,omitempty"`
+	WorkerDeploymentContainer     ContainerMergeSpec `json:"workerDeploymentContainer,omitempty"`
+	StorefrontDeploymentContainer ContainerMergeSpec `json:"storefrontDeploymentContainer,omitempty"`
+	SetupJobContainer             ContainerMergeSpec `json:"setupJobContainer,omitempty"`
+	MigrationJobContainer         ContainerMergeSpec `json:"migrationJobContainer,omitempty"`
+
 	Network                 NetworkSpec   `json:"network,omitempty"`
 	S3Storage               S3Storage     `json:"s3Storage,omitempty"`
 	CDNURL                  string        `json:"cdnURL"`
@@ -146,9 +155,9 @@ type ContainerSpec struct {
 	// ReadinessProbe corev1.Probe `json:"readinessProbe,omitempty"`
 	// LivenessProbe  corev1.Probe `json:"livenessProbe,omitempty"`
 
-	NodeSelector              map[string]string                 `json:"nodeSelector,omitempty"`
 	Annotations               map[string]string                 `json:"annotations,omitempty"`
 	Labels                    map[string]string                 `json:"labels,omitempty"`
+	NodeSelector              map[string]string                 `json:"nodeSelector,omitempty"`
 	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
 	Tolerations               []corev1.Toleration               `json:"tolerations,omitempty"`
 	Affinity                  corev1.Affinity                   `json:"affinity,omitempty"`
@@ -165,6 +174,30 @@ type ContainerSpec struct {
 
 	// Configuration string `json:"configuration,omitempty"`
 	ExtraEnvs []corev1.EnvVar `json:"extraEnvs,omitempty"`
+}
+
+type ContainerMergeSpec struct {
+	// +kubebuilder:validation:MinLength=1
+	Image                   string                        `json:"image,omitempty"`
+	ImagePullPolicy         corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
+	ImagePullSecrets        []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	Volumes                 []corev1.Volume               `json:"volumes,omitempty"`
+	VolumeMounts            []corev1.VolumeMount          `json:"volumeMounts,omitempty"`
+	RestartPolicy           corev1.RestartPolicy          `json:"restartPolicy,omitempty"`
+	SecurityContext         *corev1.PodSecurityContext    `json:"podSecurityContext,omitempty"`
+	ExtraContainers         []corev1.Container            `json:"extraContainers,omitempty"`
+	Replicas                int32                         `json:"replicas,omitempty"`
+	ProgressDeadlineSeconds int32                         `json:"progressDeadlineSeconds,omitempty"`
+
+	Annotations               map[string]string                 `json:"annotations,omitempty"`
+	Labels                    map[string]string                 `json:"labels,omitempty"`
+	NodeSelector              map[string]string                 `json:"nodeSelector,omitempty"`
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+	Tolerations               []corev1.Toleration               `json:"tolerations,omitempty"`
+	Affinity                  corev1.Affinity                   `json:"affinity,omitempty"`
+
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	ExtraEnvs []corev1.EnvVar             `json:"extraEnvs,omitempty"`
 }
 
 type SessionCacheSpec struct {
@@ -285,4 +318,58 @@ type SecretRef struct {
 
 func (s *Store) GetSecretName() string {
 	return s.Spec.SecretName
+}
+
+func (c *ContainerSpec) Merge(from ContainerMergeSpec) {
+	if from.Image != "" {
+		c.Image = from.Image
+	}
+	if from.ImagePullPolicy != "" {
+		c.ImagePullPolicy = from.ImagePullPolicy
+	}
+	if from.Replicas != 0 {
+		c.Replicas = from.Replicas
+	}
+	if from.ProgressDeadlineSeconds != 0 {
+		c.ProgressDeadlineSeconds = from.ProgressDeadlineSeconds
+	}
+	if from.RestartPolicy != "" {
+		c.RestartPolicy = from.RestartPolicy
+	}
+	if from.ExtraEnvs != nil {
+		c.ExtraEnvs = from.ExtraEnvs
+	}
+	if from.VolumeMounts != nil {
+		c.VolumeMounts = from.VolumeMounts
+	}
+	if from.ImagePullSecrets != nil {
+		c.ImagePullSecrets = from.ImagePullSecrets
+	}
+	if from.Volumes != nil {
+		c.Volumes = from.Volumes
+	}
+	if from.Resources.Requests != nil {
+		c.Resources.Requests = from.Resources.Requests
+	}
+	if from.Resources.Limits != nil {
+		c.Resources.Limits = from.Resources.Limits
+	}
+	if from.ExtraContainers != nil {
+		c.ExtraContainers = from.ExtraContainers
+	}
+	if from.NodeSelector != nil {
+		c.NodeSelector = from.NodeSelector
+	}
+	if from.TopologySpreadConstraints != nil {
+		c.TopologySpreadConstraints = from.TopologySpreadConstraints
+	}
+	if from.Tolerations != nil {
+		c.Tolerations = from.Tolerations
+	}
+	if from.Annotations != nil {
+		maps.Copy(c.Annotations, from.Annotations)
+	}
+	if from.Labels != nil {
+		maps.Copy(c.Labels, from.Labels)
+	}
 }

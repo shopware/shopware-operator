@@ -313,6 +313,10 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 			Name:  "APP_URL",
 			Value: fmt.Sprintf("https://%s", s.Spec.Network.Host),
 		},
+		{
+			Name:  "DATABASE_PERSISTENT_CONNECTION",
+			Value: "1",
+		},
 	}
 
 	c = append(c, s.getSessionCache()...)

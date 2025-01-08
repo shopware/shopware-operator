@@ -146,7 +146,19 @@ endif
 
 .PHONY: install
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply --namespace ${NAMESPACE} -f -
+	@echo "Building CRD..."
+	$(KUSTOMIZE) build config/crd > /tmp/temp-crd.yaml
+	@echo "Applying CRD..."
+	@if $(KUBECTL) get -f /tmp/temp-crd.yaml >/dev/null 2>&1; then \
+		echo "CRD exists, replacing..."; \
+		$(KUBECTL) replace --namespace ${NAMESPACE} -f /tmp/temp-crd.yaml; \
+	else \
+		echo "CRD does not exist, creating..."; \
+		$(KUBECTL) create --namespace ${NAMESPACE} -f /tmp/temp-crd.yaml; \
+	fi
+	@echo "Cleaning up..."
+	rm -f /tmp/temp-crd.yaml
+	@echo "Done."
 
 .PHONY: uninstall
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
@@ -164,10 +176,10 @@ undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/confi
 .PHONY: helm
 helm: path version manifests kustomize yq ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	echo Create version $(version)
+	rm -r $(path) 2> /dev/null || true
 	cp -r helm $(path)
 	$(KUSTOMIZE) build config/crd > $(path)/crds/crd.yaml
-	$(KUSTOMIZE) build config/rbac > $(path)/templates/rbac.yaml
-	sed -i '/namespace: default/d' $(path)/templates/rbac.yaml
+	$(KUSTOMIZE) build config/helm > $(path)/templates/operator.yaml
 	$(YQ) e -i '.appVersion = "$(version)"' $(path)/Chart.yaml
 	$(YQ) e -i '.version = "$(version)"' $(path)/Chart.yaml
 
