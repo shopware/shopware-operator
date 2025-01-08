@@ -48,6 +48,9 @@ type StoreSpec struct {
 	HorizontalPodAutoscaler HPASpec       `json:"horizontalPodAutoscaler,omitempty"`
 	ServiceAccountName      string        `json:"serviceAccountName,omitempty"`
 
+	// +kubebuilder:default={Currency: "EURO", Locale: "en-GB"}
+	ShopConfiguration Configuration `json:"shopConfiguration,omitempty"`
+
 	// +kubebuilder:default=false
 	DisableChecks      bool `json:"disableChecks,omitempty"`
 	DisableJobDeletion bool `json:"disableJobDeletion,omitempty"`
@@ -80,6 +83,11 @@ type StoreSpec struct {
 
 func init() {
 	SchemeBuilder.Register(&Store{}, &StoreList{})
+}
+
+type Configuration struct {
+	Currency string `json:"currency"`
+	Locale   string `json:"locale"`
 }
 
 type Credentials struct {
