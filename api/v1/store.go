@@ -269,6 +269,10 @@ type DatabaseSpec struct {
 	// +kubebuilder:default=shopware
 	Name string `json:"name"`
 
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:default=PREFERRED
+	SSLMode string `json:"sslMode,omitempty"`
+
 	PasswordSecretRef SecretRef `json:"passwordSecretRef"`
 }
 
