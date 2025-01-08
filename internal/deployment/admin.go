@@ -31,12 +31,18 @@ func GetAdminDeployment(
 	return search, err
 }
 
-func AdminDeployment(store *v1.Store) *appsv1.Deployment {
+func AdminDeployment(st *v1.Store) *appsv1.Deployment {
+	store := st.DeepCopy()
+
 	appName := "shopware-admin"
 	labels := map[string]string{
 		"app": appName,
 	}
 	maps.Copy(labels, util.GetDefaultLabels(store))
+
+	// Merge Overwritten adminContainer fields into container fields
+	store.Spec.Container.Merge(store.Spec.AdminDeploymentContainer)
+	maps.Copy(labels, store.Spec.Container.Labels)
 
 	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
 		LivenessProbe: &corev1.Probe{

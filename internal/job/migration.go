@@ -36,7 +36,9 @@ func GetMigrationJob(
 	return search, err
 }
 
-func MigrationJob(store *v1.Store) *batchv1.Job {
+func MigrationJob(st *v1.Store) *batchv1.Job {
+	store := st.DeepCopy()
+
 	parallelism := int32(1)
 	completions := int32(1)
 	sharedProcessNamespace := true
@@ -46,6 +48,10 @@ func MigrationJob(store *v1.Store) *batchv1.Job {
 	}
 	maps.Copy(labels, util.GetDefaultLabels(store))
 	maps.Copy(labels, MigrationJobIdentifyer)
+
+	// Merge Overwritten jobContainer fields into container fields
+	store.Spec.Container.Merge(store.Spec.MigrationJobContainer)
+	maps.Copy(labels, store.Spec.Container.Labels)
 
 	// Write images to annotations because they are longer then 63 characters which
 	// is the limit for labels

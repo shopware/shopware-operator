@@ -29,7 +29,9 @@ func GetSetupJob(ctx context.Context, client client.Client, store *v1.Store) (*b
 	return search, err
 }
 
-func SetupJob(store *v1.Store) *batchv1.Job {
+func SetupJob(st *v1.Store) *batchv1.Job {
+	store := st.DeepCopy()
+
 	parallelism := int32(1)
 	completions := int32(1)
 	sharedProcessNamespace := true
@@ -38,6 +40,10 @@ func SetupJob(store *v1.Store) *batchv1.Job {
 		"type": "setup",
 	}
 	maps.Copy(labels, util.GetDefaultLabels(store))
+
+	// Merge Overwritten jobContainer fields into container fields
+	store.Spec.Container.Merge(store.Spec.SetupJobContainer)
+	maps.Copy(labels, store.Spec.Container.Labels)
 
 	envs := append(store.GetEnv(),
 		corev1.EnvVar{

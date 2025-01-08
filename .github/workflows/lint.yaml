@@ -1,4 +1,4 @@
-name: golangci-lint
+name: Lint
 
 on:
   pull_request:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   golangci:
-    name: lint
+    name: golangci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,3 +24,15 @@ jobs:
         with:
           version: v1.60
           args: --timeout=8m --verbose
+
+  go-test:
+    name: go test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          check-latest: true
+      - name: Display Go version
+        run: go test ./...
