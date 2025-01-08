@@ -9,7 +9,7 @@ metadata:
     app.kubernetes.io/created-by: shopware-operator
     app.kubernetes.io/part-of: shopware-operator
     app.kubernetes.io/managed-by: kustomize
-  name: leader-election-role
+  name: le-shopware-operator
 rules:
 - apiGroups:
   - ""

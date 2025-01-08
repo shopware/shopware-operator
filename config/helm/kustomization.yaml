@@ -1,0 +1,5 @@
+namespace: "{{ .Release.Namespace }}"
+namePrefix: '{{ .Release.Name }}-'
+
+resources:
+- ../rbac

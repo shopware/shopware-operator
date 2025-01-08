@@ -164,10 +164,10 @@ undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/confi
 .PHONY: helm
 helm: path version manifests kustomize yq ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	echo Create version $(version)
+	rm -r $(path) 2> /dev/null || true
 	cp -r helm $(path)
 	$(KUSTOMIZE) build config/crd > $(path)/crds/crd.yaml
-	$(KUSTOMIZE) build config/rbac > $(path)/templates/rbac.yaml
-	sed -i '/namespace: default/d' $(path)/templates/rbac.yaml
+	$(KUSTOMIZE) build config/helm > $(path)/templates/operator.yaml
 	$(YQ) e -i '.appVersion = "$(version)"' $(path)/Chart.yaml
 	$(YQ) e -i '.version = "$(version)"' $(path)/Chart.yaml
 
