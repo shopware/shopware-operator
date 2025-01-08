@@ -1,4 +1,3 @@
-namePrefix: shopware-operator-
 resources:
 - manager.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1

@@ -8,11 +8,11 @@ metadata:
     app.kubernetes.io/created-by: shopware-operator
     app.kubernetes.io/part-of: shopware-operator
     app.kubernetes.io/managed-by: kustomize
-  name: manager-rolebinding
+  name: shopware-operator
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: manager-role
+  name: shopware-operator
 subjects:
 - kind: ServiceAccount
-  name: controller-manager
+  name: shopware-operator

@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: shopware-operator
+  name: '{{ .Release.Name }}-shopware-operator'
   namespace: {{ .Release.Namespace }}
   labels:
     app.kubernetes.io/component: manager
     app.kubernetes.io/created-by: shopware-operator
-    app.kubernetes.io/instance: controller-manager
-    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/instance: shopware-operator
+    app.kubernetes.io/managed-by: shopware-operator
     app.kubernetes.io/name: deployment
     app.kubernetes.io/part-of: shopware-operator
-    control-plane: controller-manager
+    control-plane: shopware-operator
 {{- with .Values.labels }}
     {{- toYaml . | nindent 4 }}
 {{- end }}
@@ -18,7 +18,7 @@ spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      control-plane: controller-manager
+      control-plane: shopware-operator
   strategy:
     rollingUpdate:
       maxUnavailable: 1
@@ -26,19 +26,19 @@ spec:
   template:
     metadata:
       annotations:
-        kubectl.kubernetes.io/default-container: manager
+        kubectl.kubernetes.io/default-container: operator
         {{- with .Values.podAnnotations }}
             {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        control-plane: controller-manager
+        control-plane: shopware-operator
     spec:
-      {{ if hasKey .Values "affinity" }}
+      {{- if hasKey .Values "affinity" }}
       affinity:
         {{- with .Values.affinity }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{ else }}
+      {{- else }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -53,7 +53,7 @@ spec:
                 operator: In
                 values:
                 - linux
-      {{ end }}
+      {{- end }}
       tolerations:
         {{- with .Values.tolerations }}
           {{- toYaml . | nindent 10 }}
@@ -61,6 +61,12 @@ spec:
       containers:
       - args:
         - --leader-elect
+        {{- if .Values.logStructured }}
+        - --log-structured
+        {{- end }}
+        {{- if .Values.debug }}
+        - --debug
+        {{- end }}
         command:
         - /manager
         env:
@@ -76,7 +82,7 @@ spec:
             port: 8081
           initialDelaySeconds: 15
           periodSeconds: 20
-        name: manager
+        name: operator
         readinessProbe:
           httpGet:
             path: /readyz
@@ -96,5 +102,5 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
-      serviceAccountName: controller-manager
+      serviceAccountName: '{{ .Release.Name }}-shopware-operator'
       terminationGracePeriodSeconds: 10
