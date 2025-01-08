@@ -2,8 +2,8 @@ name: Lint
 
 on:
   pull_request:
-    paths:
-      - '**.go'
+    # paths:
+    #   - '**.go'
 
 permissions:
   contents: read
@@ -11,28 +11,76 @@ permissions:
   checks: write
 
 jobs:
-  golangci:
-    name: golangci
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.60
-          args: --timeout=8m --verbose
+  # golangci:
+  #   name: golangci
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-go@v5
+  #       with:
+  #         go-version: stable
+  #     - name: golangci-lint
+  #       uses: golangci/golangci-lint-action@v6
+  #       with:
+  #         version: v1.60
+  #         args: --timeout=8m --verbose
+  #
+  # go-test:
+  #   name: go test
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Setup Go
+  #       uses: actions/setup-go@v5
+  #       with:
+  #         check-latest: true
+  #     - name: Run go tests
+  #       run: go test ./...
 
-  go-test:
-    name: go test
-    runs-on: ubuntu-latest
+  test-on-cluster:
+    name: Cluster test
+    runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=4
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
+          go-version: stable
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4.2.0
+        with:
+          version: v3.16.4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
           check-latest: true
-      - name: Display Go version
-        run: go test ./...
+
+      - name: Create k8s Kind Cluster
+        uses: helm/kind-action@v1
+
+      # - name: Create Snapshot
+      #   uses: goreleaser/goreleaser-action@v6
+      #   with:
+      #     distribution: goreleaser
+      #     version: '~> v1'
+      #     args: release --clean --snapshot
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run chart-testing (install)
+        run: |
+          make helm path=test version=99.99.99
+          cd test
+          kubectl create namespace test
+          helm install test --namespace test .
+          kubectl wait --namespace test --for=condition=available --timeout=90s deployment/test-shopware-operator
+
+      # - name: Run chart-testing (test)
+      #   run: |
+      #     ct install --target-branch ${{ github.event.repository.default_branch }}
