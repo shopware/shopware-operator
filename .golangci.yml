@@ -17,11 +17,10 @@ issues:
         - dupl
         - lll
 linters:
-  disable-all: true
+  disable-all: false
   enable:
     - dupl
     - errcheck
-    - exportloopref
     - gocyclo
     - gofmt
     - goimports
