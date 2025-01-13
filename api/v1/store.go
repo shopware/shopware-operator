@@ -48,7 +48,7 @@ type StoreSpec struct {
 	HorizontalPodAutoscaler HPASpec       `json:"horizontalPodAutoscaler,omitempty"`
 	ServiceAccountName      string        `json:"serviceAccountName,omitempty"`
 
-	// +kubebuilder:default={Currency: "EURO", Locale: "en-GB"}
+	// +kubebuilder:default={currency: "EURO", locale: "en-GB"}
 	ShopConfiguration Configuration `json:"shopConfiguration,omitempty"`
 
 	// +kubebuilder:default=false
