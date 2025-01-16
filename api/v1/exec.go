@@ -17,7 +17,13 @@ const (
 type StoreExecSpec struct {
 	StoreRef     string `json:"storeRef"`
 	CronSchedule string `json:"cronSchedule,omitempty"`
-	Script       string `json:"script"`
+
+	// +kubebuilder:default=false
+	CronSuspend bool   `json:"cronSuspend,omitempty"`
+	Script      string `json:"script"`
+
+	// +kubebuilder:default=3
+	MaxRetries int32 `json:"maxRetries,omitempty"`
 
 	ExtraEnvs []corev1.EnvVar `json:"extraEnvs,omitempty"`
 

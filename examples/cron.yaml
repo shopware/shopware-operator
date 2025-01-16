@@ -4,7 +4,7 @@ metadata:
   name: test-cron
   namespace: test
 spec:
-  storeRef: my-shop
+  storeRef: test
   cronSchedule: "1 * * * *"
   script: |
-    /setup
+    echo "test"

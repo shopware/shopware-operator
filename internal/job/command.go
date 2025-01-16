@@ -2,7 +2,6 @@ package job
 
 import (
 	"context"
-	"fmt"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
@@ -36,31 +35,71 @@ func GetCommandJob(
 	return search, err
 }
 
-func CommandJob(store *v1.Store, ex *v1.StoreExec) *batchv1.Job {
-	parallelism := int32(1)
-	completions := int32(1)
-	sharedProcessNamespace := true
+func GetCommandCronJob(
+	ctx context.Context,
+	client client.Client,
+	store *v1.Store,
+	exec *v1.StoreExec,
+) (*batchv1.CronJob, error) {
+	mig := CommandJob(store, exec)
+	search := &batchv1.CronJob{
+		ObjectMeta: mig.ObjectMeta,
+	}
+	err := client.Get(ctx, types.NamespacedName{
+		Namespace: mig.Namespace,
+		Name:      mig.Name,
+	}, search)
+	return search, err
+}
 
+func CommandCronJob(store *v1.Store, ex *v1.StoreExec) *batchv1.CronJob {
 	labels := util.GetDefaultStoreExecLabels(store, ex)
 	maps.Copy(labels, CommandJobIdendtifier)
 
 	annotations := map[string]string{}
 	maps.Copy(annotations, ex.Spec.Container.Annotations)
 
-	envs := util.MergeEnv(store.GetEnv(), ex.Spec.ExtraEnvs)
-
 	// Copy container spec from store to exec
 	store.Spec.Container.DeepCopyInto(&ex.Spec.Container)
 
-	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
-		Name:            CONTAINER_NAME_COMMAND,
-		VolumeMounts:    store.Spec.Container.VolumeMounts,
-		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
-		Image:           store.Spec.Container.Image,
-		Command:         []string{"sh", "-c"},
-		Args:            []string{ex.Spec.Script},
-		Env:             envs,
-	})
+	job := &batchv1.CronJob{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "CronJob",
+			APIVersion: "batch/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        CommandJobName(ex),
+			Namespace:   ex.Namespace,
+			Labels:      labels,
+			Annotations: annotations,
+		},
+		Spec: batchv1.CronJobSpec{
+			Schedule: ex.Spec.CronSchedule,
+			Suspend:  &ex.Spec.CronSuspend,
+			JobTemplate: batchv1.JobTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        CommandJobName(ex),
+					Namespace:   ex.Namespace,
+					Labels:      labels,
+					Annotations: annotations,
+				},
+				Spec: getJobSpec(store, ex, labels),
+			},
+		},
+	}
+
+	return job
+}
+
+func CommandJob(store *v1.Store, ex *v1.StoreExec) *batchv1.Job {
+	labels := util.GetDefaultStoreExecLabels(store, ex)
+	maps.Copy(labels, CommandJobIdendtifier)
+
+	annotations := map[string]string{}
+	maps.Copy(annotations, ex.Spec.Container.Annotations)
+
+	// Copy container spec from store to exec
+	store.Spec.Container.DeepCopyInto(&ex.Spec.Container)
 
 	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
@@ -73,48 +112,54 @@ func CommandJob(store *v1.Store, ex *v1.StoreExec) *batchv1.Job {
 			Labels:      labels,
 			Annotations: annotations,
 		},
-		Spec: batchv1.JobSpec{
-			Parallelism: &parallelism,
-			Completions: &completions,
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
-				},
-				Spec: corev1.PodSpec{
-					ServiceAccountName:        store.Spec.Container.ServiceAccountName,
-					ShareProcessNamespace:     &sharedProcessNamespace,
-					Volumes:                   store.Spec.Container.Volumes,
-					TopologySpreadConstraints: store.Spec.Container.TopologySpreadConstraints,
-					NodeSelector:              store.Spec.Container.NodeSelector,
-					ImagePullSecrets:          store.Spec.Container.ImagePullSecrets,
-					RestartPolicy:             "Never",
-					Containers:                containers,
-					SecurityContext:           store.Spec.Container.SecurityContext,
-				},
-			},
-		},
+		Spec: getJobSpec(store, ex, labels),
 	}
-
-	j := &batchv1.CronJob{Spec: batchv1.CronJobSpec{
-		Schedule:                "",
-		TimeZone:                new(string),
-		StartingDeadlineSeconds: new(int64),
-		ConcurrencyPolicy:       "",
-		Suspend:                 new(bool),
-		JobTemplate: batchv1.JobTemplateSpec{
-			ObjectMeta: job.ObjectMeta,
-			Spec:       job.Spec,
-		},
-		SuccessfulJobsHistoryLimit: new(int32),
-		FailedJobsHistoryLimit:     new(int32),
-	}}
-	fmt.Println(j)
 
 	return job
 }
 
 func CommandJobName(exec *v1.StoreExec) string {
-	return fmt.Sprintf("%s", exec.Name)
+	return exec.Name
+}
+
+func getJobSpec(store *v1.Store, ex *v1.StoreExec, labels map[string]string) batchv1.JobSpec {
+	parallelism := int32(1)
+	completions := int32(1)
+	sharedProcessNamespace := true
+
+	envs := util.MergeEnv(store.GetEnv(), ex.Spec.ExtraEnvs)
+
+	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
+		Name:            CONTAINER_NAME_COMMAND,
+		VolumeMounts:    store.Spec.Container.VolumeMounts,
+		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
+		Image:           store.Spec.Container.Image,
+		Command:         []string{"sh", "-c"},
+		Args:            []string{ex.Spec.Script},
+		Env:             envs,
+	})
+
+	return batchv1.JobSpec{
+		Parallelism:  &parallelism,
+		Completions:  &completions,
+		BackoffLimit: &ex.Spec.MaxRetries,
+		Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: labels,
+			},
+			Spec: corev1.PodSpec{
+				ServiceAccountName:        store.Spec.Container.ServiceAccountName,
+				ShareProcessNamespace:     &sharedProcessNamespace,
+				Volumes:                   store.Spec.Container.Volumes,
+				TopologySpreadConstraints: store.Spec.Container.TopologySpreadConstraints,
+				NodeSelector:              store.Spec.Container.NodeSelector,
+				ImagePullSecrets:          store.Spec.Container.ImagePullSecrets,
+				RestartPolicy:             "Never",
+				Containers:                containers,
+				SecurityContext:           store.Spec.Container.SecurityContext,
+			},
+		},
+	}
 }
 
 // This is just a soft check, use container check for a clean check

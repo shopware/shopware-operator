@@ -4,7 +4,8 @@ metadata:
   name: test
   namespace: test
 spec:
-  storeRef: my-shop
+  storeRef: test
+  maxRetries: 1
   script: |
     echo "Hello World"
     /setup

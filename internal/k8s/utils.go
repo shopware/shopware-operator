@@ -189,6 +189,29 @@ func EnsureHPA(
 	return EnsureObjectWithHash(ctx, cl, owner, svc, s)
 }
 
+func EnsureCronJob(
+	ctx context.Context,
+	cl client.Client,
+	owner metav1.Object,
+	job *batchv1.CronJob,
+	s *runtime.Scheme,
+	saveOldMeta bool,
+) error {
+	oldJob := new(batchv1.Job)
+	err := cl.Get(ctx, types.NamespacedName{
+		Name:      job.GetName(),
+		Namespace: job.GetNamespace(),
+	}, oldJob)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return EnsureObjectWithHash(ctx, cl, owner, job, s)
+		}
+		return errors.Wrap(err, "get object")
+	}
+
+	return EnsureObjectWithHash(ctx, cl, owner, job, s)
+}
+
 func EnsureJob(
 	ctx context.Context,
 	cl client.Client,

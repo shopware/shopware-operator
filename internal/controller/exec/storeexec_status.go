@@ -23,7 +23,7 @@ func (r *StoreExecReconciler) reconcileCRStatus(
 	ex *v1.StoreExec,
 	reconcileError error,
 ) error {
-	if ex == nil || ex.ObjectMeta.DeletionTimestamp != nil {
+	if ex == nil || ex.ObjectMeta.DeletionTimestamp != nil || store == nil || store.ObjectMeta.DeletionTimestamp != nil {
 		return nil
 	}
 
