@@ -9,6 +9,7 @@ type StatefulState string
 
 const (
 	ExecStateEmpty   StatefulState = ""
+	ExecStateWait    StatefulState = "wait"
 	ExecStateRunning StatefulState = "running"
 	ExecStateDone    StatefulState = "done"
 	ExecStateError   StatefulState = "error"

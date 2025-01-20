@@ -23,7 +23,7 @@ func (r *StoreExecReconciler) reconcileCRStatus(
 	ex *v1.StoreExec,
 	reconcileError error,
 ) error {
-	if ex == nil || ex.ObjectMeta.DeletionTimestamp != nil || store == nil || store.ObjectMeta.DeletionTimestamp != nil {
+	if ex == nil {
 		return nil
 	}
 
@@ -40,8 +40,22 @@ func (r *StoreExecReconciler) reconcileCRStatus(
 		)
 	}
 
-	if ex.IsState(v1.ExecStateEmpty) {
-		ex.Status.State = v1.ExecStateRunning
+	if store == nil {
+		ex.Status.State = v1.ExecStateWait
+		ex.Status.AddCondition(
+			v1.ExecCondition{
+				Type:               ex.Status.State,
+				LastTransitionTime: metav1.Time{},
+				LastUpdateTime:     metav1.NewTime(time.Now()),
+				Message:            fmt.Sprintf("StoreRef not found (stores/%s), waiting for store to be created", ex.Spec.StoreRef),
+				Reason:             "StoreRef error",
+				Status:             Error,
+			},
+		)
+	} else {
+		if ex.IsState(v1.ExecStateEmpty, v1.ExecStateWait) {
+			ex.Status.State = v1.ExecStateRunning
+		}
 	}
 
 	if ex.IsState(v1.ExecStateRunning) {
