@@ -1,4 +1,4 @@
-package exec
+package controller
 
 import (
 	"context"
@@ -30,6 +30,7 @@ type StoreExecReconciler struct {
 // +kubebuilder:rbac:groups="",namespace=default,resources=secrets,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups="",namespace=default,resources=pods,verbs=get;list;watch;
 // +kubebuilder:rbac:groups="batch",namespace=default,resources=jobs,verbs=get;list;watch;create;delete
+
 func (r *StoreExecReconciler) Reconcile(ctx context.Context, req ctrl.Request) (rr ctrl.Result, err error) {
 	log := logging.FromContext(ctx)
 

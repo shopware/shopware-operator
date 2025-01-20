@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package snapshot
+package controller
 
 import (
 	"context"
@@ -35,19 +35,10 @@ type StoreSnapshotReconciler struct {
 	Recorder record.EventRecorder
 }
 
-//+kubebuilder:rbac:groups=shop.shopware.com,resources=storesnapshots,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=shop.shopware.com,resources=storesnapshots/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=shop.shopware.com,resources=storesnapshots/finalizers,verbs=update
+// +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storesnapshots,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storesnapshots/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storesnapshots/finalizers,verbs=update
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the StoreSnapshot object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.15.0/pkg/reconcile
 func (r *StoreSnapshotReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
 

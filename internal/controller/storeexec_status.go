@@ -1,4 +1,4 @@
-package exec
+package controller
 
 import (
 	"context"
@@ -49,13 +49,13 @@ func (r *StoreExecReconciler) reconcileCRStatus(
 	}
 
 	log.FromContext(ctx).Info("Update exec status", "status", ex.Status)
-	return writeStatus(ctx, r.Client, types.NamespacedName{
+	return writeExecStatus(ctx, r.Client, types.NamespacedName{
 		Namespace: ex.Namespace,
 		Name:      ex.Name,
 	}, ex.Status)
 }
 
-func writeStatus(
+func writeExecStatus(
 	ctx context.Context,
 	cl client.Client,
 	nn types.NamespacedName,

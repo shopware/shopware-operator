@@ -1,4 +1,4 @@
-package store
+package controller
 
 import (
 	"context"
@@ -18,8 +18,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
-
-const Error = "Error"
 
 func (r *StoreReconciler) reconcileCRStatus(
 	ctx context.Context,
@@ -94,7 +92,7 @@ func (r *StoreReconciler) reconcileCRStatus(
 	}
 
 	log.FromContext(ctx).Info("Update store status", "status", store.Status)
-	return writeStatus(ctx, r.Client, types.NamespacedName{
+	return writeStoreStatus(ctx, r.Client, types.NamespacedName{
 		Namespace: store.Namespace,
 		Name:      store.Name,
 	}, store.Status)
@@ -398,7 +396,7 @@ func (r *StoreReconciler) stateReady(ctx context.Context, store *v1.Store) v1.St
 	}
 }
 
-func writeStatus(
+func writeStoreStatus(
 	ctx context.Context,
 	cl client.Client,
 	nn types.NamespacedName,

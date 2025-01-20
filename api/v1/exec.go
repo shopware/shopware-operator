@@ -33,6 +33,9 @@ type StoreExecSpec struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
+// +kubebuilder:printcolumn:name="MaxRetries",type=string,JSONPath=".spec.maxRetries"
+// +kubebuilder:printcolumn:name="CronSchedule",type=string,JSONPath=".spec.cronSchedule"
+// +kubebuilder:printcolumn:name="CronSuspend",type=string,JSONPath=".spec.cronSuspend"
 // +kubebuilder:resource:scope=Namespaced
 // +kubebuilder:resource:shortName=stexec
 type StoreExec struct {

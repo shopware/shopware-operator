@@ -1,4 +1,4 @@
-package store
+package controller
 
 import (
 	"context"

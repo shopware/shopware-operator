@@ -37,9 +37,7 @@ import (
 	"go.uber.org/zap"
 
 	shopv1 "github.com/shopware/shopware-operator/api/v1"
-	"github.com/shopware/shopware-operator/internal/controller/exec"
-	"github.com/shopware/shopware-operator/internal/controller/snapshot"
-	"github.com/shopware/shopware-operator/internal/controller/store"
+	"github.com/shopware/shopware-operator/internal/controller"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -113,7 +111,7 @@ func main() {
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
-		//Metrics:                 metricsserver.Options{BindAddress: metricsAddr},
+		// Metrics:                 metricsserver.Options{BindAddress: metricsAddr},
 		HealthProbeBindAddress: probeAddr,
 		Cache: cache.Options{
 			DefaultNamespaces: map[string]cache.Config{
@@ -142,7 +140,7 @@ func main() {
 
 	nsClient := client.NewNamespacedClient(mgr.GetClient(), namespace)
 
-	if err = (&store.StoreReconciler{
+	if err = (&controller.StoreReconciler{
 		Client:               nsClient,
 		Scheme:               mgr.GetScheme(),
 		Recorder:             mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", namespace)),
@@ -151,7 +149,7 @@ func main() {
 		setupLog.Error(err, "unable to create store controller", "controller", "Store")
 		os.Exit(1)
 	}
-	if err = (&exec.StoreExecReconciler{
+	if err = (&controller.StoreExecReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", namespace)),
@@ -159,7 +157,7 @@ func main() {
 		setupLog.Error(err, "unable to create exec controller", "controller", "StoreExec")
 		os.Exit(1)
 	}
-	if err = (&snapshot.StoreSnapshotReconciler{
+	if err = (&controller.StoreSnapshotReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", namespace)),
