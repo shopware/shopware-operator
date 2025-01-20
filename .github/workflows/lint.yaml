@@ -114,10 +114,10 @@ jobs:
           kubectl get pods --namespace test -o wide
           kubectl get pods --namespace test -o=custom-columns='IMAGE:spec.containers[0].image'
 
-          kubectl apply -f examples
-          kubectl wait --namespace test --for=jsonpath="{.status.state}"=running --timeout=2m storeexec/test-cron || {
+          kubectl apply -f examples --namespace test
+          kubectl wait --namespace test --for=jsonpath="{.status.state}"=wait --timeout=2m storeexec/test-cron || {
             kubectl get --namespace test job/test -o json && exit 1
           }
-          kubectl wait --namespace test --for=jsonpath="{.status.state}"=done --timeout=2m storeexec/test || {
+          kubectl wait --namespace test --for=jsonpath="{.status.state}"=wait --timeout=2m storeexec/test || {
             kubectl get --namespace test cronjob/test-cron -o json && exit 2
           }

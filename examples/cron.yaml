@@ -2,7 +2,6 @@ apiVersion: shop.shopware.com/v1
 kind: StoreExec
 metadata:
   name: test-cron
-  namespace: test
 spec:
   storeRef: test
   cronSchedule: "1 * * * *"
