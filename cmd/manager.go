@@ -111,7 +111,7 @@ func main() {
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
-		//Metrics:                 metricsserver.Options{BindAddress: metricsAddr},
+		// Metrics:                 metricsserver.Options{BindAddress: metricsAddr},
 		HealthProbeBindAddress: probeAddr,
 		Cache: cache.Options{
 			DefaultNamespaces: map[string]cache.Config{
@@ -146,7 +146,23 @@ func main() {
 		Recorder:             mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", namespace)),
 		DisableServiceChecks: disableChecks,
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Store")
+		setupLog.Error(err, "unable to create store controller", "controller", "Store")
+		os.Exit(1)
+	}
+	if err = (&controller.StoreExecReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", namespace)),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create exec controller", "controller", "StoreExec")
+		os.Exit(1)
+	}
+	if err = (&controller.StoreSnapshotReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", namespace)),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create snapshot controller", "controller", "StoreSnapshot")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

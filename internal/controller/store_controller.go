@@ -100,7 +100,7 @@ func (r *StoreReconciler) Reconcile(
 ) (rr ctrl.Result, err error) {
 	log := log.FromContext(ctx)
 
-	rr = ctrl.Result{RequeueAfter: 10 * time.Second}
+	rr = ctrl.Result{RequeueAfter: 5 * time.Second}
 
 	var store *v1.Store
 	defer func() {
@@ -112,7 +112,7 @@ func (r *StoreReconciler) Reconcile(
 	store, err = k8s.GetStore(ctx, r.Client, req.NamespacedName)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			return ctrl.Result{}, nil
+			return rr, nil
 		}
 		log.Error(err, "get CR")
 		return rr, nil
@@ -129,6 +129,7 @@ func (r *StoreReconciler) Reconcile(
 	}
 
 	log.Info("Reconcile finished")
+	rr.RequeueAfter = 15 * time.Second
 	return rr, nil
 }
 
@@ -211,9 +212,11 @@ func (r *StoreReconciler) doReconcile(
 		return fmt.Errorf("service: %w", err)
 	}
 
-	log.Info("reconcile ingress")
-	if err := r.reconcileIngress(ctx, store); err != nil {
-		return fmt.Errorf("service: %w", err)
+	if store.Spec.Network.EnabledIngress {
+		log.Info("reconcile ingress")
+		if err := r.reconcileIngress(ctx, store); err != nil {
+			return fmt.Errorf("service: %w", err)
+		}
 	}
 
 	log.Info("reconcile horizontalPodAutoscaler")
@@ -274,7 +277,7 @@ func (r *StoreReconciler) ensureAppSecrets(ctx context.Context, store *v1.Store)
 	var dbHost string
 	if store.Spec.Database.HostRef.Name != "" {
 		hostSecret := new(corev1.Secret)
-		if err := r.Client.Get(ctx, types.NamespacedName{
+		if err := r.Get(ctx, types.NamespacedName{
 			Namespace: store.Namespace,
 			Name:      store.Spec.Database.HostRef.Name,
 		}, hostSecret); err != nil {
@@ -293,7 +296,7 @@ func (r *StoreReconciler) ensureAppSecrets(ctx context.Context, store *v1.Store)
 	}
 
 	dbSecret := new(corev1.Secret)
-	if err := r.Client.Get(ctx, types.NamespacedName{
+	if err := r.Get(ctx, types.NamespacedName{
 		Namespace: store.Namespace,
 		Name:      store.Spec.Database.PasswordSecretRef.Name,
 	}, dbSecret); err != nil {

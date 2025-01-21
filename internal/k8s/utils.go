@@ -87,6 +87,32 @@ func GetStore(
 	return cr, nil
 }
 
+func GetStoreExec(
+	ctx context.Context,
+	cl client.Client,
+	nn types.NamespacedName,
+) (*v1.StoreExec, error) {
+	cr := new(v1.StoreExec)
+	if err := cl.Get(ctx, nn, cr); err != nil {
+		return nil, errors.Wrapf(err, "get %v", nn.String())
+	}
+
+	return cr, nil
+}
+
+func GetStoreSnapshot(
+	ctx context.Context,
+	cl client.Client,
+	nn types.NamespacedName,
+) (*v1.StoreSnapshot, error) {
+	cr := new(v1.StoreSnapshot)
+	if err := cl.Get(ctx, nn, cr); err != nil {
+		return nil, errors.Wrapf(err, "get %v", nn.String())
+	}
+
+	return cr, nil
+}
+
 func GetSecret(
 	ctx context.Context,
 	cl client.Client,
@@ -120,7 +146,7 @@ func ObjectExists(
 func EnsureService(
 	ctx context.Context,
 	cl client.Client,
-	store *v1.Store,
+	owner metav1.Object,
 	svc *corev1.Service,
 	s *runtime.Scheme,
 	saveOldMeta bool,
@@ -132,18 +158,18 @@ func EnsureService(
 	}, oldSvc)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			return EnsureObjectWithHash(ctx, cl, store, svc, s)
+			return EnsureObjectWithHash(ctx, cl, owner, svc, s)
 		}
 		return errors.Wrap(err, "get object")
 	}
 
-	return EnsureObjectWithHash(ctx, cl, store, svc, s)
+	return EnsureObjectWithHash(ctx, cl, owner, svc, s)
 }
 
 func EnsureHPA(
 	ctx context.Context,
 	cl client.Client,
-	store *v1.Store,
+	owner metav1.Object,
 	svc *autoscalingv2.HorizontalPodAutoscaler,
 	s *runtime.Scheme,
 	saveOldMeta bool,
@@ -155,18 +181,41 @@ func EnsureHPA(
 	}, oldSvc)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			return EnsureObjectWithHash(ctx, cl, store, svc, s)
+			return EnsureObjectWithHash(ctx, cl, owner, svc, s)
 		}
 		return errors.Wrap(err, "get object")
 	}
 
-	return EnsureObjectWithHash(ctx, cl, store, svc, s)
+	return EnsureObjectWithHash(ctx, cl, owner, svc, s)
+}
+
+func EnsureCronJob(
+	ctx context.Context,
+	cl client.Client,
+	owner metav1.Object,
+	job *batchv1.CronJob,
+	s *runtime.Scheme,
+	saveOldMeta bool,
+) error {
+	oldJob := new(batchv1.Job)
+	err := cl.Get(ctx, types.NamespacedName{
+		Name:      job.GetName(),
+		Namespace: job.GetNamespace(),
+	}, oldJob)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return EnsureObjectWithHash(ctx, cl, owner, job, s)
+		}
+		return errors.Wrap(err, "get object")
+	}
+
+	return EnsureObjectWithHash(ctx, cl, owner, job, s)
 }
 
 func EnsureJob(
 	ctx context.Context,
 	cl client.Client,
-	store *v1.Store,
+	owner metav1.Object,
 	job *batchv1.Job,
 	s *runtime.Scheme,
 	saveOldMeta bool,
@@ -178,18 +227,18 @@ func EnsureJob(
 	}, oldJob)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			return EnsureObjectWithHash(ctx, cl, store, job, s)
+			return EnsureObjectWithHash(ctx, cl, owner, job, s)
 		}
 		return errors.Wrap(err, "get object")
 	}
 
-	return EnsureObjectWithHash(ctx, cl, store, job, s)
+	return EnsureObjectWithHash(ctx, cl, owner, job, s)
 }
 
 func EnsureIngress(
 	ctx context.Context,
 	cl client.Client,
-	store *v1.Store,
+	owner metav1.Object,
 	ingress *networkingv1.Ingress,
 	s *runtime.Scheme,
 	saveOldMeta bool,
@@ -201,18 +250,18 @@ func EnsureIngress(
 	}, oldDep)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			return EnsureObjectWithHash(ctx, cl, store, ingress, s)
+			return EnsureObjectWithHash(ctx, cl, owner, ingress, s)
 		}
 		return errors.Wrap(err, "get object")
 	}
 
-	return EnsureObjectWithHash(ctx, cl, store, ingress, s)
+	return EnsureObjectWithHash(ctx, cl, owner, ingress, s)
 }
 
 func EnsureDeployment(
 	ctx context.Context,
 	cl client.Client,
-	store *v1.Store,
+	owner metav1.Object,
 	deployment *appsv1.Deployment,
 	s *runtime.Scheme,
 	saveOldMeta bool,
@@ -224,12 +273,12 @@ func EnsureDeployment(
 	}, oldDep)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			return EnsureObjectWithHash(ctx, cl, store, deployment, s)
+			return EnsureObjectWithHash(ctx, cl, owner, deployment, s)
 		}
 		return errors.Wrap(err, "get object")
 	}
 
-	return EnsureObjectWithHash(ctx, cl, store, deployment, s)
+	return EnsureObjectWithHash(ctx, cl, owner, deployment, s)
 }
 
 func HasObjectChanged(

@@ -20,7 +20,7 @@ GOLICENSES ?= $(LOCALBIN)/go-licenses
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.2.1
-CONTROLLER_TOOLS_VERSION ?= v0.14.0
+CONTROLLER_TOOLS_VERSION ?= v0.17.0
 ZAP_PRETTY_VERSION ?= v0.3.0
 HELMIFY_VERSION ?= v0.4.11
 YQ_VERSION ?= 4.44.2
@@ -74,7 +74,7 @@ licenses: path go-licenses
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) rbac:roleName=shopware-operator crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.

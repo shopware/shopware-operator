@@ -19,8 +19,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-const Error = "Error"
-
 func (r *StoreReconciler) reconcileCRStatus(
 	ctx context.Context,
 	store *v1.Store,
@@ -32,7 +30,7 @@ func (r *StoreReconciler) reconcileCRStatus(
 
 	if reconcileError != nil {
 		store.Status.AddCondition(
-			v1.ShopCondition{
+			v1.StoreCondition{
 				Type:               store.Status.State,
 				LastTransitionTime: metav1.Time{},
 				LastUpdateTime:     metav1.NewTime(time.Now()),
@@ -94,7 +92,7 @@ func (r *StoreReconciler) reconcileCRStatus(
 	}
 
 	log.FromContext(ctx).Info("Update store status", "status", store.Status)
-	return writeStatus(ctx, r.Client, types.NamespacedName{
+	return writeStoreStatus(ctx, r.Client, types.NamespacedName{
 		Namespace: store.Namespace,
 		Name:      store.Name,
 	}, store.Status)
@@ -104,7 +102,7 @@ func (r *StoreReconciler) checkExternalServices(
 	ctx context.Context,
 	store *v1.Store,
 ) v1.StatefulAppState {
-	con := v1.ShopCondition{
+	con := v1.StoreCondition{
 		Type:               v1.StateWait,
 		LastTransitionTime: metav1.Time{},
 		LastUpdateTime:     metav1.Now(),
@@ -202,7 +200,7 @@ func (r *StoreReconciler) checkExternalServices(
 }
 
 func (r *StoreReconciler) stateSetup(ctx context.Context, store *v1.Store) v1.StatefulAppState {
-	con := v1.ShopCondition{
+	con := v1.StoreCondition{
 		Type:               v1.StateSetup,
 		LastTransitionTime: metav1.Time{},
 		LastUpdateTime:     metav1.Now(),
@@ -260,7 +258,7 @@ func (r *StoreReconciler) stateSetup(ctx context.Context, store *v1.Store) v1.St
 }
 
 func (r *StoreReconciler) stateMigration(ctx context.Context, store *v1.Store) v1.StatefulAppState {
-	con := v1.ShopCondition{
+	con := v1.StoreCondition{
 		Type:               v1.StateMigration,
 		LastTransitionTime: metav1.Time{},
 		LastUpdateTime:     metav1.Now(),
@@ -323,7 +321,7 @@ func (r *StoreReconciler) stateInitializing(
 	ctx context.Context,
 	store *v1.Store,
 ) v1.StatefulAppState {
-	con := v1.ShopCondition{
+	con := v1.StoreCondition{
 		Type:               v1.StateInitializing,
 		LastTransitionTime: metav1.Time{},
 		LastUpdateTime:     metav1.Now(),
@@ -366,7 +364,7 @@ func (r *StoreReconciler) stateInitializing(
 }
 
 func (r *StoreReconciler) stateReady(ctx context.Context, store *v1.Store) v1.StatefulAppState {
-	con := v1.ShopCondition{
+	con := v1.StoreCondition{
 		Type:               v1.StateReady,
 		LastTransitionTime: metav1.Time{},
 		LastUpdateTime:     metav1.Now(),
@@ -398,7 +396,7 @@ func (r *StoreReconciler) stateReady(ctx context.Context, store *v1.Store) v1.St
 	}
 }
 
-func writeStatus(
+func writeStoreStatus(
 	ctx context.Context,
 	cl client.Client,
 	nn types.NamespacedName,

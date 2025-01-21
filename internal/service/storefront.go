@@ -22,7 +22,7 @@ func StorefrontService(store *v1.Store) *corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      GetStorefrontServiceName(store),
 			Namespace: store.Namespace,
-			Labels:    util.GetDefaultLabels(store),
+			Labels:    util.GetDefaultStoreLabels(store),
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{

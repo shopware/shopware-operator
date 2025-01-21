@@ -7,7 +7,6 @@ toolchain go1.21.6
 require (
 	github.com/aws/aws-sdk-go-v2 v1.27.0
 	github.com/cert-manager/cert-manager v1.14.2
-	github.com/go-logr/logr v1.4.1
 	github.com/minio/minio-go/v7 v7.0.70
 	github.com/onsi/ginkgo/v2 v2.13.0
 	github.com/onsi/gomega v1.29.0
@@ -25,6 +24,7 @@ require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/aws/smithy-go v1.20.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
 	github.com/klauspost/compress v1.17.6 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.6 // indirect
@@ -42,7 +42,7 @@ require (
 	github.com/emicklei/go-restful/v3 v3.11.0 // indirect
 	github.com/evanphx/json-patch/v5 v5.7.0 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
-	github.com/go-logr/zapr v1.3.0 // indirect
+	github.com/go-logr/zapr v1.3.0
 	github.com/go-openapi/jsonpointer v0.20.2 // indirect
 	github.com/go-openapi/jsonreference v0.20.4 // indirect
 	github.com/go-openapi/swag v0.22.7 // indirect

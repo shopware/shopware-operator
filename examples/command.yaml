@@ -1,0 +1,10 @@
+apiVersion: shop.shopware.com/v1
+kind: StoreExec
+metadata:
+  name: test
+spec:
+  storeRef: test
+  maxRetries: 1
+  script: |
+    echo "Hello World"
+    /setup

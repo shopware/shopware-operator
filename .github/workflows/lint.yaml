@@ -102,11 +102,10 @@ jobs:
           kind load docker-image --name chart-testing ghcr.io/shopware/shopware-operator:$version
 
           make helm path=test version=99.99.98
-          cd test
-          helm lint .
+          helm lint test
           kubectl create namespace test
 
-          helm install test --namespace test . --set image.tag="$version"
+          helm install test --namespace test test --set image.tag="$version"
           kubectl wait --namespace test --for=condition=Available --timeout=20s deployment/test-shopware-operator
 
           kubectl get deployment --namespace test -o wide
@@ -114,3 +113,11 @@ jobs:
 
           kubectl get pods --namespace test -o wide
           kubectl get pods --namespace test -o=custom-columns='IMAGE:spec.containers[0].image'
+
+          kubectl apply -f examples --namespace test
+          kubectl wait --namespace test --for=jsonpath="{.status.state}"=wait --timeout=2m storeexec/test-cron || {
+            kubectl get --namespace test job/test -o json && exit 1
+          }
+          kubectl wait --namespace test --for=jsonpath="{.status.state}"=wait --timeout=2m storeexec/test || {
+            kubectl get --namespace test cronjob/test-cron -o json && exit 2
+          }

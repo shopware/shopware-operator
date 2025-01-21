@@ -46,7 +46,7 @@ func MigrationJob(st *v1.Store) *batchv1.Job {
 	labels := map[string]string{
 		"hash": GetMigrateHash(store),
 	}
-	maps.Copy(labels, util.GetDefaultLabels(store))
+	maps.Copy(labels, util.GetDefaultStoreLabels(store))
 	maps.Copy(labels, MigrationJobIdentifyer)
 
 	// Merge Overwritten jobContainer fields into container fields
@@ -102,8 +102,13 @@ func MigrationJob(st *v1.Store) *batchv1.Job {
 		},
 	}
 
+	// Old way
 	if store.Spec.ServiceAccountName != "" {
 		job.Spec.Template.Spec.ServiceAccountName = store.Spec.ServiceAccountName
+	}
+	// New way
+	if store.Spec.Container.ServiceAccountName != "" {
+		job.Spec.Template.Spec.ServiceAccountName = store.Spec.Container.ServiceAccountName
 	}
 
 	return job

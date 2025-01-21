@@ -19,16 +19,7 @@ const (
 	StateReady        StatefulAppState = "ready"
 )
 
-type StoreStatus struct {
-	State           StatefulAppState `json:"state,omitempty"`
-	Message         string           `json:"message,omitempty"`
-	CurrentImageTag string           `json:"currentImageTag,omitempty"`
-
-	Ready      string          `json:"ready,omitempty"`
-	Conditions []ShopCondition `json:"conditions,omitempty"`
-}
-
-type ShopCondition struct {
+type StoreCondition struct {
 	Type               StatefulAppState `json:"type,omitempty"`
 	LastTransitionTime metav1.Time      `json:"lastTransitionTime,omitempty"`
 	LastUpdateTime     metav1.Time      `json:"lastUpdatedTime,omitempty"`
@@ -37,7 +28,16 @@ type ShopCondition struct {
 	Status             string           `json:"status,omitempty"`
 }
 
-func (s *StoreStatus) AddCondition(c ShopCondition) {
+type StoreStatus struct {
+	State           StatefulAppState `json:"state,omitempty"`
+	Message         string           `json:"message,omitempty"`
+	CurrentImageTag string           `json:"currentImageTag,omitempty"`
+
+	Ready      string           `json:"ready,omitempty"`
+	Conditions []StoreCondition `json:"conditions,omitempty"`
+}
+
+func (s *StoreStatus) AddCondition(c StoreCondition) {
 	if len(s.Conditions) == 0 {
 		s.Conditions = append(s.Conditions, c)
 		return

@@ -49,7 +49,7 @@ func StoreIngress(store *v1.Store) *networkingv1.Ingress {
 			Name:        GetStoreIngressName(store),
 			Namespace:   store.GetNamespace(),
 			Annotations: store.Spec.Network.Annotations,
-			Labels:      util.GetDefaultLabels(store),
+			Labels:      util.GetDefaultStoreLabels(store),
 		},
 		Spec: networkingv1.IngressSpec{
 			IngressClassName: &store.Spec.Network.IngressClassName,

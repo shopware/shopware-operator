@@ -1,0 +1,9 @@
+apiVersion: shop.shopware.com/v1
+kind: StoreExec
+metadata:
+  name: test-cron
+spec:
+  storeRef: test
+  cronSchedule: "1 * * * *"
+  script: |
+    echo "test"
