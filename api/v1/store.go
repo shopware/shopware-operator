@@ -51,7 +51,7 @@ type StoreSpec struct {
 	// Use ServiceAccountName in container spec
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
-	// +kubebuilder:default={currency: "EURO", locale: "en-GB"}
+	// +kubebuilder:default={currency: "EUR", locale: "en-GB"}
 	ShopConfiguration Configuration `json:"shopConfiguration,omitempty"`
 
 	// +kubebuilder:default=false
