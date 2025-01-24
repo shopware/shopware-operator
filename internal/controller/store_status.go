@@ -24,7 +24,7 @@ func (r *StoreReconciler) reconcileCRStatus(
 	store *v1.Store,
 	reconcileError error,
 ) error {
-	if store == nil || store.ObjectMeta.DeletionTimestamp != nil {
+	if store == nil || store.DeletionTimestamp != nil {
 		return nil
 	}
 
@@ -54,7 +54,13 @@ func (r *StoreReconciler) reconcileCRStatus(
 	}
 
 	if store.IsState(v1.StateWait) {
-		store.Status.State = r.checkExternalServices(ctx, store)
+		if !store.Spec.DisableDatabaseCheck {
+			store.Status.State = r.checkDatabaseServices(ctx, store)
+		}
+
+		if !store.Spec.DisableS3Check {
+			store.Status.State = r.checkS3Services(ctx, store)
+		}
 	}
 
 	if store.IsState(v1.StateSetup) {
@@ -98,7 +104,7 @@ func (r *StoreReconciler) reconcileCRStatus(
 	}, store.Status)
 }
 
-func (r *StoreReconciler) checkExternalServices(
+func (r *StoreReconciler) checkDatabaseServices(
 	ctx context.Context,
 	store *v1.Store,
 ) v1.StatefulAppState {
@@ -106,7 +112,56 @@ func (r *StoreReconciler) checkExternalServices(
 		Type:               v1.StateWait,
 		LastTransitionTime: metav1.Time{},
 		LastUpdateTime:     metav1.Now(),
-		Message:            "Waiting for s3 api or database connection",
+		Message:            "Waiting for database connection",
+		Reason:             "",
+		Status:             "True",
+	}
+	defer func() {
+		store.Status.AddCondition(con)
+	}()
+
+	secret, err := k8s.GetSecret(ctx, r.Client, types.NamespacedName{
+		Namespace: store.Namespace,
+		Name:      store.Spec.Database.PasswordSecretRef.Name,
+	})
+	if err != nil {
+		con.Reason = err.Error()
+		con.Status = Error
+		return v1.StateWait
+	}
+
+	var password []byte
+	var ok bool
+	if password, ok = secret.Data[store.Spec.Database.PasswordSecretRef.Key]; !ok {
+		con.Reason = fmt.Sprintf(
+			"PasswordSecretRef doesn't contain the specified key '%s' in the secret '%s'",
+			store.Spec.Database.PasswordSecretRef.Key,
+			store.Spec.Database.PasswordSecretRef.Name,
+		)
+		con.Status = Error
+		return v1.StateWait
+	}
+
+	err = util.TestSQLConnection(ctx, &store.Spec.Database, password)
+	if err != nil {
+		con.Reason = err.Error()
+		con.Status = Error
+		return v1.StateWait
+	}
+
+	con.LastTransitionTime = metav1.Now()
+	return v1.StateSetup
+}
+
+func (r *StoreReconciler) checkS3Services(
+	ctx context.Context,
+	store *v1.Store,
+) v1.StatefulAppState {
+	con := v1.StoreCondition{
+		Type:               v1.StateWait,
+		LastTransitionTime: metav1.Time{},
+		LastUpdateTime:     metav1.Now(),
+		Message:            "Waiting for s3 connection",
 		Reason:             "",
 		Status:             "True",
 	}
@@ -161,34 +216,6 @@ func (r *StoreReconciler) checkExternalServices(
 		AccessKeyID:     string(accessKey),
 		SecretAccessKey: string(secretAccessKey),
 	})
-	if err != nil {
-		con.Reason = err.Error()
-		con.Status = Error
-		return v1.StateWait
-	}
-
-	secret, err = k8s.GetSecret(ctx, r.Client, types.NamespacedName{
-		Namespace: store.Namespace,
-		Name:      store.Spec.Database.PasswordSecretRef.Name,
-	})
-	if err != nil {
-		con.Reason = err.Error()
-		con.Status = Error
-		return v1.StateWait
-	}
-
-	var password []byte
-	if password, ok = secret.Data[store.Spec.Database.PasswordSecretRef.Key]; !ok {
-		con.Reason = fmt.Sprintf(
-			"PasswordSecretRef doesn't contain the specified key '%s' in the secret '%s'",
-			store.Spec.Database.PasswordSecretRef.Key,
-			store.Spec.Database.PasswordSecretRef.Name,
-		)
-		con.Status = Error
-		return v1.StateWait
-	}
-
-	err = util.TestSQLConnection(ctx, &store.Spec.Database, password)
 	if err != nil {
 		con.Reason = err.Error()
 		con.Status = Error

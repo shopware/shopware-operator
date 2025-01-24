@@ -55,8 +55,12 @@ type StoreSpec struct {
 	ShopConfiguration Configuration `json:"shopConfiguration,omitempty"`
 
 	// +kubebuilder:default=false
-	DisableChecks      bool `json:"disableChecks,omitempty"`
-	DisableJobDeletion bool `json:"disableJobDeletion,omitempty"`
+	DisableChecks bool `json:"disableChecks,omitempty"`
+	// +kubebuilder:default=false
+	DisableS3Check bool `json:"disableS3Check,omitempty"`
+	// +kubebuilder:default=false
+	DisableDatabaseCheck bool `json:"disableDatabaseCheck,omitempty"`
+	DisableJobDeletion   bool `json:"disableJobDeletion,omitempty"`
 
 	// +kubebuilder:default={adapter: "builtin"}
 	SessionCache SessionCacheSpec `json:"sessionCache"`
