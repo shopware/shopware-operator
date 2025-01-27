@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"maps"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
@@ -55,6 +56,7 @@ func CommandCronJob(store v1.Store, ex v1.StoreExec) *batchv1.CronJob {
 
 	labels := util.GetDefaultStoreExecLabels(store, ex)
 	labels["type"] = "command"
+	maps.Copy(labels, util.GetPDBLabels(store))
 	annotations := util.GetDefaultContainerExecAnnotations(CONTAINER_NAME_COMMAND, ex)
 
 	job := &batchv1.CronJob{

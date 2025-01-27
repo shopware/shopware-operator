@@ -11,6 +11,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/ingress"
 	"github.com/shopware/shopware-operator/internal/job"
 	"github.com/shopware/shopware-operator/internal/k8s"
+	"github.com/shopware/shopware-operator/internal/pdb"
 	"github.com/shopware/shopware-operator/internal/secret"
 	"github.com/shopware/shopware-operator/internal/service"
 	appsv1 "k8s.io/api/apps/v1"
@@ -93,6 +94,7 @@ func (r *StoreReconciler) findStoreForReconcile(
 //+kubebuilder:rbac:groups="apps",namespace=default,resources=deployments,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="batch",namespace=default,resources=jobs,verbs=get;list;watch;create;delete
 //+kubebuilder:rbac:groups="networking.k8s.io",namespace=default,resources=ingresses,verbs=get;list;watch;create;patch
+//+kubebuilder:rbac:groups="policy",namespace=default,resources=PodDisruptionBudget,verbs=get;create;patch
 
 func (r *StoreReconciler) Reconcile(
 	ctx context.Context,
@@ -150,6 +152,11 @@ func (r *StoreReconciler) doReconcile(
 	if store.IsState(v1.StateEmpty, v1.StateWait) {
 		log.Info("skip reconcile because s3/db not ready or state is empty")
 		return nil
+	}
+
+	log.Info("reconcile pdb")
+	if err := r.reconcilePDB(ctx, store); err != nil {
+		return fmt.Errorf("pdb: %w", err)
 	}
 
 	// State Setup
@@ -369,6 +376,27 @@ func (r *StoreReconciler) reconcileIngress(ctx context.Context, store *v1.Store)
 				store.Namespace))
 		if err := k8s.EnsureIngress(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
 			return fmt.Errorf("reconcile unready ingress: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (r *StoreReconciler) reconcilePDB(ctx context.Context, store *v1.Store) (err error) {
+	var changed bool
+	obj := pdb.StorePDB(*store)
+
+	if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
+		return fmt.Errorf("reconcile unready pdb: %w", err)
+	}
+
+	if changed {
+		r.Recorder.Event(store, "Normal", "Diff pdb hash",
+			fmt.Sprintf("Update Store %s pdb in namespace %s. Diff hash",
+				store.Name,
+				store.Namespace))
+		if err := k8s.EnsurePDB(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
+			return fmt.Errorf("reconcile unready pdb: %w", err)
 		}
 	}
 
