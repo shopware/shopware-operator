@@ -67,7 +67,7 @@ func (r *StoreReconciler) reconcileCRStatus(
 	}
 
 	if store.IsState(v1.StateReady) {
-		currentImage, err := deployment.GetStoreDeploymentImage(ctx, store, r.Client)
+		currentImage, err := deployment.GetStoreDeploymentImage(ctx, *store, r.Client)
 		if err != nil {
 			if k8serrors.IsNotFound(err) {
 				store.Status.State = v1.StateInitializing
@@ -212,7 +212,7 @@ func (r *StoreReconciler) stateSetup(ctx context.Context, store *v1.Store) v1.St
 		store.Status.AddCondition(con)
 	}()
 
-	setup, err := job.GetSetupJob(ctx, r.Client, store)
+	setup, err := job.GetSetupJob(ctx, r.Client, *store)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return v1.StateSetup
@@ -270,7 +270,7 @@ func (r *StoreReconciler) stateMigration(ctx context.Context, store *v1.Store) v
 		store.Status.AddCondition(con)
 	}()
 
-	migration, err := job.GetMigrationJob(ctx, r.Client, store)
+	migration, err := job.GetMigrationJob(ctx, r.Client, *store)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			log.FromContext(ctx).Info("Migration job is not found")
@@ -333,7 +333,7 @@ func (r *StoreReconciler) stateInitializing(
 		store.Status.AddCondition(con)
 	}()
 
-	deployment, err := deployment.GetStorefrontDeployment(ctx, store, r.Client)
+	deployment, err := deployment.GetStorefrontDeployment(ctx, *store, r.Client)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return v1.StateInitializing
@@ -376,7 +376,7 @@ func (r *StoreReconciler) stateReady(ctx context.Context, store *v1.Store) v1.St
 		store.Status.AddCondition(con)
 	}()
 
-	currentImage, err := deployment.GetStoreDeploymentImage(ctx, store, r.Client)
+	currentImage, err := deployment.GetStoreDeploymentImage(ctx, *store, r.Client)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return v1.StateInitializing

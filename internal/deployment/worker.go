@@ -6,7 +6,6 @@ import (
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
-	"golang.org/x/exp/maps"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,7 +16,7 @@ import (
 
 func GetWorkerDeployment(
 	ctx context.Context,
-	store *v1.Store,
+	store v1.Store,
 	client client.Client,
 ) (*appsv1.Deployment, error) {
 	setup := WorkerDeployment(store)
@@ -31,18 +30,15 @@ func GetWorkerDeployment(
 	return search, err
 }
 
-func WorkerDeployment(st *v1.Store) *appsv1.Deployment {
-	store := st.DeepCopy()
-
-	appName := "shopware-worker"
-	labels := map[string]string{
-		"app": appName,
-	}
-	maps.Copy(labels, util.GetDefaultStoreLabels(store))
-
+func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 	// Merge Overwritten storefrontContainer fields into container fields
 	store.Spec.Container.Merge(store.Spec.WorkerDeploymentContainer)
-	maps.Copy(labels, store.Spec.Container.Labels)
+
+	appName := "shopware-worker"
+	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.WorkerDeploymentContainer.Labels)
+	labels["app"] = appName
+
+	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.WorkerDeploymentContainer.Annotations)
 
 	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
 		Name:            appName,
@@ -78,7 +74,7 @@ func WorkerDeployment(st *v1.Store) *appsv1.Deployment {
 			Name:        GetWorkerDeploymentName(store),
 			Namespace:   store.Namespace,
 			Labels:      labels,
-			Annotations: store.Spec.Container.Annotations,
+			Annotations: annotations,
 		},
 		Spec: appsv1.DeploymentSpec{
 			ProgressDeadlineSeconds: &store.Spec.Container.ProgressDeadlineSeconds,
@@ -129,6 +125,6 @@ func WorkerDeployment(st *v1.Store) *appsv1.Deployment {
 	return deployment
 }
 
-func GetWorkerDeploymentName(store *v1.Store) string {
+func GetWorkerDeploymentName(store v1.Store) string {
 	return fmt.Sprintf("%s-store-worker", store.Name)
 }

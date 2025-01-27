@@ -99,7 +99,7 @@ func (r *StoreExecReconciler) stateRunning(ctx context.Context, store *v1.Store,
 		ex.Status.AddCondition(con)
 	}()
 
-	command, err := job.GetCommandJob(ctx, r.Client, store, ex)
+	command, err := job.GetCommandJob(ctx, r.Client, *store, *ex)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return v1.ExecStateRunning

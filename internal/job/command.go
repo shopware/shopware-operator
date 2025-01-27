@@ -5,7 +5,6 @@ import (
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
-	"golang.org/x/exp/maps"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -14,15 +13,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var CommandJobIdendtifier = map[string]string{"type": "command"}
-
 const CONTAINER_NAME_COMMAND = "shopware-command"
 
 func GetCommandJob(
 	ctx context.Context,
 	client client.Client,
-	store *v1.Store,
-	exec *v1.StoreExec,
+	store v1.Store,
+	exec v1.StoreExec,
 ) (*batchv1.Job, error) {
 	mig := CommandJob(store, exec)
 	search := &batchv1.Job{
@@ -38,8 +35,8 @@ func GetCommandJob(
 func GetCommandCronJob(
 	ctx context.Context,
 	client client.Client,
-	store *v1.Store,
-	exec *v1.StoreExec,
+	store v1.Store,
+	exec v1.StoreExec,
 ) (*batchv1.CronJob, error) {
 	mig := CommandJob(store, exec)
 	search := &batchv1.CronJob{
@@ -52,15 +49,13 @@ func GetCommandCronJob(
 	return search, err
 }
 
-func CommandCronJob(store *v1.Store, ex *v1.StoreExec) *batchv1.CronJob {
-	labels := util.GetDefaultStoreExecLabels(store, ex)
-	maps.Copy(labels, CommandJobIdendtifier)
-
-	annotations := map[string]string{}
-	maps.Copy(annotations, ex.Spec.Container.Annotations)
-
+func CommandCronJob(store v1.Store, ex v1.StoreExec) *batchv1.CronJob {
 	// Copy container spec from store to exec
 	store.Spec.Container.DeepCopyInto(&ex.Spec.Container)
+
+	labels := util.GetDefaultStoreExecLabels(store, ex)
+	labels["type"] = "command"
+	annotations := util.GetDefaultContainerExecAnnotations(CONTAINER_NAME_COMMAND, ex)
 
 	job := &batchv1.CronJob{
 		TypeMeta: metav1.TypeMeta{
@@ -91,15 +86,13 @@ func CommandCronJob(store *v1.Store, ex *v1.StoreExec) *batchv1.CronJob {
 	return job
 }
 
-func CommandJob(store *v1.Store, ex *v1.StoreExec) *batchv1.Job {
-	labels := util.GetDefaultStoreExecLabels(store, ex)
-	maps.Copy(labels, CommandJobIdendtifier)
-
-	annotations := map[string]string{}
-	maps.Copy(annotations, ex.Spec.Container.Annotations)
-
+func CommandJob(store v1.Store, ex v1.StoreExec) *batchv1.Job {
 	// Copy container spec from store to exec
 	store.Spec.Container.DeepCopyInto(&ex.Spec.Container)
+
+	labels := util.GetDefaultStoreExecLabels(store, ex)
+	labels["type"] = "cron_command"
+	annotations := util.GetDefaultContainerExecAnnotations(CONTAINER_NAME_COMMAND, ex)
 
 	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
@@ -118,11 +111,11 @@ func CommandJob(store *v1.Store, ex *v1.StoreExec) *batchv1.Job {
 	return job
 }
 
-func CommandJobName(exec *v1.StoreExec) string {
+func CommandJobName(exec v1.StoreExec) string {
 	return exec.Name
 }
 
-func getJobSpec(store *v1.Store, ex *v1.StoreExec, labels map[string]string) batchv1.JobSpec {
+func getJobSpec(store v1.Store, ex v1.StoreExec, labels map[string]string) batchv1.JobSpec {
 	parallelism := int32(1)
 	completions := int32(1)
 	sharedProcessNamespace := true
@@ -148,15 +141,16 @@ func getJobSpec(store *v1.Store, ex *v1.StoreExec, labels map[string]string) bat
 				Labels: labels,
 			},
 			Spec: corev1.PodSpec{
-				ServiceAccountName:        store.Spec.Container.ServiceAccountName,
-				ShareProcessNamespace:     &sharedProcessNamespace,
-				Volumes:                   store.Spec.Container.Volumes,
-				TopologySpreadConstraints: store.Spec.Container.TopologySpreadConstraints,
-				NodeSelector:              store.Spec.Container.NodeSelector,
-				ImagePullSecrets:          store.Spec.Container.ImagePullSecrets,
-				RestartPolicy:             "Never",
-				Containers:                containers,
-				SecurityContext:           store.Spec.Container.SecurityContext,
+				ServiceAccountName:            store.Spec.Container.ServiceAccountName,
+				ShareProcessNamespace:         &sharedProcessNamespace,
+				Volumes:                       store.Spec.Container.Volumes,
+				TopologySpreadConstraints:     store.Spec.Container.TopologySpreadConstraints,
+				TerminationGracePeriodSeconds: &store.Spec.Container.TerminationGracePeriodSeconds,
+				NodeSelector:                  store.Spec.Container.NodeSelector,
+				ImagePullSecrets:              store.Spec.Container.ImagePullSecrets,
+				RestartPolicy:                 "Never",
+				Containers:                    containers,
+				SecurityContext:               store.Spec.Container.SecurityContext,
 			},
 		},
 	}
@@ -167,8 +161,8 @@ func getJobSpec(store *v1.Store, ex *v1.StoreExec, labels map[string]string) bat
 func IsCommandJobCompleted(
 	ctx context.Context,
 	c client.Client,
-	store *v1.Store,
-	exec *v1.StoreExec,
+	store v1.Store,
+	exec v1.StoreExec,
 ) (bool, error) {
 	job, err := GetCommandJob(ctx, c, store, exec)
 	if err != nil {

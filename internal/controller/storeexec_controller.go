@@ -111,7 +111,7 @@ func (r *StoreExecReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *StoreExecReconciler) reconcileJob(ctx context.Context, store *v1.Store, exec *v1.StoreExec) (err error) {
 	var changed bool
-	obj := job.CommandJob(store, exec)
+	obj := job.CommandJob(*store, *exec)
 
 	if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
 		return fmt.Errorf("reconcile unready setup job: %w", err)
@@ -132,7 +132,7 @@ func (r *StoreExecReconciler) reconcileJob(ctx context.Context, store *v1.Store,
 
 func (r *StoreExecReconciler) reconcileCronJob(ctx context.Context, store *v1.Store, exec *v1.StoreExec) (err error) {
 	var changed bool
-	obj := job.CommandCronJob(store, exec)
+	obj := job.CommandCronJob(*store, *exec)
 
 	if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
 		return fmt.Errorf("reconcile unready setup cron job: %w", err)

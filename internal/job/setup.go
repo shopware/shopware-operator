@@ -6,7 +6,6 @@ import (
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
-	"golang.org/x/exp/maps"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -17,7 +16,7 @@ import (
 
 const CONTAINER_NAME_SETUP_JOB = "shopware-setup"
 
-func GetSetupJob(ctx context.Context, client client.Client, store *v1.Store) (*batchv1.Job, error) {
+func GetSetupJob(ctx context.Context, client client.Client, store v1.Store) (*batchv1.Job, error) {
 	setup := SetupJob(store)
 	search := &batchv1.Job{
 		ObjectMeta: setup.ObjectMeta,
@@ -29,21 +28,19 @@ func GetSetupJob(ctx context.Context, client client.Client, store *v1.Store) (*b
 	return search, err
 }
 
-func SetupJob(st *v1.Store) *batchv1.Job {
-	store := st.DeepCopy()
+func SetupJob(store v1.Store) *batchv1.Job {
+	// Merge Overwritten jobContainer fields into container fields
+	store.Spec.Container.Merge(store.Spec.SetupJobContainer)
 
 	parallelism := int32(1)
 	completions := int32(1)
 	sharedProcessNamespace := true
 
-	labels := map[string]string{
-		"type": "setup",
-	}
-	maps.Copy(labels, util.GetDefaultStoreLabels(store))
+	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.MigrationJobContainer.Labels)
+	labels["type"] = "setup"
 
-	// Merge Overwritten jobContainer fields into container fields
-	store.Spec.Container.Merge(store.Spec.SetupJobContainer)
-	maps.Copy(labels, store.Spec.Container.Labels)
+	// Use util function for annotations
+	annotations := util.GetDefaultContainerAnnotations(CONTAINER_NAME_SETUP_JOB, store, store.Spec.SetupJobContainer.Annotations)
 
 	envs := append(store.GetEnv(),
 		corev1.EnvVar{
@@ -71,6 +68,7 @@ func SetupJob(st *v1.Store) *batchv1.Job {
 		Command:         []string{"sh", "-c"},
 		Args:            []string{store.Spec.SetupScript},
 		Env:             envs,
+		Resources:       store.Spec.Container.Resources, // Add Resources here
 	})
 
 	job := &batchv1.Job{
@@ -82,7 +80,7 @@ func SetupJob(st *v1.Store) *batchv1.Job {
 			Name:        GetSetupJobName(store),
 			Namespace:   store.Namespace,
 			Labels:      labels,
-			Annotations: store.Spec.Container.Annotations,
+			Annotations: annotations,
 		},
 		Spec: batchv1.JobSpec{
 			Parallelism: &parallelism,
@@ -92,14 +90,15 @@ func SetupJob(st *v1.Store) *batchv1.Job {
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					ShareProcessNamespace:     &sharedProcessNamespace,
-					Volumes:                   store.Spec.Container.Volumes,
-					TopologySpreadConstraints: store.Spec.Container.TopologySpreadConstraints,
-					NodeSelector:              store.Spec.Container.NodeSelector,
-					ImagePullSecrets:          store.Spec.Container.ImagePullSecrets,
-					RestartPolicy:             "Never",
-					Containers:                containers,
-					SecurityContext:           store.Spec.Container.SecurityContext,
+					ShareProcessNamespace:         &sharedProcessNamespace,
+					TerminationGracePeriodSeconds: &store.Spec.Container.TerminationGracePeriodSeconds,
+					Volumes:                       store.Spec.Container.Volumes,
+					TopologySpreadConstraints:     store.Spec.Container.TopologySpreadConstraints,
+					NodeSelector:                  store.Spec.Container.NodeSelector,
+					ImagePullSecrets:              store.Spec.Container.ImagePullSecrets,
+					RestartPolicy:                 "Never",
+					Containers:                    containers,
+					SecurityContext:               store.Spec.Container.SecurityContext,
 				},
 			},
 		},
@@ -117,11 +116,11 @@ func SetupJob(st *v1.Store) *batchv1.Job {
 	return job
 }
 
-func GetSetupJobName(store *v1.Store) string {
+func GetSetupJobName(store v1.Store) string {
 	return fmt.Sprintf("%s-setup", store.Name)
 }
 
-func DeleteSetupJob(ctx context.Context, c client.Client, store *v1.Store) error {
+func DeleteSetupJob(ctx context.Context, c client.Client, store v1.Store) error {
 	job, err := GetSetupJob(ctx, c, store)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -138,7 +137,7 @@ func DeleteSetupJob(ctx context.Context, c client.Client, store *v1.Store) error
 func IsSetupJobCompleted(
 	ctx context.Context,
 	c client.Client,
-	store *v1.Store,
+	store v1.Store,
 ) (bool, error) {
 	setup, err := GetSetupJob(ctx, c, store)
 	if err != nil {

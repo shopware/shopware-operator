@@ -10,7 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-func StorefrontService(store *v1.Store) *corev1.Service {
+func StorefrontService(store v1.Store) *corev1.Service {
 	port := int32(8000)
 	appName := "shopware-storefront"
 
@@ -42,6 +42,6 @@ func StorefrontService(store *v1.Store) *corev1.Service {
 	}
 }
 
-func GetStorefrontServiceName(store *v1.Store) string {
+func GetStorefrontServiceName(store v1.Store) string {
 	return fmt.Sprintf("%s-storefront", store.Name)
 }
