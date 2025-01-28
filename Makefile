@@ -228,7 +228,7 @@ $(YQ): $(LOCALBIN)
 go-licenses: $(GOLICENSES) ## Download locally if necessary. If wrong version is installed, it will be overwritten.
 $(GOLICENSES): $(LOCALBIN)
 	test -s $(LOCALBIN)/go-licenses || \
-	GOBIN=$(LOCALBIN) go install github.com/google/go-licenses@latest
+	GOBIN=$(LOCALBIN) go install github.com/google/go-licenses@v1.6.0
 
 .PHONY: helmify
 helmify: $(HELMIFY) ## Download locally if necessary. If wrong version is installed, it will be overwritten.
