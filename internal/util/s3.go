@@ -3,6 +3,7 @@ package util
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/minio/minio-go/v7"
@@ -11,9 +12,15 @@ import (
 )
 
 func TestS3Connection(ctx context.Context, s v1.S3Storage, c aws.Credentials) error {
-	s3Client, err := minio.New(s.EndpointURL, &minio.Options{
+	url, err := url.Parse(s.EndpointURL)
+	if err != nil {
+		return fmt.Errorf("parsing url failed: %w", err)
+	}
+
+	endpoint := fmt.Sprintf("%s:%s", url.Hostname(), url.Port())
+	s3Client, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(c.AccessKeyID, c.SecretAccessKey, ""),
-		Secure: false,
+		Secure: url.Scheme == "https",
 	})
 	if err != nil {
 		return err
@@ -24,15 +31,19 @@ func TestS3Connection(ctx context.Context, s v1.S3Storage, c aws.Credentials) er
 		return fmt.Errorf("listing buckets failed: %w", err)
 	}
 
-	if len(buckets) <= 1 {
-		return fmt.Errorf("You should have at least two buckets (private and public)")
-	}
-
+	var public bool
+	var private bool
 	for _, b := range buckets {
-		if b.Name != s.PublicBucketName && b.Name != s.PrivateBucketName {
-			return fmt.Errorf("private or public bucket are not available yet")
+		if b.Name == s.PublicBucketName {
+			public = true
+		}
+		if b.Name != s.PrivateBucketName {
+			private = true
 		}
 	}
 
-	return nil
+	if public && private {
+		return nil
+	}
+	return fmt.Errorf("public bucket is not available yet")
 }
