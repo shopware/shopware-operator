@@ -36,6 +36,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run goreleaser on developer branch
+        id: goreleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
@@ -43,3 +44,8 @@ jobs:
           args: release --clean --snapshot
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push images
+        run: |
+          docker push ghcr.io/shopware/shopware-operator:${{ fromJSON(steps.goreleaser.outputs.metadata).version }}-arm64
+          docker push ghcr.io/shopware/shopware-operator:${{ fromJSON(steps.goreleaser.outputs.metadata).version }}-amd64
