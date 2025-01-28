@@ -12,7 +12,7 @@ import (
 
 func GetStoreDeploymentImage(
 	ctx context.Context,
-	store *v1.Store,
+	store v1.Store,
 	client client.Client,
 ) (string, error) {
 	setup := StorefrontDeployment(store)

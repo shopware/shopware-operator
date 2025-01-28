@@ -12,6 +12,9 @@ issues:
     - path: "api/*"
       linters:
         - lll
+    - path: "api/v1/store_test.go"
+      linters:
+        - dupl
     - path: "internal/*"
       linters:
         - dupl

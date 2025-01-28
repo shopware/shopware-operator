@@ -6,14 +6,13 @@ toolchain go1.21.6
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.27.0
-	github.com/cert-manager/cert-manager v1.14.2
+	github.com/cert-manager/cert-manager v1.13.6
 	github.com/minio/minio-go/v7 v7.0.70
 	github.com/onsi/ginkgo/v2 v2.13.0
 	github.com/onsi/gomega v1.29.0
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.8.4
 	go.uber.org/zap v1.27.0
-	golang.org/x/exp v0.0.0-20231226003508-02704c960a9b
 	k8s.io/api v0.29.0
 	k8s.io/apimachinery v0.29.0
 	k8s.io/client-go v0.29.0
@@ -31,7 +30,8 @@ require (
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rs/xid v1.5.0 // indirect
-	golang.org/x/crypto v0.21.0 // indirect
+	golang.org/x/crypto v0.22.0 // indirect
+	golang.org/x/exp v0.0.0-20231226003508-02704c960a9b // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 )
 
@@ -70,10 +70,10 @@ require (
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/net v0.23.0 // indirect
+	golang.org/x/net v0.24.0 // indirect
 	golang.org/x/oauth2 v0.15.0 // indirect
-	golang.org/x/sys v0.18.0 // indirect
-	golang.org/x/term v0.18.0 // indirect
+	golang.org/x/sys v0.19.0 // indirect
+	golang.org/x/term v0.19.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/tools v0.16.1 // indirect
@@ -87,7 +87,7 @@ require (
 	k8s.io/component-base v0.29.0 // indirect
 	k8s.io/klog/v2 v2.110.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20240103051144-eec4567ac022 // indirect
-	k8s.io/utils v0.0.0-20240102154912-e7106e64919e // indirect
+	k8s.io/utils v0.0.0-20230726121419-3b25d923346b // indirect
 	sigs.k8s.io/gateway-api v1.0.0 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect

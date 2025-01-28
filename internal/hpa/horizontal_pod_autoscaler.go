@@ -15,7 +15,7 @@ import (
 
 func GetStoreHPA(
 	ctx context.Context,
-	store *v1.Store,
+	store v1.Store,
 	client client.Client,
 ) (*autoscaling.HorizontalPodAutoscaler, error) {
 	hpa := StoreHPA(store)
@@ -29,7 +29,7 @@ func GetStoreHPA(
 	return search, err
 }
 
-func StoreHPA(store *v1.Store) *autoscaling.HorizontalPodAutoscaler {
+func StoreHPA(store v1.Store) *autoscaling.HorizontalPodAutoscaler {
 	dep := deployment.StorefrontDeployment(store)
 
 	if len(store.Spec.HorizontalPodAutoscaler.Metrics) == 0 {
@@ -54,7 +54,7 @@ func StoreHPA(store *v1.Store) *autoscaling.HorizontalPodAutoscaler {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        GetStoreHPAName(store),
 			Namespace:   store.GetNamespace(),
-			Labels:      util.GetDefaultStoreLabels(store),
+			Labels:      util.GetDefaultContainerStoreLabels(store, map[string]string{}),
 			Annotations: store.Spec.HorizontalPodAutoscaler.Annotations,
 		},
 		Spec: autoscaling.HorizontalPodAutoscalerSpec{
@@ -71,6 +71,6 @@ func StoreHPA(store *v1.Store) *autoscaling.HorizontalPodAutoscaler {
 	}
 }
 
-func GetStoreHPAName(store *v1.Store) string {
+func GetStoreHPAName(store v1.Store) string {
 	return fmt.Sprintf("store-%s", store.Name)
 }

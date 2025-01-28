@@ -10,7 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-func AdminService(store *v1.Store) *corev1.Service {
+func AdminService(store v1.Store) *corev1.Service {
 	port := int32(8000)
 	appName := "shopware-admin"
 
@@ -42,6 +42,6 @@ func AdminService(store *v1.Store) *corev1.Service {
 	}
 }
 
-func GetAdminServiceName(store *v1.Store) string {
+func GetAdminServiceName(store v1.Store) string {
 	return fmt.Sprintf("%s-admin", store.Name)
 }

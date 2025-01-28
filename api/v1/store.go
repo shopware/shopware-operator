@@ -32,12 +32,18 @@ type StoreList struct {
 type StoreSpec struct {
 	Database DatabaseSpec `json:"database"`
 
-	Container                     ContainerSpec      `json:"container"`
-	AdminDeploymentContainer      ContainerMergeSpec `json:"adminDeploymentContainer,omitempty"`
-	WorkerDeploymentContainer     ContainerMergeSpec `json:"workerDeploymentContainer,omitempty"`
+	Container ContainerSpec `json:"container"`
+
+	// +kubebuilder:default={}
+	AdminDeploymentContainer ContainerMergeSpec `json:"adminDeploymentContainer,omitempty"`
+	// +kubebuilder:default={}
+	WorkerDeploymentContainer ContainerMergeSpec `json:"workerDeploymentContainer,omitempty"`
+	// +kubebuilder:default={}
 	StorefrontDeploymentContainer ContainerMergeSpec `json:"storefrontDeploymentContainer,omitempty"`
-	SetupJobContainer             ContainerMergeSpec `json:"setupJobContainer,omitempty"`
-	MigrationJobContainer         ContainerMergeSpec `json:"migrationJobContainer,omitempty"`
+	// +kubebuilder:default={}
+	SetupJobContainer ContainerMergeSpec `json:"setupJobContainer,omitempty"`
+	// +kubebuilder:default={}
+	MigrationJobContainer ContainerMergeSpec `json:"migrationJobContainer,omitempty"`
 
 	Network                 NetworkSpec   `json:"network,omitempty"`
 	S3Storage               S3Storage     `json:"s3Storage,omitempty"`
@@ -158,6 +164,9 @@ type ContainerSpec struct {
 	// +kubebuilder:default=30
 	ProgressDeadlineSeconds int32 `json:"progressDeadlineSeconds,omitempty"`
 
+	// +kubebuilder:default=30
+	TerminationGracePeriodSeconds int64 `json:"terminationGracePeriodSeconds"`
+
 	// StartupProbe   corev1.Probe `json:"startupProbe,omitempty"`
 	// ReadinessProbe corev1.Probe `json:"readinessProbe,omitempty"`
 	// LivenessProbe  corev1.Probe `json:"livenessProbe,omitempty"`
@@ -185,16 +194,17 @@ type ContainerSpec struct {
 
 type ContainerMergeSpec struct {
 	// +kubebuilder:validation:MinLength=1
-	Image                   string                        `json:"image,omitempty"`
-	ImagePullPolicy         corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
-	ImagePullSecrets        []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
-	Volumes                 []corev1.Volume               `json:"volumes,omitempty"`
-	VolumeMounts            []corev1.VolumeMount          `json:"volumeMounts,omitempty"`
-	RestartPolicy           corev1.RestartPolicy          `json:"restartPolicy,omitempty"`
-	SecurityContext         *corev1.PodSecurityContext    `json:"podSecurityContext,omitempty"`
-	ExtraContainers         []corev1.Container            `json:"extraContainers,omitempty"`
-	Replicas                int32                         `json:"replicas,omitempty"`
-	ProgressDeadlineSeconds int32                         `json:"progressDeadlineSeconds,omitempty"`
+	Image                         string                        `json:"image,omitempty"`
+	ImagePullPolicy               corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
+	ImagePullSecrets              []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	Volumes                       []corev1.Volume               `json:"volumes,omitempty"`
+	VolumeMounts                  []corev1.VolumeMount          `json:"volumeMounts,omitempty"`
+	RestartPolicy                 corev1.RestartPolicy          `json:"restartPolicy,omitempty"`
+	SecurityContext               *corev1.PodSecurityContext    `json:"podSecurityContext,omitempty"`
+	ExtraContainers               []corev1.Container            `json:"extraContainers,omitempty"`
+	Replicas                      int32                         `json:"replicas,omitempty"`
+	ProgressDeadlineSeconds       int32                         `json:"progressDeadlineSeconds,omitempty"`
+	TerminationGracePeriodSeconds int64                         `json:"terminationGracePeriodSeconds,omitempty"`
 
 	Annotations               map[string]string                 `json:"annotations,omitempty"`
 	Labels                    map[string]string                 `json:"labels,omitempty"`
@@ -203,8 +213,9 @@ type ContainerMergeSpec struct {
 	Tolerations               []corev1.Toleration               `json:"tolerations,omitempty"`
 	Affinity                  corev1.Affinity                   `json:"affinity,omitempty"`
 
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
-	ExtraEnvs []corev1.EnvVar             `json:"extraEnvs,omitempty"`
+	Resources          corev1.ResourceRequirements `json:"resources,omitempty"`
+	ExtraEnvs          []corev1.EnvVar             `json:"extraEnvs,omitempty"`
+	ServiceAccountName string                      `json:"serviceAccountName,omitempty"`
 }
 
 type SessionCacheSpec struct {
@@ -358,12 +369,36 @@ func (c *ContainerSpec) Merge(from ContainerMergeSpec) {
 	if from.Volumes != nil {
 		c.Volumes = from.Volumes
 	}
+
+	if from.ServiceAccountName != "" {
+		c.ServiceAccountName = from.ServiceAccountName
+	}
+
+	// Initialize resources maps if nil
+	if c.Resources.Requests == nil {
+		c.Resources.Requests = make(corev1.ResourceList)
+	}
+	if c.Resources.Limits == nil {
+		c.Resources.Limits = make(corev1.ResourceList)
+	}
+
+	// Always copy existing resources first
 	if from.Resources.Requests != nil {
-		c.Resources.Requests = from.Resources.Requests
+		for k, v := range from.Resources.Requests {
+			c.Resources.Requests[k] = v
+		}
 	}
 	if from.Resources.Limits != nil {
-		c.Resources.Limits = from.Resources.Limits
+		for k, v := range from.Resources.Limits {
+			c.Resources.Limits[k] = v
+		}
 	}
+
+	// Handle security context
+	if from.SecurityContext != nil {
+		c.SecurityContext = from.SecurityContext
+	}
+
 	if from.ExtraContainers != nil {
 		c.ExtraContainers = from.ExtraContainers
 	}
@@ -381,5 +416,13 @@ func (c *ContainerSpec) Merge(from ContainerMergeSpec) {
 	}
 	if from.Labels != nil {
 		maps.Copy(c.Labels, from.Labels)
+	}
+	if from.TerminationGracePeriodSeconds != 0 {
+		c.TerminationGracePeriodSeconds = from.TerminationGracePeriodSeconds
+	}
+
+	// Handle affinity
+	if from.Affinity.NodeAffinity != nil || from.Affinity.PodAffinity != nil || from.Affinity.PodAntiAffinity != nil {
+		c.Affinity = from.Affinity
 	}
 }

@@ -329,8 +329,8 @@ func (r *StoreReconciler) ensureAppSecrets(ctx context.Context, store *v1.Store)
 
 func (r *StoreReconciler) reconcileServices(ctx context.Context, store *v1.Store) (err error) {
 	objs := []*corev1.Service{
-		service.StorefrontService(store),
-		service.AdminService(store),
+		service.StorefrontService(*store),
+		service.AdminService(*store),
 	}
 
 	var changed bool
@@ -356,7 +356,7 @@ func (r *StoreReconciler) reconcileServices(ctx context.Context, store *v1.Store
 
 func (r *StoreReconciler) reconcileIngress(ctx context.Context, store *v1.Store) (err error) {
 	var changed bool
-	obj := ingress.StoreIngress(store)
+	obj := ingress.StoreIngress(*store)
 
 	if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
 		return fmt.Errorf("reconcile unready ingress: %w", err)
@@ -379,9 +379,9 @@ func (r *StoreReconciler) reconcileDeployment(ctx context.Context, store *v1.Sto
 	var changed bool
 
 	objs := []*appsv1.Deployment{
-		deployment.StorefrontDeployment(store),
-		deployment.AdminDeployment(store),
-		deployment.WorkerDeployment(store),
+		deployment.StorefrontDeployment(*store),
+		deployment.AdminDeployment(*store),
+		deployment.WorkerDeployment(*store),
 	}
 
 	for _, obj := range objs {
@@ -414,7 +414,7 @@ func (r *StoreReconciler) reconcileHoizontalPodAutoscaler(
 	}
 
 	var changed bool
-	obj := hpa.StoreHPA(store)
+	obj := hpa.StoreHPA(*store)
 
 	if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
 		return fmt.Errorf("reconcile unready deployment: %w", err)
@@ -435,7 +435,7 @@ func (r *StoreReconciler) reconcileHoizontalPodAutoscaler(
 
 func (r *StoreReconciler) reconcileMigrationJob(ctx context.Context, store *v1.Store) (err error) {
 	var changed bool
-	obj := job.MigrationJob(store)
+	obj := job.MigrationJob(*store)
 
 	if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
 		return fmt.Errorf("reconcile unready migrate job: %w", err)
@@ -456,7 +456,7 @@ func (r *StoreReconciler) reconcileMigrationJob(ctx context.Context, store *v1.S
 
 func (r *StoreReconciler) reconcileSetupJob(ctx context.Context, store *v1.Store) (err error) {
 	var changed bool
-	obj := job.SetupJob(store)
+	obj := job.SetupJob(*store)
 
 	if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
 		return fmt.Errorf("reconcile unready setup job: %w", err)
@@ -476,17 +476,17 @@ func (r *StoreReconciler) reconcileSetupJob(ctx context.Context, store *v1.Store
 }
 
 func (r *StoreReconciler) completeJobs(ctx context.Context, store *v1.Store) error {
-	done, err := job.IsSetupJobCompleted(ctx, r.Client, store)
+	done, err := job.IsSetupJobCompleted(ctx, r.Client, *store)
 	if err != nil {
 		return err
 	}
 	// The job is not completed because active containers are running
 	if done {
-		if err = job.DeleteSetupJob(ctx, r.Client, store); err != nil {
+		if err = job.DeleteSetupJob(ctx, r.Client, *store); err != nil {
 			return err
 		}
 	}
-	done, err = job.IsMigrationJobCompleted(ctx, r.Client, store)
+	done, err = job.IsMigrationJobCompleted(ctx, r.Client, *store)
 	if err != nil {
 		return err
 	}

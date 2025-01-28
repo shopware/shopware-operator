@@ -3,6 +3,7 @@ package ingress
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/service"
@@ -16,7 +17,7 @@ import (
 
 func GetStoreIngress(
 	ctx context.Context,
-	store *v1.Store,
+	store v1.Store,
 	client client.Client,
 ) (*appsv1.Deployment, error) {
 	ingress := StoreIngress(store)
@@ -30,8 +31,11 @@ func GetStoreIngress(
 	return search, err
 }
 
-func StoreIngress(store *v1.Store) *networkingv1.Ingress {
+func StoreIngress(store v1.Store) *networkingv1.Ingress {
 	pathType := networkingv1.PathTypePrefix
+
+	labels := util.GetDefaultContainerStoreLabels(store, map[string]string{})
+	maps.Copy(labels, store.Spec.Network.Labels)
 
 	var tls []networkingv1.IngressTLS
 	if store.Spec.Network.TLSSecretName != "" {
@@ -49,7 +53,7 @@ func StoreIngress(store *v1.Store) *networkingv1.Ingress {
 			Name:        GetStoreIngressName(store),
 			Namespace:   store.GetNamespace(),
 			Annotations: store.Spec.Network.Annotations,
-			Labels:      util.GetDefaultStoreLabels(store),
+			Labels:      labels,
 		},
 		Spec: networkingv1.IngressSpec{
 			IngressClassName: &store.Spec.Network.IngressClassName,
@@ -117,6 +121,6 @@ func StoreIngress(store *v1.Store) *networkingv1.Ingress {
 	}
 }
 
-func GetStoreIngressName(store *v1.Store) string {
+func GetStoreIngressName(store v1.Store) string {
 	return fmt.Sprintf("store-%s", store.Name)
 }

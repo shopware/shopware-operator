@@ -6,7 +6,6 @@ import (
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
-	"golang.org/x/exp/maps"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,7 +18,7 @@ const DEPLOYMENT_STOREFRONT_CONTAINER_NAME = "shopware-storefront"
 
 func GetStorefrontDeployment(
 	ctx context.Context,
-	store *v1.Store,
+	store v1.Store,
 	client client.Client,
 ) (*appsv1.Deployment, error) {
 	setup := StorefrontDeployment(store)
@@ -33,18 +32,15 @@ func GetStorefrontDeployment(
 	return search, err
 }
 
-func StorefrontDeployment(st *v1.Store) *appsv1.Deployment {
-	store := st.DeepCopy()
-
-	appName := "shopware-storefront"
-	labels := map[string]string{
-		"app": appName,
-	}
-	maps.Copy(labels, util.GetDefaultStoreLabels(store))
-
+func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 	// Merge Overwritten storefrontContainer fields into container fields
 	store.Spec.Container.Merge(store.Spec.StorefrontDeploymentContainer)
-	maps.Copy(labels, store.Spec.Container.Labels)
+
+	appName := "shopware-storefront"
+	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.StorefrontDeploymentContainer.Labels)
+	labels["app"] = appName
+
+	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.StorefrontDeploymentContainer.Annotations)
 
 	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
 		Name: DEPLOYMENT_STOREFRONT_CONTAINER_NAME,
@@ -96,7 +92,7 @@ func StorefrontDeployment(st *v1.Store) *appsv1.Deployment {
 			Name:        GetStorefrontDeploymentName(store),
 			Namespace:   store.Namespace,
 			Labels:      labels,
-			Annotations: store.Spec.Container.Annotations,
+			Annotations: annotations,
 		},
 		Spec: appsv1.DeploymentSpec{
 			ProgressDeadlineSeconds: &store.Spec.Container.ProgressDeadlineSeconds,
@@ -147,6 +143,6 @@ func StorefrontDeployment(st *v1.Store) *appsv1.Deployment {
 	return deployment
 }
 
-func GetStorefrontDeploymentName(store *v1.Store) string {
+func GetStorefrontDeploymentName(store v1.Store) string {
 	return fmt.Sprintf("%s-storefront", store.Name)
 }

@@ -7,7 +7,6 @@ import (
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
-	"golang.org/x/exp/maps"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -23,7 +22,7 @@ const CONTAINER_NAME_MIGRATION_JOB = "shopware-migration"
 func GetMigrationJob(
 	ctx context.Context,
 	client client.Client,
-	store *v1.Store,
+	store v1.Store,
 ) (*batchv1.Job, error) {
 	mig := MigrationJob(store)
 	search := &batchv1.Job{
@@ -36,30 +35,21 @@ func GetMigrationJob(
 	return search, err
 }
 
-func MigrationJob(st *v1.Store) *batchv1.Job {
-	store := st.DeepCopy()
+func MigrationJob(store v1.Store) *batchv1.Job {
+	// Merge Overwritten jobContainer fields into container fields
+	store.Spec.Container.Merge(store.Spec.MigrationJobContainer)
 
 	parallelism := int32(1)
 	completions := int32(1)
 	sharedProcessNamespace := true
 
-	labels := map[string]string{
-		"hash": GetMigrateHash(store),
-	}
-	maps.Copy(labels, util.GetDefaultStoreLabels(store))
-	maps.Copy(labels, MigrationJobIdentifyer)
+	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.MigrationJobContainer.Labels)
+	labels["hash"] = GetMigrateHash(store)
+	labels["type"] = "migration"
 
-	// Merge Overwritten jobContainer fields into container fields
-	store.Spec.Container.Merge(store.Spec.MigrationJobContainer)
-	maps.Copy(labels, store.Spec.Container.Labels)
-
-	// Write images to annotations because they are longer then 63 characters which
-	// is the limit for labels
-	annotations := map[string]string{
-		"oldImage": store.Status.CurrentImageTag,
-		"newImage": store.Spec.Container.Image,
-	}
-	maps.Copy(annotations, store.Spec.Container.Annotations)
+	annotations := util.GetDefaultContainerAnnotations(CONTAINER_NAME_MIGRATION_JOB, store, store.Spec.MigrationJobContainer.Annotations)
+	annotations["oldImage"] = store.Status.CurrentImageTag
+	annotations["newImage"] = store.Spec.Container.Image
 
 	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
 		Name:            CONTAINER_NAME_MIGRATION_JOB,
@@ -74,7 +64,8 @@ func MigrationJob(st *v1.Store) *batchv1.Job {
 	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Job",
-			APIVersion: "batch/v1"},
+			APIVersion: "batch/v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        MigrateJobName(store),
 			Namespace:   store.Namespace,
@@ -89,14 +80,15 @@ func MigrationJob(st *v1.Store) *batchv1.Job {
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					ShareProcessNamespace:     &sharedProcessNamespace,
-					Volumes:                   store.Spec.Container.Volumes,
-					TopologySpreadConstraints: store.Spec.Container.TopologySpreadConstraints,
-					NodeSelector:              store.Spec.Container.NodeSelector,
-					ImagePullSecrets:          store.Spec.Container.ImagePullSecrets,
-					RestartPolicy:             "Never",
-					Containers:                containers,
-					SecurityContext:           store.Spec.Container.SecurityContext,
+					ShareProcessNamespace:         &sharedProcessNamespace,
+					Volumes:                       store.Spec.Container.Volumes,
+					TopologySpreadConstraints:     store.Spec.Container.TopologySpreadConstraints,
+					TerminationGracePeriodSeconds: &store.Spec.Container.TerminationGracePeriodSeconds,
+					NodeSelector:                  store.Spec.Container.NodeSelector,
+					ImagePullSecrets:              store.Spec.Container.ImagePullSecrets,
+					RestartPolicy:                 "Never",
+					Containers:                    containers,
+					SecurityContext:               store.Spec.Container.SecurityContext,
 				},
 			},
 		},
@@ -114,11 +106,11 @@ func MigrationJob(st *v1.Store) *batchv1.Job {
 	return job
 }
 
-func MigrateJobName(store *v1.Store) string {
+func MigrateJobName(store v1.Store) string {
 	return fmt.Sprintf("%s-migrate-%s", store.Name, GetMigrateHash(store))
 }
 
-func GetMigrateHash(store *v1.Store) string {
+func GetMigrateHash(store v1.Store) string {
 	data := []byte(fmt.Sprintf("%s|%s", store.Status.CurrentImageTag, store.Spec.Container.Image))
 	return fmt.Sprintf("%x", md5.Sum(data))
 }
@@ -132,7 +124,7 @@ func DeleteAllMigrationJobs(ctx context.Context, c client.Client, store *v1.Stor
 func IsMigrationJobCompleted(
 	ctx context.Context,
 	c client.Client,
-	store *v1.Store,
+	store v1.Store,
 ) (bool, error) {
 	migration, err := GetMigrationJob(ctx, c, store)
 	if err != nil {

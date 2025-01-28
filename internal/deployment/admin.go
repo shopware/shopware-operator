@@ -6,7 +6,6 @@ import (
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
-	"golang.org/x/exp/maps"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,7 +16,7 @@ import (
 
 func GetAdminDeployment(
 	ctx context.Context,
-	store *v1.Store,
+	store v1.Store,
 	client client.Client,
 ) (*appsv1.Deployment, error) {
 	setup := AdminDeployment(store)
@@ -31,18 +30,15 @@ func GetAdminDeployment(
 	return search, err
 }
 
-func AdminDeployment(st *v1.Store) *appsv1.Deployment {
-	store := st.DeepCopy()
-
-	appName := "shopware-admin"
-	labels := map[string]string{
-		"app": appName,
-	}
-	maps.Copy(labels, util.GetDefaultStoreLabels(store))
-
+func AdminDeployment(store v1.Store) *appsv1.Deployment {
 	// Merge Overwritten adminContainer fields into container fields
 	store.Spec.Container.Merge(store.Spec.AdminDeploymentContainer)
-	maps.Copy(labels, store.Spec.Container.Labels)
+
+	appName := "shopware-admin"
+	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.AdminDeploymentContainer.Labels)
+	labels["app"] = appName
+
+	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.AdminDeploymentContainer.Annotations)
 
 	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
 		LivenessProbe: &corev1.Probe{
@@ -94,7 +90,7 @@ func AdminDeployment(st *v1.Store) *appsv1.Deployment {
 			Name:        GetAdminDeploymentName(store),
 			Namespace:   store.Namespace,
 			Labels:      labels,
-			Annotations: store.Spec.Container.Annotations,
+			Annotations: annotations,
 		},
 		Spec: appsv1.DeploymentSpec{
 			ProgressDeadlineSeconds: &store.Spec.Container.ProgressDeadlineSeconds,
@@ -146,6 +142,6 @@ func AdminDeployment(st *v1.Store) *appsv1.Deployment {
 	return deployment
 }
 
-func GetAdminDeploymentName(store *v1.Store) string {
+func GetAdminDeploymentName(store v1.Store) string {
 	return fmt.Sprintf("%s-store-admin", store.Name)
 }
