@@ -313,6 +313,9 @@ type DatabaseSpec struct {
 	// +kubebuilder:default=PREFERRED
 	SSLMode string `json:"sslMode,omitempty"`
 
+	// +kubebuilder:example=?attribute1=value1&attribute2=value2...
+	Options string `json:"options,omitempty"`
+
 	PasswordSecretRef SecretRef `json:"passwordSecretRef"`
 }
 
