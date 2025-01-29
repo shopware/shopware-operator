@@ -15,7 +15,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-const Error = "Error"
+const (
+	Error = "Error"
+	Ready = "Ready"
+)
 
 func (r *StoreExecReconciler) reconcileCRStatus(
 	ctx context.Context,

@@ -157,6 +157,8 @@ func (r *StoreReconciler) checkDatabaseServices(
 	}
 
 	con.LastTransitionTime = metav1.Now()
+	con.Status = Ready
+	con.Reason = "Database ping passed"
 	return v1.StateSetup
 }
 
@@ -230,6 +232,8 @@ func (r *StoreReconciler) checkS3Services(
 	}
 
 	con.LastTransitionTime = metav1.Now()
+	con.Status = Ready
+	con.Reason = "S3 connection test passed"
 	return v1.StateSetup
 }
 
@@ -278,6 +282,7 @@ func (r *StoreReconciler) stateSetup(ctx context.Context, store *v1.Store) v1.St
 
 	if jobState.IsDone() && !jobState.HasErrors() {
 		con.Message = "Setup finished"
+		con.Status = Ready
 		con.LastTransitionTime = metav1.Now()
 		return v1.StateInitializing
 	}
@@ -338,6 +343,7 @@ func (r *StoreReconciler) stateMigration(ctx context.Context, store *v1.Store) v
 
 	if jobState.IsDone() && !jobState.HasErrors() {
 		con.Message = "Migration finished"
+		con.Status = Ready
 		con.LastTransitionTime = metav1.Now()
 		return v1.StateInitializing
 	}
@@ -384,6 +390,7 @@ func (r *StoreReconciler) stateInitializing(
 
 	if deployment.Status.ReadyReplicas == store.Spec.Container.Replicas {
 		con.Message = "Initialization finished"
+		con.Status = Ready
 		con.LastTransitionTime = metav1.Now()
 		return v1.StateReady
 	}
