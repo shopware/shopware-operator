@@ -100,7 +100,8 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					Volumes:                   store.Spec.Container.Volumes,

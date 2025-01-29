@@ -79,7 +79,8 @@ func MigrationJob(store v1.Store) *batchv1.Job {
 			Completions: &completions,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					ShareProcessNamespace:         &sharedProcessNamespace,
