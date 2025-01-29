@@ -14,6 +14,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/pdb"
 	"github.com/shopware/shopware-operator/internal/secret"
 	"github.com/shopware/shopware-operator/internal/service"
+	"github.com/shopware/shopware-operator/internal/util"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -281,25 +282,9 @@ func (r *StoreReconciler) ensureAppSecrets(ctx context.Context, store *v1.Store)
 		return fmt.Errorf("database host is empty for store %s. Eigther set host or a hostRef", store.Name)
 	}
 
-	var dbHost string
-	if store.Spec.Database.HostRef.Name != "" {
-		hostSecret := new(corev1.Secret)
-		if err := r.Get(ctx, types.NamespacedName{
-			Namespace: store.Namespace,
-			Name:      store.Spec.Database.HostRef.Name,
-		}, hostSecret); err != nil {
-			if k8serrors.IsNotFound(err) {
-				r.Recorder.Event(store, "Warning", "DB secret not found",
-					fmt.Sprintf("Missing database secret for Store %s in namespace %s",
-						store.Name,
-						store.Namespace))
-				return nil
-			}
-			return fmt.Errorf("can't read database secret: %w", err)
-		}
-		dbHost = string(hostSecret.Data[store.Spec.Database.HostRef.Key])
-	} else {
-		dbHost = store.Spec.Database.Host
+	dbHost, err := util.GetDBHost(ctx, *store, r.Client)
+	if err != nil {
+		return fmt.Errorf("get db host: %w", err)
 	}
 
 	dbSecret := new(corev1.Secret)

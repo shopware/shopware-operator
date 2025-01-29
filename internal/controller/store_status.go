@@ -142,7 +142,14 @@ func (r *StoreReconciler) checkDatabaseServices(
 		return v1.StateWait
 	}
 
-	err = util.TestSQLConnection(ctx, &store.Spec.Database, password)
+	dbHost, err := util.GetDBHost(ctx, *store, r.Client)
+	if err != nil {
+		con.Reason = err.Error()
+		con.Status = Error
+		return v1.StateWait
+	}
+
+	err = util.TestSQLConnection(ctx, &store.Spec.Database, dbHost, password)
 	if err != nil {
 		con.Reason = err.Error()
 		con.Status = Error
