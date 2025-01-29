@@ -58,7 +58,7 @@ func (r *StoreReconciler) reconcileCRStatus(
 			store.Status.State = r.checkDatabaseServices(ctx, store)
 		}
 
-		if !store.Spec.DisableS3Check {
+		if !store.Spec.DisableS3Check && store.Spec.S3Storage.AccessKeyRef.Key != "" {
 			store.Status.State = r.checkS3Services(ctx, store)
 		}
 	}
