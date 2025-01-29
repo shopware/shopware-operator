@@ -6,7 +6,7 @@ import (
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
-	policy "k8s.io/api/policy/v1beta1"
+	policy "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
