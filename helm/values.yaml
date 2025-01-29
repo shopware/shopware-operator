@@ -10,6 +10,11 @@ image:
   tag: ""
   pullPolicy: IfNotPresent
 
+## Custom resource configuration
+crds:
+  # Install and upgrade CRDs
+  install: true
+
 # rbac: settings for deployer RBAC creation
 rbac:
   # rbac.create: if false, RBAC resources should be in place
