@@ -45,13 +45,13 @@ func MigrationJob(store v1.Store) *batchv1.Job {
 	sharedProcessNamespace := true
 
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.MigrationJobContainer.Labels)
-	labels["hash"] = GetMigrateHash(store)
-	labels["type"] = "migration"
+	labels["shop.shopware.com/store/hash"] = GetMigrateHash(store)
+	labels["shop.shopware.com/store/type"] = "migration"
 	maps.Copy(labels, util.GetPDBLabels(store))
 
 	annotations := util.GetDefaultContainerAnnotations(CONTAINER_NAME_MIGRATION_JOB, store, store.Spec.MigrationJobContainer.Annotations)
-	annotations["oldImage"] = store.Status.CurrentImageTag
-	annotations["newImage"] = store.Spec.Container.Image
+	annotations["shop.shopware.com/store/oldImage"] = store.Status.CurrentImageTag
+	annotations["shop.shopware.com/store/newImage"] = store.Spec.Container.Image
 
 	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
 		Name:            CONTAINER_NAME_MIGRATION_JOB,
