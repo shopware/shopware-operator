@@ -186,7 +186,7 @@ helm: path version manifests kustomize yq ## Undeploy controller from the K8s cl
 	rm $(path)/templates/crds/all.yaml
 	rm $(path)/templates/.gitkeep
 	rm $(path)/templates/crds/.gitkeep
-	@for file in release/templates/crds/*.yml; do \
+	@for file in $(path)/templates/crds/*.yml; do \
 		if [ -f "$$file" ]; then \
 			echo "{{- if .Values.crds.install }}" > "$$file.tmp"; \
 			cat "$$file" >> "$$file.tmp"; \
