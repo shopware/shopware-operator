@@ -178,10 +178,24 @@ helm: path version manifests kustomize yq ## Undeploy controller from the K8s cl
 	echo Create version $(version)
 	rm -r $(path) 2> /dev/null || true
 	cp -r helm $(path)
-	$(KUSTOMIZE) build config/crd > $(path)/crds/crd.yaml
+	$(KUSTOMIZE) build config/crd > $(path)/templates/crds/all.yaml
 	$(KUSTOMIZE) build config/helm > $(path)/templates/operator.yaml
 	$(YQ) e -i '.appVersion = "$(version)"' $(path)/Chart.yaml
 	$(YQ) e -i '.version = "$(version)"' $(path)/Chart.yaml
+	$(YQ) $(path)/templates/crds/all.yaml -s '"$(path)/templates/crds/" + .spec.names.kind' --no-doc
+	rm $(path)/templates/crds/all.yaml
+	rm $(path)/templates/.gitkeep
+	rm $(path)/templates/crds/.gitkeep
+	@for file in release/templates/crds/*.yml; do \
+		if [ -f "$$file" ]; then \
+			echo "{{- if .Values.crds.install }}" > "$$file.tmp"; \
+			cat "$$file" >> "$$file.tmp"; \
+			echo "{{- end }}" >> "$$file.tmp"; \
+			mv "$$file.tmp" "$$file"; \
+			echo "Modified $$file"; \
+		fi \
+	done
+
 
 .PHONY: resources
 resources: path manifests kustomize ## Create crd's and manager for a direct kubectl apply
@@ -228,7 +242,7 @@ $(YQ): $(LOCALBIN)
 go-licenses: $(GOLICENSES) ## Download locally if necessary. If wrong version is installed, it will be overwritten.
 $(GOLICENSES): $(LOCALBIN)
 	test -s $(LOCALBIN)/go-licenses || \
-	GOBIN=$(LOCALBIN) go install github.com/google/go-licenses@latest
+	GOBIN=$(LOCALBIN) go install github.com/google/go-licenses@v1.6.0
 
 .PHONY: helmify
 helmify: $(HELMIFY) ## Download locally if necessary. If wrong version is installed, it will be overwritten.

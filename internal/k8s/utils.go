@@ -40,6 +40,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	policy "k8s.io/api/policy/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -233,6 +234,29 @@ func EnsureJob(
 	}
 
 	return EnsureObjectWithHash(ctx, cl, owner, job, s)
+}
+
+func EnsurePDB(
+	ctx context.Context,
+	cl client.Client,
+	owner metav1.Object,
+	pdb *policy.PodDisruptionBudget,
+	s *runtime.Scheme,
+	saveOldMeta bool,
+) error {
+	oldDep := new(policy.PodDisruptionBudget)
+	err := cl.Get(ctx, types.NamespacedName{
+		Name:      pdb.GetName(),
+		Namespace: pdb.GetNamespace(),
+	}, oldDep)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return EnsureObjectWithHash(ctx, cl, owner, pdb, s)
+		}
+		return errors.Wrap(err, "get object")
+	}
+
+	return EnsureObjectWithHash(ctx, cl, owner, pdb, s)
 }
 
 func EnsureIngress(

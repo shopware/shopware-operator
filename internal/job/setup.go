@@ -3,6 +3,7 @@ package job
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
@@ -37,7 +38,8 @@ func SetupJob(store v1.Store) *batchv1.Job {
 	sharedProcessNamespace := true
 
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.MigrationJobContainer.Labels)
-	labels["type"] = "setup"
+	labels["shop.shopware.com/store/type"] = "setup"
+	maps.Copy(labels, util.GetPDBLabels(store))
 
 	// Use util function for annotations
 	annotations := util.GetDefaultContainerAnnotations(CONTAINER_NAME_SETUP_JOB, store, store.Spec.SetupJobContainer.Annotations)
@@ -87,7 +89,8 @@ func SetupJob(store v1.Store) *batchv1.Job {
 			Completions: &completions,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					ShareProcessNamespace:         &sharedProcessNamespace,

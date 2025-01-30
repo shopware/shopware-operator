@@ -58,7 +58,7 @@ func (r *StoreReconciler) reconcileCRStatus(
 			store.Status.State = r.checkDatabaseServices(ctx, store)
 		}
 
-		if !store.Spec.DisableS3Check {
+		if !store.Spec.DisableS3Check && store.Spec.S3Storage.AccessKeyRef.Key != "" {
 			store.Status.State = r.checkS3Services(ctx, store)
 		}
 	}
@@ -142,7 +142,14 @@ func (r *StoreReconciler) checkDatabaseServices(
 		return v1.StateWait
 	}
 
-	err = util.TestSQLConnection(ctx, &store.Spec.Database, password)
+	dbHost, err := util.GetDBHost(ctx, *store, r.Client)
+	if err != nil {
+		con.Reason = err.Error()
+		con.Status = Error
+		return v1.StateWait
+	}
+
+	err = util.TestSQLConnection(ctx, &store.Spec.Database, dbHost, password)
 	if err != nil {
 		con.Reason = err.Error()
 		con.Status = Error
@@ -150,6 +157,8 @@ func (r *StoreReconciler) checkDatabaseServices(
 	}
 
 	con.LastTransitionTime = metav1.Now()
+	con.Status = Ready
+	con.Reason = "Database ping passed"
 	return v1.StateSetup
 }
 
@@ -223,6 +232,8 @@ func (r *StoreReconciler) checkS3Services(
 	}
 
 	con.LastTransitionTime = metav1.Now()
+	con.Status = Ready
+	con.Reason = "S3 connection test passed"
 	return v1.StateSetup
 }
 
@@ -271,6 +282,7 @@ func (r *StoreReconciler) stateSetup(ctx context.Context, store *v1.Store) v1.St
 
 	if jobState.IsDone() && !jobState.HasErrors() {
 		con.Message = "Setup finished"
+		con.Status = Ready
 		con.LastTransitionTime = metav1.Now()
 		return v1.StateInitializing
 	}
@@ -331,6 +343,7 @@ func (r *StoreReconciler) stateMigration(ctx context.Context, store *v1.Store) v
 
 	if jobState.IsDone() && !jobState.HasErrors() {
 		con.Message = "Migration finished"
+		con.Status = Ready
 		con.LastTransitionTime = metav1.Now()
 		return v1.StateInitializing
 	}
@@ -377,6 +390,7 @@ func (r *StoreReconciler) stateInitializing(
 
 	if deployment.Status.ReadyReplicas == store.Spec.Container.Replicas {
 		con.Message = "Initialization finished"
+		con.Status = Ready
 		con.LastTransitionTime = metav1.Now()
 		return v1.StateReady
 	}

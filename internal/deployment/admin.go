@@ -3,6 +3,7 @@ package deployment
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
@@ -36,7 +37,8 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 
 	appName := "shopware-admin"
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.AdminDeploymentContainer.Labels)
-	labels["app"] = appName
+	labels["shop.shopware.com/store/app"] = appName
+	maps.Copy(labels, util.GetPDBLabels(store))
 
 	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.AdminDeploymentContainer.Annotations)
 
@@ -98,7 +100,7 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"app": appName,
+					"shop.shopware.com/store/app": appName,
 				},
 			},
 			Strategy: appsv1.DeploymentStrategy{
@@ -115,7 +117,8 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					Volumes:                   store.Spec.Container.Volumes,

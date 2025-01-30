@@ -4,6 +4,9 @@ name: Build and push
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - "main"
 
 permissions:
   contents: write
@@ -14,7 +17,7 @@ env:
 
 jobs:
   goreleaser:
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=2
     outputs:
       tag: ${{ steps.get_tag.outputs.tag }}
     steps:
@@ -22,6 +25,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -31,10 +39,16 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run goreleaser on developer branch
+        id: goreleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
-          version: '~> v1'
+          version: "~> v1"
           args: release --clean --snapshot
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push images
+        run: |
+          docker push ghcr.io/shopware/shopware-operator:${{ fromJSON(steps.goreleaser.outputs.metadata).version }}-arm64
+          docker push ghcr.io/shopware/shopware-operator:${{ fromJSON(steps.goreleaser.outputs.metadata).version }}-amd64
