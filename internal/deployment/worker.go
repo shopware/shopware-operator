@@ -37,7 +37,7 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 
 	appName := "shopware-worker"
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.WorkerDeploymentContainer.Labels)
-	labels["shop.shopware.com/store/app"] = appName
+	labels["shop.shopware.com/store.app"] = appName
 	maps.Copy(labels, util.GetPDBLabels(store))
 
 	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.WorkerDeploymentContainer.Annotations)
@@ -83,7 +83,7 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 			Replicas:                &store.Spec.Container.Replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"shop.shopware.com/store/app": appName,
+					"shop.shopware.com/store.app": appName,
 				},
 			},
 			Strategy: appsv1.DeploymentStrategy{

@@ -38,7 +38,7 @@ func SetupJob(store v1.Store) *batchv1.Job {
 	sharedProcessNamespace := true
 
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.MigrationJobContainer.Labels)
-	labels["shop.shopware.com/store/type"] = "setup"
+	labels["shop.shopware.com/store.type"] = "setup"
 	maps.Copy(labels, util.GetPDBLabels(store))
 
 	// Use util function for annotations
