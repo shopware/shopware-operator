@@ -1,5 +1,19 @@
 namespace: "{{ .Release.Namespace }}"
-namePrefix: '{{ .Release.Name }}-'
+namePrefix: "{{ .Release.Name }}-"
 
 resources:
-- ../rbac
+  - ../rbac
+patches:
+  - target:
+      version: v1
+    patch: |-
+      - op: add
+        path: /metadata/labels
+        value: {
+          "app.kubernetes.io/managed-by": "Helm",
+          "app.kubernetes.io/component": "rbac",
+          "app.kubernetes.io/created-by": "shopware-operator",
+          "app.kubernetes.io/part-of": "shopware-operator",
+          "app.kubernetes.io/release-name": "{{ .Release.Name }}",
+          "app.kubernetes.io/release-namespace": "{{ .Release.Namespace }}"
+        }
