@@ -195,7 +195,8 @@ helm: path version manifests kustomize yq ## Undeploy controller from the K8s cl
 			echo "Modified $$file"; \
 		fi \
 	done
-
+	sed -i '1i {{- if not .Values.crds.installOnly }}' $(path)/templates/operator.yaml
+	echo "{{- end }}" >> $(path)/templates/operator.yaml
 
 .PHONY: resources
 resources: path manifests kustomize ## Create crd's and manager for a direct kubectl apply

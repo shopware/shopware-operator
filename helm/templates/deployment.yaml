@@ -1,3 +1,4 @@
+{{- if not .Values.crds.installOnly }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -104,3 +105,4 @@ spec:
           type: RuntimeDefault
       serviceAccountName: '{{ .Release.Name }}-shopware-operator'
       terminationGracePeriodSeconds: 10
+{{- end }}
