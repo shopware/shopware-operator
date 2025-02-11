@@ -85,6 +85,22 @@ func IsJobContainerDone(
 		}
 	}
 
+	if job.Status.Succeeded > 0 {
+		log.FromContext(ctx).Info(fmt.Sprintf("job not found in container: %s. But job has succeeded continue with job done.", containerName))
+		return JobState{
+			ExitCode: -404,
+			Running:  false,
+		}, nil
+	}
+
+	if job.Status.Failed > 0 {
+		log.FromContext(ctx).Info(fmt.Sprintf("job not found in container: %s. But job has failed.", containerName))
+		return JobState{
+			ExitCode: -404,
+			Running:  false,
+		}, nil
+	}
+
 	err := fmt.Errorf("job not found in container: %s", containerName)
 	log.FromContext(ctx).Info(err.Error())
 	return JobState{}, err

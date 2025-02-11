@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -11,6 +12,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/job"
 	"github.com/shopware/shopware-operator/internal/k8s"
 	"github.com/shopware/shopware-operator/internal/util"
+	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -40,6 +42,8 @@ func (r *StoreReconciler) reconcileCRStatus(
 			},
 		)
 	}
+
+	printWarningForEnvs(ctx, store)
 
 	// First creation
 	if store.IsState(v1.StateEmpty) || store.IsState(v1.StateWait) {
@@ -102,6 +106,17 @@ func (r *StoreReconciler) reconcileCRStatus(
 		Namespace: store.Namespace,
 		Name:      store.Name,
 	}, store.Status)
+}
+
+func printWarningForEnvs(ctx context.Context, store *v1.Store) {
+	l := log.FromContext(ctx)
+
+	envs := store.GetEnv()
+	for _, obj2 := range store.Spec.Container.ExtraEnvs {
+		if slices.ContainsFunc(envs, func(c corev1.EnvVar) bool { return c.Name == obj2.Name }) {
+			l.Info("Overwriting env var. If you can, please use the crd to define it", "name", obj2.Name)
+		}
+	}
 }
 
 func (r *StoreReconciler) checkDatabaseServices(
