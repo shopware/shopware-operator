@@ -2,6 +2,7 @@ package v1
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
@@ -327,5 +328,13 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 	c = append(c, s.getWorker()...)
 	c = append(c, s.Spec.FPM.getFPMConfiguration()...)
 
-	return append(c, s.Spec.Container.ExtraEnvs...)
+	for _, obj2 := range s.Spec.Container.ExtraEnvs {
+		if i := slices.IndexFunc(c, func(c corev1.EnvVar) bool { return c.Name == obj2.Name }); i > -1 {
+			c[i] = obj2
+		} else {
+			c = append(c, obj2)
+		}
+	}
+
+	return c
 }

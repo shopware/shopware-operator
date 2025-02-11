@@ -6,6 +6,7 @@ import (
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -293,4 +294,46 @@ func TestAffinity(t *testing.T) {
 
 	baseContainer.Spec.Container.Merge(mergeSpec)
 	assert.Equal(t, "merged", baseContainer.Spec.Container.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms[0].MatchExpressions[0].Key)
+}
+
+func TestEnvMerge(t *testing.T) {
+	baseContainer := &v1.Store{
+		Spec: v1.StoreSpec{
+			Container: v1.ContainerSpec{
+				Image:                   "originalImage",
+				ImagePullPolicy:         corev1.PullAlways,
+				Replicas:                5,
+				ProgressDeadlineSeconds: 30,
+				RestartPolicy:           corev1.RestartPolicyAlways,
+				ExtraEnvs: []corev1.EnvVar{
+					{Name: "APP_URL", Value: "overwritten"},
+					{Name: "NEW", Value: "exists"},
+				},
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: "original-volume", MountPath: "/original"},
+				},
+				Resources: corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU: resource.MustParse("1"),
+					},
+				},
+				Labels: map[string]string{
+					"original": "value",
+				},
+				Annotations: map[string]string{
+					"original": "value",
+				},
+				TerminationGracePeriodSeconds: 10,
+			},
+		},
+	}
+	env := baseContainer.GetEnv()
+	for _, envVar := range env {
+		if envVar.Name == "APP_URL" {
+			require.Equal(t, "overwritten", envVar.Value)
+		}
+		if envVar.Name == "NEW" {
+			require.Equal(t, "exists", envVar.Value)
+		}
+	}
 }
