@@ -71,6 +71,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
       - uses: octo-sts/action@v1.0.0
         id: octo-sts
         with:
