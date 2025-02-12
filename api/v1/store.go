@@ -412,9 +412,15 @@ func (c *ContainerSpec) Merge(from ContainerMergeSpec) {
 		c.Tolerations = from.Tolerations
 	}
 	if from.Annotations != nil {
+		if c.Annotations == nil {
+			c.Annotations = make(map[string]string)
+		}
 		maps.Copy(c.Annotations, from.Annotations)
 	}
 	if from.Labels != nil {
+		if c.Labels == nil {
+			c.Labels = make(map[string]string)
+		}
 		maps.Copy(c.Labels, from.Labels)
 	}
 	if from.TerminationGracePeriodSeconds != 0 {
