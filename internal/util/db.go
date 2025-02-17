@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/url"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -88,5 +88,16 @@ func TestSQLConnection(ctx context.Context, database *v1.DatabaseSpec, host stri
 	}
 	//nolint:errcheck
 	defer db.Close()
-	return db.PingContext(ctx)
+	err = db.PingContext(ctx)
+
+	if mysqlErr, ok := err.(*mysql.MySQLError); ok {
+		// Error 1049 (42000): Unknown database
+		if mysqlErr.Number == 1049 {
+			return nil
+		}
+	} else {
+		return err
+	}
+
+	return nil
 }
