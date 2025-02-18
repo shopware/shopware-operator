@@ -35,6 +35,9 @@ func IsJobContainerDone(
 		return JobState{}, fmt.Errorf("job to check is nil")
 	}
 
+	logger := log.FromContext(ctx).WithValues("job", job.Name)
+
+	var errorStates []JobState
 	for _, container := range job.Spec.Template.Spec.Containers {
 		if container.Name == containerName {
 			selector, err := labels.ValidatedSelectorFromSet(job.Labels)
@@ -56,24 +59,24 @@ func IsJobContainerDone(
 			for _, pod := range pods.Items {
 				for _, c := range pod.Status.ContainerStatuses {
 					if c.Name == containerName {
-						log.FromContext(ctx).Info(fmt.Sprintf("Found container for job `%s`", c.Name))
+						logger.Info(fmt.Sprintf("Found container for job `%s`", c.Name))
 						if c.State.Terminated == nil {
-							log.FromContext(ctx).Info("Job not terminated still running")
+							logger.Info("Job not terminated still running")
 							return JobState{
 								ExitCode: -1,
 								Running:  true,
 							}, nil
 						}
 						if c.State.Terminated.ExitCode != 0 {
-							log.FromContext(ctx).
+							logger.
 								Info("Job has not 0 as exit code, check job", "exitcode", c.State.Terminated.ExitCode)
-							return JobState{
+							errorStates = append(errorStates, JobState{
 								ExitCode: int(c.State.Terminated.ExitCode),
 								Running:  false,
-							}, nil
+							})
 						}
 						if c.State.Terminated.Reason == "Completed" {
-							log.FromContext(ctx).Info("Job completed")
+							logger.Info("Job completed")
 							return JobState{
 								ExitCode: 0,
 								Running:  false,
@@ -86,15 +89,20 @@ func IsJobContainerDone(
 	}
 
 	if job.Status.Succeeded > 0 {
-		log.FromContext(ctx).Info(fmt.Sprintf("job not found in container: %s. But job has succeeded continue with job done.", containerName))
+		logger.Info(fmt.Sprintf("job not found in container: %s. But job has succeeded continue with job done.", containerName))
 		return JobState{
 			ExitCode: 0,
 			Running:  false,
 		}, nil
 	}
 
+	if len(errorStates) > 0 {
+		// Return the latest error state
+		return errorStates[len(errorStates)-1], nil
+	}
+
 	if job.Status.Failed > 0 {
-		log.FromContext(ctx).Info(fmt.Sprintf("job not found in container: %s. But job has failed.", containerName))
+		logger.Info(fmt.Sprintf("job not found in container: %s. But job has failed.", containerName))
 		return JobState{
 			ExitCode: -404,
 			Running:  false,
@@ -102,7 +110,7 @@ func IsJobContainerDone(
 	}
 
 	err := fmt.Errorf("job not found in container: %s", containerName)
-	log.FromContext(ctx).Info(err.Error())
+	logger.Info(err.Error())
 	return JobState{}, err
 }
 
