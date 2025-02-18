@@ -55,5 +55,6 @@ tolerations: []
 labels: {}
 podAnnotations: {}
 
-logStructured: false
+# If set to true this will create json logs instead of user logs
+logStructured: true
 debug: false
