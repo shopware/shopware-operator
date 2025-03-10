@@ -136,6 +136,61 @@ func (s *Store) getWorker() []corev1.EnvVar {
 	return []corev1.EnvVar{}
 }
 
+func (s *Store) getOpensearch() []corev1.EnvVar {
+	if s.Spec.OpensearchSpec.Enabled {
+		return []corev1.EnvVar{
+			{
+				Name: "OPENSEARCH_URL",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: s.Spec.SecretName,
+						},
+						Key: "opensearch-url",
+					},
+				},
+			},
+			{
+				Name:  "SHOPWARE_ES_ENABLED",
+				Value: "1",
+			},
+			{
+				Name:  "SHOPWARE_ES_INDEXING_ENABLED",
+				Value: "1",
+			},
+			{
+				Name:  "SHOPWARE_ADMIN_ES_ENABLED",
+				Value: "1",
+			},
+			{
+				Name:  "SHOPWARE_ADMIN_ES_REFRESH_INDICES",
+				Value: "1",
+			},
+			{
+				Name:  "SHOPWARE_ES_THROW_EXCEPTION",
+				Value: "1",
+			},
+			{
+				Name:  "K8S_ES_NUMBER_OF_REPLICAS",
+				Value: strconv.Itoa(s.Spec.OpensearchSpec.Index.Replicas),
+			},
+			{
+				Name:  "K8S_ES_NUMBER_OF_SHARDS",
+				Value: strconv.Itoa(s.Spec.OpensearchSpec.Index.Shards),
+			},
+			{
+				Name:  "SHOPWARE_ES_INDEX_PREFIX",
+				Value: s.Spec.OpensearchSpec.Index.Prefix,
+			},
+			{
+				Name:  "SHOPWARE_ADMIN_ES_INDEX_PREFIX",
+				Value: fmt.Sprintf("%s-admin", s.Spec.OpensearchSpec.Index.Prefix),
+			},
+		}
+	}
+	return []corev1.EnvVar{}
+}
+
 // TODO: blackfire and otel together not working
 func (s *Store) getOtel() []corev1.EnvVar {
 	if s.Spec.Otel.Enabled {
@@ -293,6 +348,11 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 			Name:  "TRUSTED_PROXIES",
 			Value: "REMOTE_ADDR",
 		},
+		// Changed in 6.7
+		{
+			Name:  "SYMFONY_TRUSTED_PROXIES",
+			Value: "REMOTE_ADDR",
+		},
 		// Some Shopware best practises
 		{
 			Name:  "SHOPWARE_DBAL_TIMEZONE_SUPPORT_ENABLED",
@@ -326,6 +386,7 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 	c = append(c, s.getBlackfire()...)
 	c = append(c, s.getStorage()...)
 	c = append(c, s.getWorker()...)
+	c = append(c, s.getOpensearch()...)
 	c = append(c, s.Spec.FPM.getFPMConfiguration()...)
 
 	for _, obj2 := range s.Spec.Container.ExtraEnvs {
