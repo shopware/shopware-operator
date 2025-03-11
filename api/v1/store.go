@@ -53,7 +53,6 @@ type StoreSpec struct {
 	FPM                     FPMSpec       `json:"fpm,omitempty"`
 	HorizontalPodAutoscaler HPASpec       `json:"horizontalPodAutoscaler,omitempty"`
 
-	//+kubebuilder:deprecatedversion
 	// Use ServiceAccountName in container spec
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 

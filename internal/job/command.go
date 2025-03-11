@@ -134,6 +134,16 @@ func getJobSpec(store v1.Store, ex v1.StoreExec, labels map[string]string) batch
 		Env:             envs,
 	})
 
+	var sa string
+	// Global way
+	if store.Spec.ServiceAccountName != "" {
+		sa = store.Spec.ServiceAccountName
+	}
+	// Per container way
+	if store.Spec.Container.ServiceAccountName != "" {
+		sa = store.Spec.Container.ServiceAccountName
+	}
+
 	return batchv1.JobSpec{
 		Parallelism:  &parallelism,
 		Completions:  &completions,
@@ -143,7 +153,7 @@ func getJobSpec(store v1.Store, ex v1.StoreExec, labels map[string]string) batch
 				Labels: labels,
 			},
 			Spec: corev1.PodSpec{
-				ServiceAccountName:            store.Spec.Container.ServiceAccountName,
+				ServiceAccountName:            sa,
 				ShareProcessNamespace:         &sharedProcessNamespace,
 				Volumes:                       store.Spec.Container.Volumes,
 				TopologySpreadConstraints:     store.Spec.Container.TopologySpreadConstraints,
