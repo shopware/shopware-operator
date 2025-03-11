@@ -14,13 +14,16 @@ jobs:
     runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=1
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          go-version: stable
-      - name: golangci-lint
+          go-version-file: go.mod
+
+      - name: Run linter
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.60
+          version: v1.63.4
           args: --timeout=8m --verbose
 
   go-test:
