@@ -25,7 +25,7 @@ const (
 	rsaKeySize = 2024
 )
 
-func GenerateStoreSecret(ctx context.Context, store *v1.Store, secret *corev1.Secret, dbHost string, p []byte) error {
+func GenerateStoreSecret(ctx context.Context, store *v1.Store, secret *corev1.Secret, dbHost string, dbp []byte, esp []byte) error {
 	if secret.Data == nil {
 		secret.Data = make(map[string][]byte)
 	}
@@ -59,7 +59,8 @@ func GenerateStoreSecret(ctx context.Context, store *v1.Store, secret *corev1.Se
 		secret.Data["jwt-public-key"] = []byte(base64.StdEncoding.EncodeToString(publicKey))
 	}
 
-	secret.Data["database-url"] = util.GenerateDatabaseURLForShopware(&store.Spec.Database, dbHost, p)
+	secret.Data["database-url"] = util.GenerateDatabaseURLForShopware(&store.Spec.Database, dbHost, dbp)
+	secret.Data["opensearch-url"] = util.GenerateOpensearchURLForShopware(&store.Spec.OpensearchSpec, dbp)
 
 	return nil
 }

@@ -53,6 +53,9 @@ type StoreSpec struct {
 	FPM                     FPMSpec       `json:"fpm,omitempty"`
 	HorizontalPodAutoscaler HPASpec       `json:"horizontalPodAutoscaler,omitempty"`
 
+	// +kubebuilder:default={enabled: false}
+	OpensearchSpec OpensearchSpec `json:"opensearch,omitempty"`
+
 	// Use ServiceAccountName in container spec
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
@@ -121,6 +124,30 @@ type HPASpec struct {
 	// +kubebuilder:default=false
 	Enabled     bool              `json:"enabled"`
 	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
+type OpensearchSpec struct {
+	Enabled bool `json:"enabled"`
+
+	Host              string    `json:"host,omitempty"`
+	Username          string    `json:"username,omitempty"`
+	PasswordSecretRef SecretRef `json:"passwordSecretRef,omitempty"`
+
+	// +kubebuilder:default=9200
+	Port int32 `json:"port,omitempty"`
+
+	// +kubebuilder:validation:Enum=http;https
+	// +kubebuilder:default=https
+	Schema string `json:"schema,omitempty"`
+
+	// +kubebuilder:default={prefix: sw, shards: 3, replicas: 3}
+	Index OpensearchIndexSpec `json:"index,omitempty"`
+}
+
+type OpensearchIndexSpec struct {
+	Prefix   string `json:"prefix,omitempty"`
+	Shards   int    `json:"shards,omitempty"`
+	Replicas int    `json:"replicas,omitempty"`
 }
 
 type NetworkSpec struct {
