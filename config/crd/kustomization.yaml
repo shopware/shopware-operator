@@ -5,6 +5,7 @@ resources:
 - bases/shop.shopware.com_stores.yaml
 - bases/shop.shopware.com_storeexecs.yaml
 - bases/shop.shopware.com_storesnapshots.yaml
+- bases/shop.shopware.com_storedebuginstances.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 #patches:

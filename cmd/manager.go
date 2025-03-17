@@ -165,6 +165,14 @@ func main() {
 		setupLog.Error(err, "unable to create snapshot controller", "controller", "StoreSnapshot")
 		os.Exit(1)
 	}
+	if err = (&controller.StoreDebugInstanceReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", namespace)),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "StoreDebugInstance")
+		os.Exit(1)
+	}
 	//+kubebuilder:scaffold:builder
 
 	defer func() {
