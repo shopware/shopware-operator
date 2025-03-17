@@ -55,6 +55,16 @@ rules:
   - patch
   - watch
 - apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
   - shop.shopware.com
   resources:
   - storeexecs

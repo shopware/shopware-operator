@@ -127,6 +127,19 @@ func GetSecret(
 	return cr, nil
 }
 
+func GetStoreDebugInstance(
+	ctx context.Context,
+	cl client.Client,
+	nn types.NamespacedName,
+) (*v1.StoreDebugInstance, error) {
+	cr := new(v1.StoreDebugInstance)
+	if err := cl.Get(ctx, nn, cr); err != nil {
+		return nil, errors.Wrapf(err, "get %v", nn.String())
+	}
+
+	return cr, nil
+}
+
 func ObjectExists(
 	ctx context.Context,
 	cl client.Reader,
@@ -211,6 +224,29 @@ func EnsureCronJob(
 	}
 
 	return EnsureObjectWithHash(ctx, cl, owner, job, s)
+}
+
+func EnsurePod(
+	ctx context.Context,
+	cl client.Client,
+	owner metav1.Object,
+	pod *corev1.Pod,
+	s *runtime.Scheme,
+	saveOldMeta bool,
+) error {
+	oldPod := new(corev1.Pod)
+	err := cl.Get(ctx, types.NamespacedName{
+		Name:      pod.GetName(),
+		Namespace: pod.GetNamespace(),
+	}, oldPod)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return EnsureObjectWithHash(ctx, cl, owner, pod, s)
+		}
+		return errors.Wrap(err, "get object")
+	}
+
+	return EnsureObjectWithHash(ctx, cl, owner, pod, s)
 }
 
 func EnsureJob(
