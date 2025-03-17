@@ -1,0 +1,12 @@
+apiVersion: shop.shopware.com/v1
+kind: StoreDebugInstance
+metadata:
+  labels:
+    app.kubernetes.io/name: shopware-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: storedebuginstance-sample
+spec:
+  storeRef: shopware-dev
+  duration: 1h
+  extraLabels:
+    debug: true

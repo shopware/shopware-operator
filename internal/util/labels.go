@@ -1,7 +1,9 @@
 package util
 
 import (
+	"fmt"
 	"maps"
+	"time"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 )
@@ -37,5 +39,19 @@ func GetDefaultStoreExecLabels(store v1.Store, ex v1.StoreExec) map[string]strin
 	}
 	labels["shop.shopware.com/store.name"] = store.Name
 	labels["shop.shopware.com/storeexec.name"] = ex.Name
+	return labels
+}
+
+func GetDefaultStoreInstanceDebugLabels(store v1.Store, storeDebugInstance v1.StoreDebugInstance) map[string]string {
+	labels := GetDefaultContainerStoreLabels(store, storeDebugInstance.Spec.ExtraLabels)
+
+	// we don't need to check for errors here, because the duration is validated in the controller
+	duration, _ := time.ParseDuration(storeDebugInstance.Spec.Duration)
+	validUntil := storeDebugInstance.CreationTimestamp.Add(duration)
+
+	labels["shop.shopware.com/store.debug"] = "true"
+	labels["shop.shopware.com/store.debug.instance"] = storeDebugInstance.Name
+	labels["shop.shopware.com/store.debug.validUntil"] = fmt.Sprintf("%d", validUntil.UnixNano())
+
 	return labels
 }
