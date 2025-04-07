@@ -283,7 +283,7 @@ func (r *StoreReconciler) ensureAppSecrets(ctx context.Context, store *v1.Store)
 	}
 
 	if store.Spec.OpensearchSpec.Enabled && (store.Spec.OpensearchSpec.PasswordSecretRef.Name == "" || store.Spec.OpensearchSpec.PasswordSecretRef.Key == "") {
-		return fmt.Errorf("opensearch passwordSecretRef key or name is empty for store %s.", store.Name)
+		return fmt.Errorf("opensearch passwordSecretRef key or name is empty for store %s", store.Name)
 	}
 
 	var esp []byte

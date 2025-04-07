@@ -32,5 +32,5 @@ func GetStoreDeploymentImage(
 			return container.Image, nil
 		}
 	}
-	return "", fmt.Errorf("Could'n find storefront deployment container")
+	return "", fmt.Errorf("could not find storefront deployment container")
 }
