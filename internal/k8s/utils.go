@@ -70,7 +70,7 @@ func GetOperatorNamespace() (string, error) {
 	}
 
 	return "", fmt.Errorf(
-		"Eigther set the namespace via env `%s` or run the operator as a pod",
+		"either set the namespace via env `%s` or run the operator as a pod",
 		"OPERATOR_NAMESPACE",
 	)
 }
