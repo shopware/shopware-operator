@@ -1,40 +1,40 @@
+version: "2"
 run:
   allow-parallel-runners: true
-
-issues:
-  # don't skip warning about doc comments
-  # don't exclude the default set of lint
-  exclude-use-default: false
-  # restore some of the defaults
-  # (fill in the rest as needed)
-  exclude-rules:
-    - path: "api/*"
-      linters:
-        - lll
-    - path: "api/v1/store_test.go"
-      linters:
-        - dupl
-    - path: "internal/*"
-      linters:
-        - dupl
-        - lll
 linters:
-  disable-all: false
   enable:
     - dupl
-    - errcheck
     - gocyclo
-    - gofmt
-    - goimports
-    - gosimple
-    - govet
-    - ineffassign
     - lll
     - misspell
     - nakedret
     - prealloc
-    - staticcheck
-    - typecheck
     - unconvert
     - unparam
-    - unused
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - lll
+        path: api/*
+      - linters:
+          - dupl
+        path: api/v1/store_test.go
+      - linters:
+          - dupl
+          - lll
+        path: internal/*
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
