@@ -12,6 +12,7 @@
 This repository contains the Shopware Operator for Kubernetes. The Operator is a Kubernetes controller that manages Shopware installations in a Kubernetes cluster.
 
 ## Disclaimer
+
 This Shopware operator is currently in an experimental phase and is not yet ready for production use.
 The features, functionalities, and individual steps described in this repository are still under
 development and are not in a final state. As such, they may contain bugs, incomplete
@@ -41,21 +42,23 @@ For a helm installation check out our [charts repository](https://github.com/sho
 
 1. Install the custom resource definitions (cdr) for your cluster:
 
-    ```sh
-    kubectl apply -f https://github.com/shopware/shopware-operator/releases/latest/download/crd.yaml
-    ```
+   ```sh
+   kubectl apply -f https://github.com/shopware/shopware-operator/releases/latest/download/crd.yaml --server-side
+   ```
 
 2. Deploy the operator itself from `manager.yaml`:
 
-    ```sh
-    kubectl apply -f https://github.com/shopware/shopware-operator/releases/latest/download/manager.yaml
-    ```
+   ```sh
+   kubectl apply -f https://github.com/shopware/shopware-operator/releases/latest/download/manager.yaml
+   ```
 
 > [!IMPORTANT]
 > This will install the Operator in the default namespace, if you want to change this use `kubectl -n <namespace> apply -f ...`
 
 ## Limitations and Issues
+
 #### Sidecars
+
 When using sidecars, please ensure they are properly terminated. Unfortunately, Kubernetes does not provide a reliable mechanism for
 managing the shutdown of jobs (such as setup and migration jobs). As a result, we cannot guarantee that containers within the pod will
 be stopped correctly. To address this, the job will be deleted once the operator container has completed its task.
@@ -65,4 +68,4 @@ be stopped correctly. To address this, the job will be deleted once the operator
 Shopware welcomes community contributions to help improving the Shopware Operator.
 If you found a bug or want to change something create an issue before fixing/changing it.
 
-Another good place to discuss the Shopware Operator with developers and other community members is the Slack channel: https://shopwarecommunity.slack.com/channels/shopware6-kubernetes
+Another good place to discuss the Shopware Operator with developers and other community members is the Slack channel: <https://shopwarecommunity.slack.com/channels/shopware6-kubernetes>
