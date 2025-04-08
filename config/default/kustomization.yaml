@@ -6,7 +6,7 @@
 # "wordpress" becomes "alices-wordpress".
 # Note that it should also match with the prefix (text before '-') of the namespace
 # field above.
-namePrefix: shopware-operator-
+#namePrefix: shopware-operator-
 
 # Labels to add to all resources and selectors.
 #labels:
@@ -15,8 +15,8 @@ namePrefix: shopware-operator-
 #    someName: someValue
 
 resources:
-- ../rbac
-- ../manager
+  - ../rbac
+  - ../manager
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix including the one in
 # crd/kustomization.yaml
 #- ../webhook
@@ -26,16 +26,15 @@ resources:
 #- ../prometheus
 
 patches:
-# Protect the /metrics endpoint by putting it behind auth.
-# If you want your controller-manager to expose the /metrics
-# endpoint w/o any authn/z, please comment the following line.
-#- path: manager_auth_proxy_patch.yaml
+  # Protect the /metrics endpoint by putting it behind auth.
+  # If you want your controller-manager to expose the /metrics
+  # endpoint w/o any authn/z, please comment the following line.
+  #- path: manager_auth_proxy_patch.yaml
 
-# Patching all deployments and add a pull secret with name `regcred`
+  # Patching all deployments and add a pull secret with name `regcred`
   - path: pull_secret_patch.yaml
     target:
       kind: Deployment
-
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix including the one in
 # crd/kustomization.yaml
 #- path: manager_webhook_patch.yaml

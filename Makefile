@@ -208,8 +208,10 @@ resources: path manifests kustomize yq ## Create crd's and manager for a direct 
 	mkdir -p $(path)
 	$(KUSTOMIZE) build config/crd > $(path)/crd.yaml
 	$(KUSTOMIZE) build config/default > $(path)/manager.yaml
-	sed -i '/namespace: default/d' $(path)/manager.yaml
 	$(YQ) eval -i 'select(.kind == "Deployment") | .spec.template.spec.containers[0].image = "ghcr.io/shopware/shopware-operator:$(shell git describe --tags --abbrev=0)"' release/manager.yaml
+	echo "---" >> $(path)/manager.yaml
+	$(KUSTOMIZE) build config/rbac >> $(path)/manager.yaml
+	sed -i '/namespace: default/d' $(path)/manager.yaml
 
 ##@ Build Dependencies
 
