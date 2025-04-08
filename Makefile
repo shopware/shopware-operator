@@ -100,6 +100,11 @@ lint: golangci-lint ## Run golangci-lint linter & yamllint
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 	$(GOLANGCI_LINT) run --fix
 
+.PHONY: test-chart
+test-chart: install
+	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/baremetal/deploy.yaml
+	kubectl apply -k "github.com/minio/operator?ref=v5.0.15"
+	helm install test shopware/shopware
 ##@ Build
 
 .PHONY: build
@@ -199,11 +204,12 @@ helm: path version manifests kustomize yq ## Undeploy controller from the K8s cl
 	echo "{{- end }}" >> $(path)/templates/operator.yaml
 
 .PHONY: resources
-resources: path manifests kustomize ## Create crd's and manager for a direct kubectl apply
+resources: path manifests kustomize yq ## Create crd's and manager for a direct kubectl apply
 	mkdir -p $(path)
 	$(KUSTOMIZE) build config/crd > $(path)/crd.yaml
 	$(KUSTOMIZE) build config/default > $(path)/manager.yaml
 	sed -i '/namespace: default/d' $(path)/manager.yaml
+	$(YQ) eval 'select(.kind == "Deployment") | .spec.template.spec.containers[0].image = "ghcr.io/shopware/shopware-operator:$(shell git describe --tags --abbrev=0)"' release/manager.yaml
 
 ##@ Build Dependencies
 
