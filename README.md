@@ -55,6 +55,26 @@ For a helm installation check out our [charts repository](https://github.com/sho
 > [!IMPORTANT]
 > This will install the Operator in the default namespace, if you want to change this use `kubectl -n <namespace> apply -f ...`
 
+## Local Development
+
+To set up a local development environment, you must have the following components in place:
+
+- A valid Store custom resource
+- A MySQL-compatible database
+- An S3-compatible object storage
+
+These are required for a basic Shopware deployment within a Kubernetes cluster.
+
+We recommend using the [Shopware Helm Chart](https://github.com/shopware/helm-charts/tree/main/charts/shopware), which includes a Percona-based MySQL database and an S3-compatible interface
+provided by MinIO.To run the operator within your cluster, execute the following command:
+
+```sh
+NAMESPACE=default make run
+```
+
+> [!IMPORTANT]
+> Ensure that you are using the correct Kubernetes context before running the command.
+
 ## Limitations and Issues
 
 #### Sidecars
