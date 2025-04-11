@@ -39,3 +39,27 @@ func GetDefaultStoreExecLabels(store v1.Store, ex v1.StoreExec) map[string]strin
 	labels["shop.shopware.com/storeexec.name"] = ex.Name
 	return labels
 }
+
+func GetAdminDeploymentMatchLabel(labels map[string]string) map[string]string {
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+	labels["shop.shopware.com/store.app"] = "shopware-admin"
+	return labels
+}
+
+func GetStorefrontDeploymentMatchLabel(labels map[string]string) map[string]string {
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+	labels["shop.shopware.com/store.app"] = "shopware-storefront"
+	return labels
+}
+
+func GetWorkerDeploymentMatchLabel(labels map[string]string) map[string]string {
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+	labels["shop.shopware.com/store.app"] = "shopware-worker"
+	return labels
+}

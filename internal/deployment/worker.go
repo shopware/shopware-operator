@@ -37,7 +37,7 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 
 	appName := "shopware-worker"
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.WorkerDeploymentContainer.Labels)
-	labels["shop.shopware.com/store.app"] = appName
+	labels = util.GetWorkerDeploymentMatchLabel(labels)
 	maps.Copy(labels, util.GetPDBLabels(store))
 
 	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.WorkerDeploymentContainer.Annotations)
@@ -82,9 +82,7 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 			ProgressDeadlineSeconds: &store.Spec.Container.ProgressDeadlineSeconds,
 			Replicas:                &store.Spec.Container.Replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"shop.shopware.com/store.app": appName,
-				},
+				MatchLabels: util.GetWorkerDeploymentMatchLabel(nil),
 			},
 			Strategy: appsv1.DeploymentStrategy{
 				RollingUpdate: &appsv1.RollingUpdateDeployment{
