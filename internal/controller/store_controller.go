@@ -19,6 +19,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	policy "k8s.io/api/policy/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -406,19 +407,26 @@ func (r *StoreReconciler) reconcileIngress(ctx context.Context, store *v1.Store)
 
 func (r *StoreReconciler) reconcilePDB(ctx context.Context, store *v1.Store) (err error) {
 	var changed bool
-	obj := pdb.StorePDB(*store)
 
-	if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
-		return fmt.Errorf("reconcile unready pdb: %w", err)
+	objs := []*policy.PodDisruptionBudget{
+		pdb.AdminPDB(*store),
+		pdb.StorefrontPDB(*store),
+		pdb.WorkerPDB(*store),
 	}
 
-	if changed {
-		r.Recorder.Event(store, "Normal", "Diff pdb hash",
-			fmt.Sprintf("Update Store %s pdb in namespace %s. Diff hash",
-				store.Name,
-				store.Namespace))
-		if err := k8s.EnsurePDB(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
+	for _, obj := range objs {
+		if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
 			return fmt.Errorf("reconcile unready pdb: %w", err)
+		}
+
+		if changed {
+			r.Recorder.Event(store, "Normal", "Diff pdb hash",
+				fmt.Sprintf("Update Store %s pdb in namespace %s. Diff hash",
+					store.Name,
+					store.Namespace))
+			if err := k8s.EnsurePDB(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
+				return fmt.Errorf("reconcile unready pdb: %w", err)
+			}
 		}
 	}
 

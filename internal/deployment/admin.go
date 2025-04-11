@@ -37,7 +37,7 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 
 	appName := "shopware-admin"
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.AdminDeploymentContainer.Labels)
-	labels["shop.shopware.com/store.app"] = appName
+	labels = util.GetAdminDeploymentMatchLabel(labels)
 	maps.Copy(labels, util.GetPDBLabels(store))
 
 	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.AdminDeploymentContainer.Annotations)
@@ -99,9 +99,7 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 			Replicas:                &store.Spec.Container.Replicas,
 
 			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"shop.shopware.com/store.app": appName,
-				},
+				MatchLabels: util.GetAdminDeploymentMatchLabel(nil),
 			},
 			Strategy: appsv1.DeploymentStrategy{
 				RollingUpdate: &appsv1.RollingUpdateDeployment{
