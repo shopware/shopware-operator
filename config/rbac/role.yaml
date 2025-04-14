@@ -9,7 +9,10 @@ rules:
   - ""
   resources:
   - pods
+  - service
   verbs:
+  - create
+  - delete
   - get
   - list
   - watch
@@ -55,8 +58,19 @@ rules:
   - patch
   - watch
 - apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
   - shop.shopware.com
   resources:
+  - storedebuginstances
   - storeexecs
   - storesnapshots
   verbs:
@@ -70,6 +84,7 @@ rules:
 - apiGroups:
   - shop.shopware.com
   resources:
+  - storedebuginstances/finalizers
   - storeexecs/finalizers
   - stores/finalizers
   - storesnapshots/finalizers
@@ -78,6 +93,7 @@ rules:
 - apiGroups:
   - shop.shopware.com
   resources:
+  - storedebuginstances/status
   - storeexecs/status
   - stores/status
   - storesnapshots/status

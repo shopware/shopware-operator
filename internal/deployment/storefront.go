@@ -37,6 +37,8 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 	// Merge Overwritten storefrontContainer fields into container fields
 	store.Spec.Container.Merge(store.Spec.StorefrontDeploymentContainer)
 
+	// think of the debug container to when changing the deployment
+
 	appName := "shopware-storefront"
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.StorefrontDeploymentContainer.Labels)
 	labels["shop.shopware.com/store.app"] = appName
