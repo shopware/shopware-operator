@@ -28,6 +28,8 @@ func DebugService(store v1.Store, debugInstance v1.StoreDebugInstance) *corev1.S
 		})
 	}
 
+	selector := util.GetDefaultStoreInstanceDebugLabels(store, debugInstance)
+
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -39,13 +41,9 @@ func DebugService(store v1.Store, debugInstance v1.StoreDebugInstance) *corev1.S
 			Labels:    util.GetDefaultStoreLabels(store),
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{
-				"shop.shopware.com/store.debug":          "true",
-				"shop.shopware.com/store.debug.instance": debugInstance.Name,
-				"shop.shopware.com/store.app":            "shopware-storefront",
-			},
-			Type:  corev1.ServiceTypeClusterIP,
-			Ports: ports,
+			Selector: selector,
+			Type:     corev1.ServiceTypeClusterIP,
+			Ports:    ports,
 		},
 	}
 }

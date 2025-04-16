@@ -48,7 +48,7 @@ type StoreDebugInstanceReconciler struct {
 // +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storedebuginstances/finalizers,verbs=update
 // +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=stores,verbs=get
 // +kubebuilder:rbac:groups="",namespace=default,resources=pods,verbs=get;list;watch;create;delete;
-// +kubebuilder:rbac:groups="",namespace=default,resources=service,verbs=get;list;watch;create;delete;
+// +kubebuilder:rbac:groups="",namespace=default,resources=services,verbs=get;list;watch;create;delete;
 
 func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (rr ctrl.Result, err error) {
 	log := logging.FromContext(ctx).
