@@ -154,8 +154,12 @@ type NetworkSpec struct {
 	// +kubebuilder:default=false
 	EnabledIngress bool `json:"enabledIngress"`
 
-	// +kubebuilder:validation:MinLength=1
-	Host string `json:"host"`
+	// +kubebuilder:validation:deprecatedversion
+	Host string `json:"host,omitempty"`
+
+	// The listType is used to make the slice unique, the unique constraint is not working: the runtime complexity becomes quadratic
+	Hosts      []string `json:"hosts,omitempty"`
+	AppURLHost string   `json:"appURLHost,omitempty"`
 
 	// +kubebuilder:default=8000
 	Port int32 `json:"port,omitempty"`

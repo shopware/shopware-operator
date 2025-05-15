@@ -37,13 +37,79 @@ func StoreIngress(store v1.Store) *networkingv1.Ingress {
 	labels := util.GetDefaultContainerStoreLabels(store, map[string]string{})
 	maps.Copy(labels, store.Spec.Network.Labels)
 
+	hosts := make([]string, len(store.Spec.Network.Hosts))
+	_ = copy(hosts, store.Spec.Network.Hosts)
+
+	if store.Spec.Network.Host != "" {
+		hosts = append(hosts, store.Spec.Network.Host)
+	}
+
 	var tls []networkingv1.IngressTLS
 	if store.Spec.Network.TLSSecretName != "" {
 		tls = append(tls, networkingv1.IngressTLS{
-			Hosts: []string{
-				store.Spec.Network.Host,
-			},
+			Hosts:      hosts,
 			SecretName: store.Spec.Network.TLSSecretName,
+		})
+	}
+
+	rules := make([]networkingv1.IngressRule, 0, len(hosts))
+	for _, host := range hosts {
+		rules = append(rules, networkingv1.IngressRule{
+			Host: host,
+			IngressRuleValue: networkingv1.IngressRuleValue{
+				HTTP: &networkingv1.HTTPIngressRuleValue{
+					Paths: []networkingv1.HTTPIngressPath{
+						{
+							Path:     "/api",
+							PathType: &pathType,
+							Backend: networkingv1.IngressBackend{
+								Service: &networkingv1.IngressServiceBackend{
+									Name: service.GetAdminServiceName(store),
+									Port: networkingv1.ServiceBackendPort{
+										Number: store.Spec.Network.Port,
+									},
+								},
+							},
+						},
+						{
+							Path:     "/admin",
+							PathType: &pathType,
+							Backend: networkingv1.IngressBackend{
+								Service: &networkingv1.IngressServiceBackend{
+									Name: service.GetAdminServiceName(store),
+									Port: networkingv1.ServiceBackendPort{
+										Number: store.Spec.Network.Port,
+									},
+								},
+							},
+						},
+						{
+							Path:     "/store-api",
+							PathType: &pathType,
+							Backend: networkingv1.IngressBackend{
+								Service: &networkingv1.IngressServiceBackend{
+									Name: service.GetStorefrontServiceName(store),
+									Port: networkingv1.ServiceBackendPort{
+										Number: store.Spec.Network.Port,
+									},
+								},
+							},
+						},
+						{
+							Path:     "/",
+							PathType: &pathType,
+							Backend: networkingv1.IngressBackend{
+								Service: &networkingv1.IngressServiceBackend{
+									Name: service.GetStorefrontServiceName(store),
+									Port: networkingv1.ServiceBackendPort{
+										Number: store.Spec.Network.Port,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		})
 	}
 
@@ -57,66 +123,8 @@ func StoreIngress(store v1.Store) *networkingv1.Ingress {
 		},
 		Spec: networkingv1.IngressSpec{
 			IngressClassName: &store.Spec.Network.IngressClassName,
-			Rules: []networkingv1.IngressRule{
-				{
-					Host: store.Spec.Network.Host,
-					IngressRuleValue: networkingv1.IngressRuleValue{
-						HTTP: &networkingv1.HTTPIngressRuleValue{
-							Paths: []networkingv1.HTTPIngressPath{
-								{
-									Path:     "/api",
-									PathType: &pathType,
-									Backend: networkingv1.IngressBackend{
-										Service: &networkingv1.IngressServiceBackend{
-											Name: service.GetAdminServiceName(store),
-											Port: networkingv1.ServiceBackendPort{
-												Number: store.Spec.Network.Port,
-											},
-										},
-									},
-								},
-								{
-									Path:     "/admin",
-									PathType: &pathType,
-									Backend: networkingv1.IngressBackend{
-										Service: &networkingv1.IngressServiceBackend{
-											Name: service.GetAdminServiceName(store),
-											Port: networkingv1.ServiceBackendPort{
-												Number: store.Spec.Network.Port,
-											},
-										},
-									},
-								},
-								{
-									Path:     "/store-api",
-									PathType: &pathType,
-									Backend: networkingv1.IngressBackend{
-										Service: &networkingv1.IngressServiceBackend{
-											Name: service.GetStorefrontServiceName(store),
-											Port: networkingv1.ServiceBackendPort{
-												Number: store.Spec.Network.Port,
-											},
-										},
-									},
-								},
-								{
-									Path:     "/",
-									PathType: &pathType,
-									Backend: networkingv1.IngressBackend{
-										Service: &networkingv1.IngressServiceBackend{
-											Name: service.GetStorefrontServiceName(store),
-											Port: networkingv1.ServiceBackendPort{
-												Number: store.Spec.Network.Port,
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			TLS: tls,
+			Rules:            rules,
+			TLS:              tls,
 		},
 	}
 }
