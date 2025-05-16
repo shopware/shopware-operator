@@ -297,6 +297,13 @@ func (s *Store) getStorage() []corev1.EnvVar {
 }
 
 func (s *Store) GetEnv() []corev1.EnvVar {
+	var appUrl string
+	if s.Spec.Network.AppURLHost == "" {
+		appUrl = fmt.Sprintf("https://%s", s.Spec.Network.Host)
+	} else {
+		appUrl = fmt.Sprintf("https://%s", s.Spec.Network.AppURLHost)
+	}
+
 	// TODO: Use map for overwriting when using ENVs from customer
 	c := []corev1.EnvVar{
 		{
@@ -372,7 +379,7 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 		},
 		{
 			Name:  "APP_URL",
-			Value: fmt.Sprintf("https://%s", s.Spec.Network.Host),
+			Value: appUrl,
 		},
 		{
 			Name:  "DATABASE_PERSISTENT_CONNECTION",
