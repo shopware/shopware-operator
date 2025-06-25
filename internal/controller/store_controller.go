@@ -443,13 +443,12 @@ func (r *StoreReconciler) reconcileDeployment(ctx context.Context, store *v1.Sto
 	}
 
 	for _, obj := range objs {
-
 		if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
 			return fmt.Errorf("reconcile unready deployment: %w", err)
 		}
 
 		if changed {
-			r.Recorder.Event(store, "Normal", "Diff ingress hash",
+			r.Recorder.Event(store, "Normal", "Diff deployment hash",
 				fmt.Sprintf("Update Store %s deployment in namespace %s for %s. Diff hash",
 					store.Name,
 					store.Namespace,
