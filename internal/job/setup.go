@@ -3,7 +3,6 @@ package job
 import (
 	"context"
 	"fmt"
-	"maps"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
@@ -39,7 +38,6 @@ func SetupJob(store v1.Store) *batchv1.Job {
 
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.MigrationJobContainer.Labels)
 	labels["shop.shopware.com/store.type"] = "setup"
-	maps.Copy(labels, util.GetPDBLabels(store))
 
 	// Use util function for annotations
 	annotations := util.GetDefaultContainerAnnotations(CONTAINER_NAME_SETUP_JOB, store, store.Spec.SetupJobContainer.Annotations)

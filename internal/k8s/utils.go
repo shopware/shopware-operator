@@ -566,6 +566,12 @@ func ObjectHash(obj runtime.Object) (string, error) {
 		dataToMarshal = object.Spec
 	case *batchv1.Job:
 		dataToMarshal = object.Spec
+	case *batchv1.CronJob:
+		dataToMarshal = object.Spec
+	case *policy.PodDisruptionBudget:
+		dataToMarshal = object.Spec
+	case *networkingv1.Ingress:
+		dataToMarshal = object.Spec
 	default:
 		dataToMarshal = obj
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
-	"maps"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
@@ -47,7 +46,6 @@ func MigrationJob(store v1.Store) *batchv1.Job {
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.MigrationJobContainer.Labels)
 	labels["shop.shopware.com/store.hash"] = GetMigrateHash(store)
 	labels["shop.shopware.com/store.type"] = "migration"
-	maps.Copy(labels, util.GetPDBLabels(store))
 
 	annotations := util.GetDefaultContainerAnnotations(CONTAINER_NAME_MIGRATION_JOB, store, store.Spec.MigrationJobContainer.Annotations)
 	annotations["shop.shopware.com/store.oldImage"] = store.Status.CurrentImageTag
