@@ -3,7 +3,6 @@ package deployment
 import (
 	"context"
 	"fmt"
-	"maps"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
@@ -38,7 +37,6 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 	appName := "shopware-worker"
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.WorkerDeploymentContainer.Labels)
 	labels = util.GetWorkerDeploymentMatchLabel(labels)
-	maps.Copy(labels, util.GetPDBLabels(store))
 
 	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.WorkerDeploymentContainer.Annotations)
 

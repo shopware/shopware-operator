@@ -8,12 +8,6 @@ import (
 	v1 "github.com/shopware/shopware-operator/api/v1"
 )
 
-func GetPDBLabels(store v1.Store) map[string]string {
-	return map[string]string{
-		"shop.shopware.com/store.pdb": store.Name,
-	}
-}
-
 func GetDefaultStoreLabels(store v1.Store) map[string]string {
 	return map[string]string{
 		"shop.shopware.com/store.name": store.Name,

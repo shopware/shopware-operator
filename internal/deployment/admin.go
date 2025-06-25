@@ -3,7 +3,6 @@ package deployment
 import (
 	"context"
 	"fmt"
-	"maps"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
@@ -38,7 +37,6 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 	appName := "shopware-admin"
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.AdminDeploymentContainer.Labels)
 	labels = util.GetAdminDeploymentMatchLabel(labels)
-	maps.Copy(labels, util.GetPDBLabels(store))
 
 	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.AdminDeploymentContainer.Annotations)
 
