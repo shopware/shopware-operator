@@ -17,7 +17,7 @@ func GetDefaultStoreLabels(store v1.Store) map[string]string {
 func GetDefaultContainerStoreLabels(store v1.Store, overwrite map[string]string) map[string]string {
 	labels := make(map[string]string)
 	if store.Spec.Container.Labels != nil {
-		labels = store.Spec.Container.Labels
+		maps.Copy(labels, store.Spec.Container.Labels)
 	}
 	labels["shop.shopware.com/store.name"] = store.Name
 	if overwrite != nil {
@@ -29,7 +29,7 @@ func GetDefaultContainerStoreLabels(store v1.Store, overwrite map[string]string)
 func GetDefaultStoreExecLabels(store v1.Store, ex v1.StoreExec) map[string]string {
 	labels := make(map[string]string)
 	if store.Spec.Container.Labels != nil {
-		labels = store.Spec.Container.Labels
+		maps.Copy(labels, store.Spec.Container.Labels)
 	}
 	labels["shop.shopware.com/store.name"] = store.Name
 	labels["shop.shopware.com/storeexec.name"] = ex.Name
@@ -50,26 +50,20 @@ func GetDefaultStoreInstanceDebugLabels(store v1.Store, storeDebugInstance v1.St
 	return labels
 }
 
-func GetAdminDeploymentMatchLabel(labels map[string]string) map[string]string {
-	if labels == nil {
-		labels = make(map[string]string)
-	}
+func GetAdminDeploymentMatchLabel() map[string]string {
+	labels := make(map[string]string)
 	labels["shop.shopware.com/store.app"] = "shopware-admin"
 	return labels
 }
 
-func GetStorefrontDeploymentMatchLabel(labels map[string]string) map[string]string {
-	if labels == nil {
-		labels = make(map[string]string)
-	}
+func GetStorefrontDeploymentMatchLabel() map[string]string {
+	labels := make(map[string]string)
 	labels["shop.shopware.com/store.app"] = "shopware-storefront"
 	return labels
 }
 
-func GetWorkerDeploymentMatchLabel(labels map[string]string) map[string]string {
-	if labels == nil {
-		labels = make(map[string]string)
-	}
+func GetWorkerDeploymentMatchLabel() map[string]string {
+	labels := make(map[string]string)
 	labels["shop.shopware.com/store.app"] = "shopware-worker"
 	return labels
 }
