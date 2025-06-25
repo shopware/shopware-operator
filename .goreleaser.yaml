@@ -23,6 +23,9 @@ builds:
       - linux
       - darwin
 
+snapshot:
+  version_template: "{{.Branch}}"
+
 dockers:
   - id: operator-amd64
     goarch: amd64

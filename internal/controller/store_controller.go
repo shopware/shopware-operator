@@ -6,6 +6,7 @@ import (
 	"time"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
+	"github.com/shopware/shopware-operator/internal/cronjob"
 	"github.com/shopware/shopware-operator/internal/deployment"
 	"github.com/shopware/shopware-operator/internal/hpa"
 	"github.com/shopware/shopware-operator/internal/ingress"
@@ -96,6 +97,7 @@ func (r *StoreReconciler) findStoreForReconcile(
 //+kubebuilder:rbac:groups="batch",namespace=default,resources=jobs,verbs=get;list;watch;create;delete
 //+kubebuilder:rbac:groups="networking.k8s.io",namespace=default,resources=ingresses,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="policy",namespace=default,resources=poddisruptionbudgets,verbs=get;list;watch;create;patch
+//+kubebuilder:rbac:groups="batch",namespace=default,resources=cronjobs,verbs=get;list;watch;create;delete
 
 func (r *StoreReconciler) Reconcile(
 	ctx context.Context,
@@ -184,6 +186,13 @@ func (r *StoreReconciler) doReconcile(
 		if err := r.reconcileMigrationJob(ctx, store); err != nil {
 			return fmt.Errorf("migration: %w", err)
 		}
+
+		store.Spec.ScheduledTask.Suspend = true
+		log.Info("Overwrite Suspend for ScheduledTask because of migration")
+		if err := r.reconcileScheduledTask(ctx, store); err != nil {
+			return fmt.Errorf("cronjob: %w", err)
+		}
+
 		log.Info("wait for migration to finish")
 		return nil
 	}
@@ -225,6 +234,11 @@ func (r *StoreReconciler) doReconcile(
 		if err := r.reconcileIngress(ctx, store); err != nil {
 			return fmt.Errorf("service: %w", err)
 		}
+	}
+
+	log.Info("reconcile CronJob scheduledTask")
+	if err := r.reconcileScheduledTask(ctx, store); err != nil {
+		return fmt.Errorf("cronjob: %w", err)
 	}
 
 	log.Info("reconcile horizontalPodAutoscaler")
@@ -505,6 +519,27 @@ func (r *StoreReconciler) reconcileSetupJob(ctx context.Context, store *v1.Store
 				store.Namespace))
 		if err := k8s.EnsureJob(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
 			return fmt.Errorf("reconcile unready setup job: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (r *StoreReconciler) reconcileScheduledTask(ctx context.Context, store *v1.Store) (err error) {
+	var changed bool
+	obj := cronjob.ScheduledTaskJob(*store)
+
+	if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
+		return fmt.Errorf("reconcile unready setup job: %w", err)
+	}
+
+	if changed {
+		r.Recorder.Event(store, "Normal", "Diff setup job hash",
+			fmt.Sprintf("Update Store %s scheduled task job in namespace %s. Diff hash",
+				store.Name,
+				store.Namespace))
+		if err := k8s.EnsureCronJob(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
+			return fmt.Errorf("reconcile unready scheduled task job: %w", err)
 		}
 	}
 

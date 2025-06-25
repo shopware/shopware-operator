@@ -94,6 +94,9 @@ type StoreSpec struct {
 	MigrationHook Hook `json:"migrationHook,omitempty"`
 	// +kubebuilder:default=/setup
 	MigrationScript string `json:"migrationScript,omitempty"`
+
+	// +kubebuilder:default={timeZone: "Etc/UTC", schedule: "0 * * * *", command: "bin/console scheduled-task:run -v -n --no-wait"}
+	ScheduledTask ScheduledTaskSpec `json:"ScheduledTask,omitempty"`
 }
 
 func init() {
@@ -124,6 +127,26 @@ type HPASpec struct {
 	// +kubebuilder:default=false
 	Enabled     bool              `json:"enabled"`
 	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
+type ScheduledTaskSpec struct {
+	// The time zone name for the given schedule, see https://en.wikipedia.org/wiki/List_of_tz_database_time_zones. Default is Etc/UTC.
+	// +kubebuilder:default="Etc/UTC"
+	TimeZone string `json:"timeZone"`
+
+	// The schedule in Cron format, see https://en.wikipedia.org/wiki/Cron.
+	// Default to every hour at minute 0.
+	// +kubebuilder:default="0 * * * *"
+	Schedule string `json:"schedule"`
+
+	// This flag tells the controller to suspend subsequent executions, it does
+	// not apply to already started executions.  Defaults to false.
+	// +kubebuilder:default=false
+	Suspend bool `json:"suspend,omitempty"`
+
+	// The schedule task command
+	// +kubebuilder:default="bin/console scheduled-task:run -v -n --no-wait"
+	Command string `json:"command"`
 }
 
 type OpensearchSpec struct {

@@ -1,5 +1,6 @@
 # Image URL to use all building/pushing image targets
 IMG ?= ghcr.io/shopware/shopware-operator:main
+IMG_REPO ?= ghcr.io/shopware/shopware-operator
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.28.0
 TAG ?= v0.0.1
@@ -31,6 +32,7 @@ GOBIN=$(shell go env GOPATH)/bin
 else
 GOBIN=$(shell go env GOBIN)
 endif
+branch := $(shell git rev-parse --abbrev-ref HEAD)
 
 # CONTAINER_TOOL defines the container tool to be used for building images.
 # Be aware that the target commands are only tested with Docker which is
@@ -170,9 +172,16 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 .PHONY: deploy
-deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
+deploy: install manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+	goreleaser release --snapshot --clean
+	make helm path=temp version=0.0.0
+	@helm template shopware-operator temp \
+		--namespace shopware \
+		--set crds.install=false \
+		--set image.tag=$(branch)-amd64 \
+		--set image.pullPolicy=Always > temp/helm.yaml
+	kind load docker-image --name helm-chart $(IMG_REPO):$(branch)-amd64
+	kubectl apply -f temp/helm.yaml
 
 .PHONY: undeploy
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
