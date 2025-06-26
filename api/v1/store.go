@@ -96,7 +96,7 @@ type StoreSpec struct {
 	MigrationScript string `json:"migrationScript,omitempty"`
 
 	// +kubebuilder:default={timeZone: "Etc/UTC", schedule: "0 * * * *", command: "bin/console scheduled-task:run -v -n --no-wait"}
-	ScheduledTask ScheduledTaskSpec `json:"ScheduledTask,omitempty"`
+	ScheduledTask ScheduledTaskSpec `json:"scheduledTask,omitempty"`
 }
 
 func init() {
