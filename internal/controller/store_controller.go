@@ -98,7 +98,7 @@ func (r *StoreReconciler) findStoreForReconcile(
 //+kubebuilder:rbac:groups="batch",namespace=default,resources=jobs,verbs=get;list;watch;create;delete
 //+kubebuilder:rbac:groups="networking.k8s.io",namespace=default,resources=ingresses,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="policy",namespace=default,resources=poddisruptionbudgets,verbs=get;list;watch;create;patch
-//+kubebuilder:rbac:groups="batch",namespace=default,resources=cronjobs,verbs=get;list;watch;create;delete
+//+kubebuilder:rbac:groups="batch",namespace=default,resources=cronjobs,verbs=get;patch;list;watch;create;delete
 
 func (r *StoreReconciler) Reconcile(
 	ctx context.Context,
