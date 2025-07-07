@@ -44,7 +44,7 @@ type StoreReconciler struct {
 	Scheme               *runtime.Scheme
 	Recorder             record.EventRecorder
 	DisableServiceChecks bool
-	eventHandlers        []event.EventHandler
+	EventHandlers        []event.EventHandler
 }
 
 // SetupWithManager sets up the controller with the Manager.
