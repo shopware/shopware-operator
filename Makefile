@@ -115,7 +115,7 @@ build: manifests generate ## Build manager binary.
 
 .PHONY: run
 run: manifests generate zap-pretty ## Run a controller from your host.
-	go run ./cmd/manager.go --namespace ${NAMESPACE} --disable-checks --debug --log-structured 2>&1 | $(ZAP_PRETTY) --all
+	go run ./cmd/manager.go --namespace ${NAMESPACE} --enable-events --disable-checks --debug --log-structured 2>&1 | $(ZAP_PRETTY) --all
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.

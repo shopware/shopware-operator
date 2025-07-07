@@ -11,10 +11,10 @@ import (
 
 func (c *StoreReconciler) SendEvent(ctx context.Context, store v1.Store, message string) {
 	log := log.FromContext(ctx).WithValues(
-		zap.String("message", message),
-		zap.String("currentImageTag", store.Status.CurrentImageTag),
-		zap.Any("condition", store.Status.GetLastCondition()),
-		zap.Any("labels", store.Labels),
+		"message", message,
+		"currentImageTag", store.Status.CurrentImageTag,
+		"condition", store.Status.GetLastCondition(),
+		"labels", store.Labels,
 	)
 
 	e := event.Event{
@@ -24,7 +24,7 @@ func (c *StoreReconciler) SendEvent(ctx context.Context, store v1.Store, message
 		StoreLabels:   store.Labels,
 	}
 
-	for _, handler := range c.eventHandlers {
+	for _, handler := range c.EventHandlers {
 		log.Info("Sending event", "handler", reflect.TypeOf(handler).String())
 		err := handler.Send(ctx, e)
 		if err != nil {
