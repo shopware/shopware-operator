@@ -8,6 +8,7 @@ import (
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/cronjob"
 	"github.com/shopware/shopware-operator/internal/deployment"
+	"github.com/shopware/shopware-operator/internal/event"
 	"github.com/shopware/shopware-operator/internal/hpa"
 	"github.com/shopware/shopware-operator/internal/ingress"
 	"github.com/shopware/shopware-operator/internal/job"
@@ -43,6 +44,7 @@ type StoreReconciler struct {
 	Scheme               *runtime.Scheme
 	Recorder             record.EventRecorder
 	DisableServiceChecks bool
+	eventHandlers        []event.EventHandler
 }
 
 // SetupWithManager sets up the controller with the Manager.
