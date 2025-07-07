@@ -53,6 +53,7 @@ func GetStorefrontDeploymentCondition(
 				State:          v1.DeploymentStateNotFound,
 				LastUpdateTime: metav1.Now(),
 				Message:        "No deployment found",
+				Ready:          "0/0",
 			}
 		}
 	}

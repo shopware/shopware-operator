@@ -6,6 +6,7 @@ import (
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/event"
+	"go.uber.org/zap"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
