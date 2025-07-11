@@ -111,7 +111,14 @@ test-chart: install
 
 .PHONY: run
 run: manifests generate zap-pretty ## Run a controller from your host.
-	go run ./cmd/manager.go --namespace ${NAMESPACE} --enable-events --disable-checks --debug --log-structured 2>&1 | $(ZAP_PRETTY) --all
+	go run ./cmd/manager.go \
+		--namespace ${NAMESPACE} \
+		--enable-events \
+		--nats-address nats://localhost:4222 \
+		--disable-checks \
+		--debug \
+		--log-structured \
+		2>&1 | $(ZAP_PRETTY) --all
 
 .PHONY: debug
 debug: manifests generate zap-pretty ## Run a controller from your host.
@@ -175,10 +182,12 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 .PHONY: build
 build: ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	goreleaser release --snapshot --clean
+	# Doesn't overwrite the image
 	kind load docker-image --name helm-chart $(IMG_REPO):$(branch)-amd64
 
 .PHONY: deploy
 deploy: install manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+	kubectl config use-context kind-helm-chart
 	make helm path=temp version=0.0.0
 	@helm template shopware-operator temp \
 		--namespace shopware \
