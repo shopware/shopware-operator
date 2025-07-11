@@ -58,7 +58,7 @@ func NewNatsEventServer(addr string, nkeyFile string, credentialsFile string, to
 	}
 
 	if !nc.IsConnected() {
-		return &NatsEventServer{}, fmt.Errorf("failed isConnected test NATS server: %w", err)
+		return &NatsEventServer{}, fmt.Errorf("NATS server connection test failed: server is not connected")
 	}
 
 	return &NatsEventServer{
