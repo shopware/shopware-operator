@@ -109,10 +109,6 @@ test-chart: install
 	helm install test shopware/shopware
 ##@ Build
 
-.PHONY: build
-build: manifests generate ## Build manager binary.
-	go build -o bin/manager cmd/manager.go
-
 .PHONY: run
 run: manifests generate zap-pretty ## Run a controller from your host.
 	go run ./cmd/manager.go --namespace ${NAMESPACE} --enable-events --disable-checks --debug --log-structured 2>&1 | $(ZAP_PRETTY) --all
