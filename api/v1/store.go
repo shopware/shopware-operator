@@ -13,7 +13,7 @@ import (
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Storefront",type=string,JSONPath=".status.storefrontState.ready"
 // +kubebuilder:printcolumn:name="Worker",type=string,JSONPath=".status.workerState.ready"
-// +kubebuilder:printcolumn:name="Admin",type=string,JSONPath=".status.workerState.ready"
+// +kubebuilder:printcolumn:name="Admin",type=string,JSONPath=".status.adminState.ready"
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
 // +kubebuilder:printcolumn:name="Message",type=string,JSONPath=".status.message"
 // +kubebuilder:resource:scope=Namespaced
