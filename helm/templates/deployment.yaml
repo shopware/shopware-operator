@@ -68,6 +68,21 @@ spec:
         {{- if .Values.debug }}
         - --debug
         {{- end }}
+        {{- if and (hasKey .Values "events") (.Values.events.enable) }}
+        - --enable-events
+        - -nats-address
+        - {{ .Values.events.nats.address }}
+        {{- if hasKey .Values.events.nats "credentialsRef" }}
+        - -nats-credentials 
+        - /secrets/{{ .Values.events.nats.credentialsRef.key }}
+        {{- end }}
+        {{- if hasKey .Values.events.nats "nkeyRef" }}
+        - -nats-nkey
+        - /secrets/{{ .Values.events.nats.nkeyRef.key }}
+        {{- end }}
+        - -nats-topic 
+        - {{ .Values.events.nats.topic }}
+        {{- end }}
         command:
         - /manager
         env:
@@ -99,10 +114,30 @@ spec:
           capabilities:
             drop:
             - ALL
+        volumeMounts:
+          {{- if and (hasKey .Values "events") (.Values.events.enable) (hasKey .Values.events.nats "nkeyRef") }}
+          - mountPath: /secrets
+            name: nkey
+          {{- end }}
+          {{- if and (hasKey .Values "events") (.Values.events.enable) (hasKey .Values.events.nats "credentialsRef") }}
+          - mountPath: /secrets
+            name: credentials
+          {{- end }}
       securityContext:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: '{{ .Release.Name }}-shopware-operator'
       terminationGracePeriodSeconds: 10
+      volumes:
+        {{- if and (hasKey .Values "events") (.Values.events.enable) (hasKey .Values.events.nats "nkeyRef") }}
+        - name: nkey
+          secret:
+            secretName: {{ .Values.events.nats.nkeyRef.name }}
+        {{- end }}
+        {{- if and (hasKey .Values "events") (.Values.events.enable) (hasKey .Values.events.nats "credentialsRef") }}
+        - name: credentials
+          secret:
+            secretName: {{ .Values.events.nats.credentialsRef.name }}
+        {{- end }}
 {{- end }}

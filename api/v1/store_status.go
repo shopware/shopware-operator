@@ -8,7 +8,10 @@ import (
 
 const maxStatusesQuantity = 6
 
-type StatefulAppState string
+type (
+	StatefulAppState string
+	DeploymentState  string
+)
 
 const (
 	StateEmpty        StatefulAppState = ""
@@ -17,6 +20,13 @@ const (
 	StateInitializing StatefulAppState = "initializing"
 	StateMigration    StatefulAppState = "migrating"
 	StateReady        StatefulAppState = "ready"
+)
+
+const (
+	DeploymentStateUnknown  DeploymentState = "unknown"
+	DeploymentStateError    DeploymentState = "error"
+	DeploymentStateNotFound DeploymentState = "not-found"
+	DeploymentStateRunning  DeploymentState = "running"
 )
 
 type StoreCondition struct {
@@ -28,12 +38,22 @@ type StoreCondition struct {
 	Status             string           `json:"status,omitempty"`
 }
 
+type DeploymentCondition struct {
+	State          DeploymentState `json:"state,omitempty"`
+	LastUpdateTime metav1.Time     `json:"lastUpdatedTime,omitempty"`
+	Message        string          `json:"message,omitempty"`
+	Ready          string          `json:"ready,omitempty"`
+}
+
 type StoreStatus struct {
 	State           StatefulAppState `json:"state,omitempty"`
 	Message         string           `json:"message,omitempty"`
 	CurrentImageTag string           `json:"currentImageTag,omitempty"`
 
-	Ready      string           `json:"ready,omitempty"`
+	WorkerState     DeploymentCondition `json:"workerState,omitempty"`
+	AdminState      DeploymentCondition `json:"adminState,omitempty"`
+	StorefrontState DeploymentCondition `json:"storefrontState,omitempty"`
+
 	Conditions []StoreCondition `json:"conditions,omitempty"`
 }
 
@@ -54,9 +74,17 @@ func (s *StoreStatus) AddCondition(c StoreCondition) {
 		s.Conditions = append(s.Conditions, c)
 	}
 
+	// Remove oldest conditions if the length exceeds maxStatusesQuantity
 	if len(s.Conditions) > maxStatusesQuantity {
 		s.Conditions = s.Conditions[len(s.Conditions)-maxStatusesQuantity:]
 	}
+}
+
+func (s *StoreStatus) GetLastCondition() StoreCondition {
+	if len(s.Conditions) == 0 {
+		return StoreCondition{}
+	}
+	return s.Conditions[len(s.Conditions)-1]
 }
 
 func (s *Store) IsState(states ...StatefulAppState) bool {

@@ -101,7 +101,14 @@ func (r *StoreReconciler) reconcileCRStatus(
 		}
 	}
 
+	store.Status.Message = store.Status.GetLastCondition().Message
+	store.Status.AdminState = deployment.GetAdminDeploymentCondition(ctx, *store, r.Client)
+	store.Status.WorkerState = deployment.GetWorkerDeploymentCondition(ctx, *store, r.Client)
+	store.Status.StorefrontState = deployment.GetStorefrontDeploymentCondition(ctx, *store, r.Client)
+
 	log.FromContext(ctx).Info("Update store status", "status", store.Status)
+	r.SendEvent(ctx, *store, "Update store status")
+
 	return writeStoreStatus(ctx, r.Client, types.NamespacedName{
 		Namespace: store.Namespace,
 		Name:      store.Name,

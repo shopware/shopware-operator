@@ -8,6 +8,7 @@ import (
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/cronjob"
 	"github.com/shopware/shopware-operator/internal/deployment"
+	"github.com/shopware/shopware-operator/internal/event"
 	"github.com/shopware/shopware-operator/internal/hpa"
 	"github.com/shopware/shopware-operator/internal/ingress"
 	"github.com/shopware/shopware-operator/internal/job"
@@ -19,6 +20,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	policy "k8s.io/api/policy/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -43,6 +45,7 @@ type StoreReconciler struct {
 	Scheme               *runtime.Scheme
 	Recorder             record.EventRecorder
 	DisableServiceChecks bool
+	EventHandlers        []event.EventHandler
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -50,8 +53,14 @@ func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1.Store{}).
 		Owns(&corev1.Secret{}).
+		Owns(&corev1.Service{}).
+		Owns(&networkingv1.Ingress{}).
+		Owns(&policy.PodDisruptionBudget{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&batchv1.Job{}).
+		Owns(&batchv1.CronJob{}).
+		// Skip status updates of sub resources
+		WithEventFilter(SkipStatusUpdates{}).
 		// This will watch the db secret and run a reconcile if the db secret will change.
 		Watches(
 			&corev1.Secret{},
@@ -103,10 +112,12 @@ func (r *StoreReconciler) findStoreForReconcile(
 func (r *StoreReconciler) Reconcile(
 	ctx context.Context,
 	req ctrl.Request,
-) (rr ctrl.Result, err error) {
+) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
-	rr = ctrl.Result{RequeueAfter: 5 * time.Second}
+	var err error
+	shortRequeue := ctrl.Result{RequeueAfter: 10 * time.Second}
+	longRequeue := ctrl.Result{RequeueAfter: 5 * time.Minute}
 
 	var store *v1.Store
 	defer func() {
@@ -118,10 +129,10 @@ func (r *StoreReconciler) Reconcile(
 	store, err = k8s.GetStore(ctx, r.Client, req.NamespacedName)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			return rr, nil
+			return shortRequeue, nil
 		}
 		log.Error(err, "get CR")
-		return rr, nil
+		return shortRequeue, nil
 	}
 
 	// We don't need yet finalizers
@@ -131,12 +142,18 @@ func (r *StoreReconciler) Reconcile(
 
 	if err := r.doReconcile(ctx, store); err != nil {
 		log.Error(err, "reconcile")
-		return rr, nil
+		return shortRequeue, nil
 	}
 
 	log.Info("Reconcile finished")
-	rr.RequeueAfter = 15 * time.Second
-	return rr, nil
+
+	if store.IsState(v1.StateReady) {
+		log.Info("Schedule long Reconcile")
+		return longRequeue, nil
+	}
+
+	log.Info("Schedule short Reconcile, because store is not ready yet")
+	return shortRequeue, nil
 }
 
 func (r *StoreReconciler) doReconcile(

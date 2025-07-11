@@ -38,6 +38,8 @@ import (
 
 	shopv1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/controller"
+	"github.com/shopware/shopware-operator/internal/event"
+	"github.com/shopware/shopware-operator/internal/event/nats"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -57,13 +59,23 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var debug bool
+	var enableEventPublish bool
 	var logStructured bool
 	var disableChecks bool
 	var probeAddr string
+	var natsAddr string
+	var natsTopic string
+	var natsNkeyFile string
+	var natsCredentialsFile string
 	var namespace string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.StringVar(&natsAddr, "nats-address", "nats://127.0.0.1:4222", "The address for the nats server.")
+	flag.StringVar(&natsTopic, "nats-topic", "shopware-operator", "The topic for publish events to the nats server.")
+	flag.StringVar(&natsNkeyFile, "nats-nkey", "", "The file for the nkey.")
+	flag.StringVar(&natsCredentialsFile, "nats-credentials", "", "The file for the credentials.")
 	flag.StringVar(&namespace, "namespace", "default", "The namespace in which the operator is running in")
+	flag.BoolVar(&enableEventPublish, "enable-events", false, "Enables publishing events to NATS")
 	flag.BoolVar(&debug, "debug", false, "Set's the logger to debug with more logging output")
 	flag.BoolVar(&logStructured, "log-structured", false, "Set's the logger to output with human logs")
 	flag.BoolVar(&disableChecks, "disable-checks", false,
@@ -140,8 +152,29 @@ func main() {
 
 	nsClient := client.NewNamespacedClient(mgr.GetClient(), namespace)
 
+	// Event Registration
+	var handlers []event.EventHandler
+
+	if enableEventPublish {
+		n, err := nats.NewNatsEventServer(natsAddr, natsNkeyFile, natsCredentialsFile, natsTopic)
+		if err != nil {
+			setupLog.Error(err, "unable to create NATS event server. Skip event publishing")
+		} else {
+			setupLog.Info("Nats connection established")
+			handlers = append(handlers, n)
+		}
+	}
+
+	// Cleanup all event handlers on exit
+	defer func() {
+		for _, handler := range handlers {
+			handler.Close()
+		}
+	}()
+
 	if err = (&controller.StoreReconciler{
 		Client:               nsClient,
+		EventHandlers:        handlers,
 		Scheme:               mgr.GetScheme(),
 		Recorder:             mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", namespace)),
 		DisableServiceChecks: disableChecks,
