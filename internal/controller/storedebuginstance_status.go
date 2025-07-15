@@ -6,6 +6,7 @@ import (
 	"time"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
+	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/pod"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -13,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	k8sretry "k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func (r *StoreDebugInstanceReconciler) reconcileCRStatus(
@@ -61,7 +61,7 @@ func (r *StoreDebugInstanceReconciler) reconcileCRStatus(
 		storeDebugInstance.Status.State = r.stateRunning(ctx, store, storeDebugInstance)
 	}
 
-	log.FromContext(ctx).Info("Update store debug instance status", "status", storeDebugInstance.Status)
+	logging.FromContext(ctx).Info("Update store debug instance status", "status", storeDebugInstance.Status)
 	return writeStoreDebugInstanceStatus(ctx, r.Client, types.NamespacedName{
 		Namespace: storeDebugInstance.Namespace,
 		Name:      storeDebugInstance.Name,

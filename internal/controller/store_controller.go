@@ -12,10 +12,12 @@ import (
 	"github.com/shopware/shopware-operator/internal/ingress"
 	"github.com/shopware/shopware-operator/internal/job"
 	"github.com/shopware/shopware-operator/internal/k8s"
+	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/pdb"
 	"github.com/shopware/shopware-operator/internal/secret"
 	"github.com/shopware/shopware-operator/internal/service"
 	"github.com/shopware/shopware-operator/internal/util"
+	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -30,7 +32,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -43,6 +44,7 @@ type StoreReconciler struct {
 	Scheme               *runtime.Scheme
 	Recorder             record.EventRecorder
 	DisableServiceChecks bool
+	Logger               *zap.SugaredLogger
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -74,7 +76,7 @@ func (r *StoreReconciler) findStoreForReconcile(
 	var requests []reconcile.Request
 	for _, store := range stores.Items {
 		if store.Spec.Database.PasswordSecretRef.Name == secret.GetName() {
-			log.FromContext(ctx).
+			logging.FromContext(ctx).
 				Info("Do reconcile on store because db secret has changed", "Store", store.Name)
 			requests = append(requests, reconcile.Request{
 				NamespacedName: types.NamespacedName{
@@ -104,14 +106,20 @@ func (r *StoreReconciler) Reconcile(
 	ctx context.Context,
 	req ctrl.Request,
 ) (rr ctrl.Result, err error) {
-	log := log.FromContext(ctx)
+	log := r.Logger.
+		With(zap.String("namespace", req.Namespace)).
+		With(zap.String("name", req.Name))
+
+	// Put logger in context for this reconcile
+	ctx = logging.WithLogger(ctx, log)
+	log.Info("Reconciling FastlyService")
 
 	rr = ctrl.Result{RequeueAfter: 5 * time.Second}
 
 	var store *v1.Store
 	defer func() {
 		if err := r.reconcileCRStatus(ctx, store, err); err != nil {
-			log.Error(err, "failed to update status")
+			log.Errorw("failed to update status", zap.Error(err))
 		}
 	}()
 
@@ -120,7 +128,7 @@ func (r *StoreReconciler) Reconcile(
 		if k8serrors.IsNotFound(err) {
 			return rr, nil
 		}
-		log.Error(err, "get CR")
+		log.Errorw("get CR", zap.Error(err))
 		return rr, nil
 	}
 
@@ -130,7 +138,7 @@ func (r *StoreReconciler) Reconcile(
 	// }
 
 	if err := r.doReconcile(ctx, store); err != nil {
-		log.Error(err, "reconcile")
+		log.Errorw("reconcile", zap.Error(err))
 		return rr, nil
 	}
 
@@ -143,9 +151,7 @@ func (r *StoreReconciler) doReconcile(
 	ctx context.Context,
 	store *v1.Store,
 ) error {
-	log := log.FromContext(ctx).
-		WithName(store.Name).
-		WithValues("state", store.Status.State)
+	log := logging.FromContext(ctx)
 	log.Info("Do reconcile on store")
 
 	log.Info("reconcile app secrets")
@@ -216,7 +222,7 @@ func (r *StoreReconciler) doReconcile(
 	if len(store.Spec.Container.ExtraContainers) > 0 && !store.Spec.DisableJobDeletion {
 		log.Info("Delete setup/migration job if they are finished because sidecars are used")
 		if err := r.completeJobs(ctx, store); err != nil {
-			log.Error(err, "Can't cleanup setup and migration jobs")
+			log.Errorw("Can't cleanup setup and migration jobs", zap.Error(err))
 		}
 	}
 
@@ -251,7 +257,7 @@ func (r *StoreReconciler) doReconcile(
 }
 
 // func (r *StoreReconciler) applyFinalizers(ctx context.Context, store *v1.Store) error {
-// 	log := log.FromContext(ctx).WithName(store.Name)
+// 	log := logging.FromContext(ctx).WithName(store.Name)
 // 	log.Info("Applying finalizers")
 //
 // 	var err error
@@ -270,7 +276,7 @@ func (r *StoreReconciler) doReconcile(
 // 	// 		case psrestore.ErrWaitingTermination:
 // 	// 			log.Info("waiting for pods to be deleted", "finalizer", f)
 // 	// 		default:
-// 	// 			log.Error(err, "failed to run finalizer", "finalizer", f)
+// 	// 			log.Errorw("failed to run finalizer", "finalizer", f)
 // 	// 		}
 // 	// 		finalizers = append(finalizers, f)
 // 	// 	}
@@ -281,7 +287,7 @@ func (r *StoreReconciler) doReconcile(
 // 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 // 		err = r.Client.Update(ctx, store)
 // 		if err != nil {
-// 			log.Error(err, "Client.Update failed")
+// 			log.Errorw("Client.Update failed")
 // 		}
 // 		return err
 // 	})

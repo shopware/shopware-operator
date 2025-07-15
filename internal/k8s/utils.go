@@ -34,7 +34,9 @@ import (
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/pkg/errors"
 	v1 "github.com/shopware/shopware-operator/api/v1"
+	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/util"
+	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
@@ -47,7 +49,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func GetWatchNamespace() (string, error) {
@@ -469,14 +470,14 @@ func EnsureObjectWithHash(
 
 	if hashChanged || objectMetaChanged {
 		if hashChanged {
-			log.FromContext(ctx).Info("Object last-config-hash has changed", "old", oldObject.GetAnnotations()["shopware.com/last-config-hash"], "new", hash)
+			logging.FromContext(ctx).Info("Object last-config-hash has changed", zap.String("old", oldObject.GetAnnotations()["shopware.com/last-config-hash"]), zap.String("new", hash))
 		} else {
-			log.FromContext(ctx).Info(
+			logging.FromContext(ctx).Info(
 				"Object meta has changed",
-				"oldAnnotations", oldObject.GetAnnotations(),
-				"newAnnotations", obj.GetAnnotations(),
-				"oldLabels", oldObject.GetLabels(),
-				"newLabels", obj.GetLabels(),
+				zap.Any("oldAnnotations", oldObject.GetAnnotations()),
+				zap.Any("newAnnotations", obj.GetAnnotations()),
+				zap.Any("oldLabels", oldObject.GetLabels()),
+				zap.Any("newLabels", obj.GetLabels()),
 			)
 		}
 
