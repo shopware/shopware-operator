@@ -46,11 +46,11 @@ serviceAccount:
 # }
 # Currently we only support Nats for internal usage, If you want a different publish message system let us know with an issue or pull request.
 # events:
-#   enable: true
 #   nats:
 #     nkeyRef:
 #       name: "nats-nkey" # secret name
 #       key: "nkey" # file
+#     enable: true
 #     credentialsRef:
 #       name: "nats-credentials" # secret name
 #       key: "creds" # file
@@ -85,6 +85,11 @@ tolerations: []
 labels: {}
 podAnnotations: {}
 
-# If set to true this will create json logs instead of user logs
-logStructured: true
-debug: false
+# Supported levels: debug, info, warn, error, dpanic, panic, fatal
+logLevel: info
+# Supported formats: json, text, zap-pretty
+# Use zap-pretty for the makefile run command, as it will be properly formatted
+logFormat: json
+# Disable check for s3 and database checks. Useful if network access is not given for the s3 or database.
+# This is a global level. You can also control this per store.
+disableChecks: false
