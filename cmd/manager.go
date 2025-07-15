@@ -25,6 +25,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	zapz "go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -32,18 +33,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/go-logr/zapr"
-	"go.uber.org/zap"
-
 	shopv1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/controller"
+	"github.com/shopware/shopware-operator/internal/logging"
 	//+kubebuilder:scaffold:imports
 )
 
 var (
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
+	scheme  = runtime.NewScheme()
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
 )
 
 func init() {
@@ -57,7 +60,8 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var debug bool
-	var logStructured bool
+	var logLevel string
+	var logFormat string
 	var disableChecks bool
 	var probeAddr string
 	var namespace string
@@ -65,38 +69,37 @@ func main() {
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&namespace, "namespace", "default", "The namespace in which the operator is running in")
 	flag.BoolVar(&debug, "debug", false, "Set's the logger to debug with more logging output")
-	flag.BoolVar(&logStructured, "log-structured", false, "Set's the logger to output with human logs")
+	flag.StringVar(&logLevel, "log-level", "Info", "The log level of the logger")
+	flag.StringVar(&logFormat, "log-format", "json",
+		"The log format of the logger. Use json for docker container and zap-pretty for zap.")
 	flag.BoolVar(&disableChecks, "disable-checks", false,
 		"Disable the s3 connection check and the database connection check")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 
+	opts := zap.Options{
+		Development: debug,
+	}
+	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	var cfg zap.Config
-
-	if logStructured {
-		cfg = zap.NewProductionConfig()
-	} else {
-		cfg = zap.NewDevelopmentConfig()
-	}
-
 	if debug {
-		cfg.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
+		opts.Level = zapz.DebugLevel
 	}
 
-	zlogger, err := cfg.Build()
-	if err != nil {
-		setupLog.Error(err, "setup zap logger")
-		return
-	}
-	logger := zapr.NewLogger(zlogger)
-	ctrl.SetLogger(logger)
+	logger := logging.NewLogger(logLevel, logFormat).
+		With(zapz.String("service", "shopware-operator")).
+		With(zapz.String("operator_version", version)).
+		With(zapz.String("operator_date", date)).
+		With(zapz.String("operator_commit", commit))
+	setupLog := zapr.NewLogger(logger.Desugar()).WithName("setup")
+	ctrl.SetLogger(setupLog)
 
 	// Overwrite namespace when env is set, which is always set running in a cluster
 	ns := os.Getenv("NAMESPACE")
 	if ns != "" {
+		logger = logger.With(zapz.String("namespace", namespace))
 		namespace = ns
 	}
 
@@ -141,6 +144,7 @@ func main() {
 	nsClient := client.NewNamespacedClient(mgr.GetClient(), namespace)
 
 	if err = (&controller.StoreReconciler{
+		Logger:               logger,
 		Client:               nsClient,
 		Scheme:               mgr.GetScheme(),
 		Recorder:             mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", namespace)),
@@ -151,6 +155,7 @@ func main() {
 	}
 	if err = (&controller.StoreExecReconciler{
 		Client:   mgr.GetClient(),
+		Logger:   logger,
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", namespace)),
 	}).SetupWithManager(mgr); err != nil {
@@ -159,6 +164,7 @@ func main() {
 	}
 	if err = (&controller.StoreSnapshotReconciler{
 		Client:   mgr.GetClient(),
+		Logger:   logger,
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", namespace)),
 	}).SetupWithManager(mgr); err != nil {
@@ -167,6 +173,7 @@ func main() {
 	}
 	if err = (&controller.StoreDebugInstanceReconciler{
 		Client:   mgr.GetClient(),
+		Logger:   logger,
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", namespace)),
 	}).SetupWithManager(mgr); err != nil {
@@ -177,7 +184,7 @@ func main() {
 
 	defer func() {
 		if err := recover(); err != nil {
-			zlogger.Fatal("Panic occurred", zap.Any("error", err))
+			logger.Fatal("Panic occurred", zapz.Any("error", err))
 		}
 	}()
 

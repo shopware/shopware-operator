@@ -21,13 +21,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/shopware/shopware-operator/internal/logging"
+	"go.uber.org/zap"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logging "sigs.k8s.io/controller-runtime/pkg/log"
 
 	shopv1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/k8s"
@@ -41,6 +42,7 @@ type StoreDebugInstanceReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
+	Logger   *zap.SugaredLogger
 }
 
 // +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storedebuginstances,verbs=get;list;watch;create;update;patch;delete
@@ -52,15 +54,15 @@ type StoreDebugInstanceReconciler struct {
 
 func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (rr ctrl.Result, err error) {
 	log := logging.FromContext(ctx).
-		WithName("storedebuginstance").
-		WithValues("request", req)
+		With(zap.String("namespace", req.Namespace)).
+		With(zap.String("name", req.Name))
 
 	var store *shopv1.Store
 	var storeDebugInstance *shopv1.StoreDebugInstance
 	rr = ctrl.Result{RequeueAfter: 10 * time.Second}
 	defer func() {
 		if err := r.reconcileCRStatus(ctx, store, storeDebugInstance, err); err != nil {
-			log.Error(err, "failed to update status")
+			log.Errorw("failed to update status", zap.Error(err))
 		}
 	}()
 
@@ -69,7 +71,7 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 		if k8serrors.IsNotFound(err) {
 			return rr, nil
 		}
-		log.Error(err, "get CR store debug instance")
+		log.Errorw("get CR store debug instance", zap.Error(err))
 	}
 
 	// validate duration
@@ -84,23 +86,23 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 	})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			log.Info("Skip reconcile, because store is not found", "storeRef", storeDebugInstance.Spec.StoreRef)
+			log.Info("Skip reconcile, because store is not found", zap.String("storeRef", storeDebugInstance.Spec.StoreRef))
 			return rr, nil
 		}
-		log.Error(err, "get CR store")
+		log.Errorw("get CR store", zap.Error(err))
 		return rr, nil
 	}
 
 	if storeDebugInstance.IsState(shopv1.StoreDebugInstanceStateDone) {
 		pod := pod.DebugPod(*store, *storeDebugInstance)
 		if err := r.Delete(ctx, pod); err != nil {
-			log.Error(err, "failed to delete pod")
+			log.Errorw("failed to delete pod", zap.Error(err))
 			return rr, nil
 		}
 
 		svc := service.DebugService(*store, *storeDebugInstance)
 		if err := r.Delete(ctx, svc); err != nil {
-			log.Error(err, "failed to delete service")
+			log.Errorw("failed to delete service", zap.Error(err))
 			return rr, nil
 		}
 
@@ -109,15 +111,11 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	if !store.IsState(shopv1.StateReady) {
-		log.Info("Skip reconcile, because store is not ready yet.", "store", store.Status)
+		log.Info("Skip reconcile, because store is not ready yet.", zap.Any("store", store.Status))
 		return rr, nil
 	}
 
-	log = logging.FromContext(ctx).
-		WithName(storeDebugInstance.Name).
-		WithValues("store", storeDebugInstance.Spec.StoreRef).
-		WithValues("state", storeDebugInstance.Status.State)
-
+	log = log.With(zap.String("store", storeDebugInstance.Spec.StoreRef))
 	log.Info("Do reconcile on store debug instance")
 
 	if storeDebugInstance.IsState(shopv1.StoreDebugInstanceStateUnspecified) {
@@ -130,12 +128,12 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	if err := r.reconcilePod(ctx, store, storeDebugInstance); err != nil {
-		log.Error(err, "exec error: %v", err)
+		log.Errorw("exec error", zap.Error(err))
 		return rr, nil
 	}
 
 	if err := r.reconcileService(ctx, store, storeDebugInstance); err != nil {
-		log.Error(err, "failed to reconcile service")
+		log.Errorw("failed to reconcile service", zap.Error(err))
 		return rr, nil
 	}
 
