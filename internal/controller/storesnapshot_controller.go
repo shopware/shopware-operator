@@ -19,11 +19,12 @@ package controller
 import (
 	"context"
 
+	"github.com/shopware/shopware-operator/internal/logging"
+	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 )
@@ -33,6 +34,7 @@ type StoreSnapshotReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
+	Logger   *zap.SugaredLogger
 }
 
 // +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storesnapshots,verbs=get;list;watch;create;update;patch;delete
@@ -40,7 +42,7 @@ type StoreSnapshotReconciler struct {
 // +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storesnapshots/finalizers,verbs=update
 
 func (r *StoreSnapshotReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	_ = logging.FromContext(ctx)
 
 	// TODO(user): your logic here
 
