@@ -9,6 +9,7 @@ require (
 	github.com/cert-manager/cert-manager v1.17.1
 	github.com/minio/minio-go/v7 v7.0.88
 	github.com/pkg/errors v0.9.1
+	github.com/sethvargo/go-envconfig v1.3.0
 	github.com/stretchr/testify v1.10.0
 	go.uber.org/zap v1.27.0
 	k8s.io/api v0.32.2

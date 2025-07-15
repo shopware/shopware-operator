@@ -17,7 +17,7 @@ limitations under the License.
 package main
 
 import (
-	"flag"
+	"context"
 	"fmt"
 	"os"
 
@@ -33,10 +33,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/go-logr/zapr"
 	shopv1 "github.com/shopware/shopware-operator/api/v1"
+	"github.com/shopware/shopware-operator/internal/config"
 	"github.com/shopware/shopware-operator/internal/controller"
 	"github.com/shopware/shopware-operator/internal/logging"
 	//+kubebuilder:scaffold:imports
@@ -57,73 +57,44 @@ func init() {
 }
 
 func main() {
-	var metricsAddr string
-	var enableLeaderElection bool
-	var debug bool
-	var logLevel string
-	var logFormat string
-	var disableChecks bool
-	var probeAddr string
-	var namespace string
-	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.StringVar(&namespace, "namespace", "default", "The namespace in which the operator is running in")
-	flag.BoolVar(&debug, "debug", false, "Set's the logger to debug with more logging output")
-	flag.StringVar(&logLevel, "log-level", "Info", "The log level of the logger")
-	flag.StringVar(&logFormat, "log-format", "json",
-		"The log format of the logger. Use json for docker container and zap-pretty for zap.")
-	flag.BoolVar(&disableChecks, "disable-checks", false,
-		"Disable the s3 connection check and the database connection check")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
-
-	opts := zap.Options{
-		Development: debug,
-	}
-	opts.BindFlags(flag.CommandLine)
-	flag.Parse()
-
-	if debug {
-		opts.Level = zapz.DebugLevel
+	// Load configuration and set up flags
+	cfg, err := config.Load(context.Background())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
+		os.Exit(1)
 	}
 
-	logger := logging.NewLogger(logLevel, logFormat).
+	logger := logging.NewLogger(cfg.LogLevel, cfg.LogFormat).
 		With(zapz.String("service", "shopware-operator")).
 		With(zapz.String("operator_version", version)).
 		With(zapz.String("operator_date", date)).
-		With(zapz.String("operator_commit", commit))
+		With(zapz.String("operator_commit", commit)).
+		With(zapz.String("namespace", cfg.Namespace))
 	setupLog := zapr.NewLogger(logger.Desugar()).WithName("setup")
 	ctrl.SetLogger(setupLog)
+	setupLog.Info("Config for operator", "config", cfg)
 
-	// Overwrite namespace when env is set, which is always set running in a cluster
-	ns := os.Getenv("NAMESPACE")
-	if ns != "" {
-		logger = logger.With(zapz.String("namespace", namespace))
-		namespace = ns
-	}
-
-	if namespace == "" {
-		setupLog.Error(fmt.Errorf("namespace is not set correctly"), "missing env `NAMESPACE` or flag `--namespace`")
+	if cfg.Namespace == "" {
+		setupLog.Error(fmt.Errorf("namespace is not set correctly"), "missing env `NAMESPACE`")
 		os.Exit(3)
 	}
 
-	if disableChecks {
+	if cfg.DisableChecks {
 		setupLog.Info("S3 and database checks are disabled")
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
-		// Metrics:                 metricsserver.Options{BindAddress: metricsAddr},
-		HealthProbeBindAddress: probeAddr,
+		// Metrics:                 metricsserver.Options{BindAddress: cfg.MetricsAddr},
+		HealthProbeBindAddress: cfg.ProbeAddr,
 		Cache: cache.Options{
 			DefaultNamespaces: map[string]cache.Config{
-				namespace: {},
+				cfg.Namespace: {},
 			},
 		},
-		LeaderElection:          enableLeaderElection,
+		LeaderElection:          cfg.EnableLeaderElection,
 		LeaderElectionID:        "d79142e5.shopware.com",
-		LeaderElectionNamespace: namespace,
+		LeaderElectionNamespace: cfg.Namespace,
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
@@ -141,14 +112,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	nsClient := client.NewNamespacedClient(mgr.GetClient(), namespace)
+	nsClient := client.NewNamespacedClient(mgr.GetClient(), cfg.Namespace)
 
 	if err = (&controller.StoreReconciler{
 		Logger:               logger,
 		Client:               nsClient,
 		Scheme:               mgr.GetScheme(),
-		Recorder:             mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", namespace)),
-		DisableServiceChecks: disableChecks,
+		Recorder:             mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
+		DisableServiceChecks: cfg.DisableChecks,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create store controller", "controller", "Store")
 		os.Exit(1)
@@ -157,7 +128,7 @@ func main() {
 		Client:   mgr.GetClient(),
 		Logger:   logger,
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", namespace)),
+		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create exec controller", "controller", "StoreExec")
 		os.Exit(1)
@@ -166,7 +137,7 @@ func main() {
 		Client:   mgr.GetClient(),
 		Logger:   logger,
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", namespace)),
+		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create snapshot controller", "controller", "StoreSnapshot")
 		os.Exit(1)
@@ -175,7 +146,7 @@ func main() {
 		Client:   mgr.GetClient(),
 		Logger:   logger,
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", namespace)),
+		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "StoreDebugInstance")
 		os.Exit(1)

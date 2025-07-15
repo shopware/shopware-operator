@@ -55,6 +55,11 @@ tolerations: []
 labels: {}
 podAnnotations: {}
 
-# If set to true this will create json logs instead of user logs
-logStructured: true
-debug: false
+# Supported levels: debug, info, warn, error, dpanic, panic, fatal
+logLevel: info
+# Supported formats: json, text, zap-pretty
+# Use zap-pretty for the makefile run command, as it will be properly formatted
+logFormat: json
+# Disable check for s3 and database checks. Useful if network access is not given for the s3 or database.
+# This is a global level. You can also control this per store.
+disableChecks: false
