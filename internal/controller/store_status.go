@@ -65,6 +65,13 @@ func (r *StoreReconciler) reconcileCRStatus(
 		if !store.Spec.DisableS3Check && store.Spec.S3Storage.AccessKeyRef.Key != "" {
 			store.Status.State = r.checkS3Services(ctx, store)
 		}
+
+		if store.Spec.AppCache.Adapter == "redis" {
+			store.Status.State = r.checkRedisServices(ctx, store)
+		} else if store.Spec.AppCache.Adapter == "builtin" && store.Spec.Container.Replicas > 1 {
+			//confirm if we should fail or just log a warning
+			log.FromContext(ctx).Info("Redis is not configured but the replicas are greater than 1. This can cause problems.")
+		}
 	}
 
 	if store.IsState(v1.StateSetup) {
@@ -249,6 +256,37 @@ func (r *StoreReconciler) checkS3Services(
 	con.LastTransitionTime = metav1.Now()
 	con.Status = Ready
 	con.Reason = "S3 connection test passed"
+	return v1.StateSetup
+}
+
+func (r *StoreReconciler) checkRedisServices(
+	ctx context.Context,
+	store *v1.Store,
+) v1.StatefulAppState {
+	redisSpec := store.Spec.AppCache.RedisSpec
+	con := v1.StoreCondition{
+		Type:               v1.StateWait,
+		LastTransitionTime: metav1.Time{},
+		LastUpdateTime:     metav1.Now(),
+		Message:            "Waiting for Redis connection",
+		Reason:             "",
+		Status:             "True",
+	}
+	defer func() {
+		store.Status.AddCondition(con)
+	}()
+
+	// Test Redis connection
+	err := util.TestRedisConnection(ctx, redisSpec.RedisHost, redisSpec.RedisPort, "", redisSpec.RedisIndex)
+	if err != nil {
+		con.Reason = err.Error()
+		con.Status = Error
+		return v1.StateWait
+	}
+
+	con.LastTransitionTime = metav1.Now()
+	con.Status = Ready
+	con.Reason = "Redis connection test passed"
 	return v1.StateSetup
 }
 
