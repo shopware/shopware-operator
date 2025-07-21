@@ -121,11 +121,15 @@ func (r *StoreReconciler) Reconcile(
 
 	result, reconcileErr := r.doReconcile(ctx, store)
 
-	if err := r.reconcileCRStatus(ctx, store, reconcileErr); err != nil {
-		log.Error(err, "failed to update status")
-	}
+	r.reconcileCRStatus(ctx, store, reconcileErr)
 
-	r.publishReconcileStatus(ctx, store)
+	if err := writeStoreStatus(ctx, r.Client, store); err != nil {
+		log.Error(err, "failed to update status")
+	} else {
+		if err := r.publishReconcileStatus(ctx, store); err != nil {
+			log.Info("failed to publish event after status update", "error", err)
+		}
+	}
 
 	// Log the error, but the result from reconcile() already has the correct RequeueAfter time.
 	// We return nil as error to not trigger exponential backoff.
@@ -251,15 +255,15 @@ func (r *StoreReconciler) doReconcile(
 	return requeue, nil
 }
 
-func (r *StoreReconciler) publishReconcileStatus(ctx context.Context, store *v1.Store) {
+func (r *StoreReconciler) publishReconcileStatus(ctx context.Context, store *v1.Store) error {
 	log := log.FromContext(ctx)
 
 	if store == nil {
-		return
+		return nil
 	}
 
 	if r.Publisher == nil {
-		return
+		return nil
 	}
 
 	payload := map[string]interface{}{
@@ -271,7 +275,10 @@ func (r *StoreReconciler) publishReconcileStatus(ctx context.Context, store *v1.
 
 	if err := r.Publisher.Publish(ctx, "ReconcileCRStatusFinished", payload); err != nil {
 		log.Error(err, "failed to publish event")
+		return err
 	}
+
+	return nil
 }
 
 // func (r *StoreReconciler) applyFinalizers(ctx context.Context, store *v1.Store) error {

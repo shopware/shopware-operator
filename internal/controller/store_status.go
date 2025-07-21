@@ -25,9 +25,9 @@ func (r *StoreReconciler) reconcileCRStatus(
 	ctx context.Context,
 	store *v1.Store,
 	reconcileError error,
-) error {
+) {
 	if store == nil || store.DeletionTimestamp != nil {
-		return nil
+		return
 	}
 
 	if reconcileError != nil {
@@ -100,12 +100,6 @@ func (r *StoreReconciler) reconcileCRStatus(
 			store.Status.CurrentImageTag = store.Spec.Container.Image
 		}
 	}
-
-	log.FromContext(ctx).Info("Update store status", "status", store.Status)
-	return writeStoreStatus(ctx, r.Client, types.NamespacedName{
-		Namespace: store.Namespace,
-		Name:      store.Name,
-	}, store.Status)
 }
 
 func printWarningForEnvs(ctx context.Context, store *v1.Store) {
@@ -455,16 +449,15 @@ func (r *StoreReconciler) stateReady(ctx context.Context, store *v1.Store) v1.St
 func writeStoreStatus(
 	ctx context.Context,
 	cl client.Client,
-	nn types.NamespacedName,
-	status v1.StoreStatus,
+	store *v1.Store,
 ) error {
 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		cr := &v1.Store{}
-		if err := cl.Get(ctx, nn, cr); err != nil {
+		if err := cl.Get(ctx, types.NamespacedName{Name: store.Name, Namespace: store.Namespace}, cr); err != nil {
 			return fmt.Errorf("write status: %w", err)
 		}
 
-		cr.Status = status
+		cr.Status = store.Status
 		return cl.Status().Update(ctx, cr)
 	})
 }
