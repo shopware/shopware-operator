@@ -33,6 +33,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/shopware/shopware-operator/internal/publisher"
 )
 
 // StoreReconciler reconciles a Store object
@@ -43,6 +45,7 @@ type StoreReconciler struct {
 	Scheme               *runtime.Scheme
 	Recorder             record.EventRecorder
 	DisableServiceChecks bool
+	Publisher            publisher.Publisher
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -103,109 +106,110 @@ func (r *StoreReconciler) findStoreForReconcile(
 func (r *StoreReconciler) Reconcile(
 	ctx context.Context,
 	req ctrl.Request,
-) (rr ctrl.Result, err error) {
+) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
-	rr = ctrl.Result{RequeueAfter: 5 * time.Second}
-
-	var store *v1.Store
-	defer func() {
-		if err := r.reconcileCRStatus(ctx, store, err); err != nil {
-			log.Error(err, "failed to update status")
-		}
-	}()
-
-	store, err = k8s.GetStore(ctx, r.Client, req.NamespacedName)
+	store, err := k8s.GetStore(ctx, r.Client, req.NamespacedName)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			return rr, nil
+			return ctrl.Result{}, nil
 		}
 		log.Error(err, "get CR")
-		return rr, nil
+		// When we cannot get the store, we cannot update the status, so we just requeue.
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
-	// We don't need yet finalizers
-	// if store.ObjectMeta.DeletionTimestamp != nil {
-	// 	return rr, r.applyFinalizers(ctx, store)
-	// }
+	result, reconcileErr := r.doReconcile(ctx, store)
 
-	if err := r.doReconcile(ctx, store); err != nil {
-		log.Error(err, "reconcile")
-		return rr, nil
+	r.reconcileCRStatus(ctx, store, reconcileErr)
+
+	if err := writeStoreStatus(ctx, r.Client, store); err != nil {
+		log.Error(err, "failed to update status")
+	} else {
+		if err := r.publishReconcileStatus(ctx, store); err != nil {
+			log.Info("failed to publish event after status update", "error", err)
+		}
 	}
 
-	log.Info("Reconcile finished")
-	rr.RequeueAfter = 15 * time.Second
-	return rr, nil
+	// Log the error, but the result from reconcile() already has the correct RequeueAfter time.
+	// We return nil as error to not trigger exponential backoff.
+	if reconcileErr != nil {
+		log.Error(reconcileErr, "reconcile failed")
+	}
+
+	return result, nil
 }
 
 func (r *StoreReconciler) doReconcile(
 	ctx context.Context,
 	store *v1.Store,
-) error {
+) (ctrl.Result, error) {
 	log := log.FromContext(ctx).
 		WithName(store.Name).
 		WithValues("state", store.Status.State)
 	log.Info("Do reconcile on store")
 
+	requeue := ctrl.Result{RequeueAfter: 15 * time.Second}
+	requeueWithError := ctrl.Result{RequeueAfter: 5 * time.Second}
+
 	log.Info("reconcile app secrets")
 	if err := r.ensureAppSecrets(ctx, store); err != nil {
-		return fmt.Errorf("app secrets: %w", err)
+		return requeueWithError, fmt.Errorf("app secrets: %w", err)
 	}
 
 	if store.IsState(v1.StateEmpty, v1.StateWait) {
 		log.Info("skip reconcile because s3/db not ready or state is empty")
-		return nil
+		return requeue, nil
 	}
 
 	log.Info("reconcile pdb")
 	if err := r.reconcilePDB(ctx, store); err != nil {
-		return fmt.Errorf("pdb: %w", err)
+		return requeueWithError, fmt.Errorf("pdb: %w", err)
 	}
 
 	// State Setup
 	if store.IsState(v1.StateSetup) {
 		if err := r.reconcileSetupJob(ctx, store); err != nil {
-			return fmt.Errorf("setup: %w", err)
+			return requeueWithError, fmt.Errorf("setup: %w", err)
 		}
 		log.Info("Wait for setup to finish")
-		return nil
+		return requeue, nil
 	}
 
 	// State Initializing
 	if store.IsState(v1.StateInitializing) {
 		log.Info("reconcile deployment")
 		if err := r.reconcileDeployment(ctx, store); err != nil {
-			return fmt.Errorf("deployment: %w", err)
+			return requeueWithError, fmt.Errorf("deployment: %w", err)
 		}
 		log.Info("Wait for deployment to finish")
-		return nil
+		return requeue, nil
 	}
 
 	// State Update
 	if store.IsState(v1.StateMigration) {
 		if err := r.reconcileMigrationJob(ctx, store); err != nil {
-			return fmt.Errorf("migration: %w", err)
+			return requeueWithError, fmt.Errorf("migration: %w", err)
 		}
 
 		store.Spec.ScheduledTask.Suspend = true
 		log.Info("Overwrite Suspend for ScheduledTask because of migration")
 		if err := r.reconcileScheduledTask(ctx, store); err != nil {
-			return fmt.Errorf("cronjob: %w", err)
+			return requeueWithError, fmt.Errorf("cronjob: %w", err)
 		}
 
 		log.Info("wait for migration to finish")
-		return nil
+		return requeue, nil
 	}
 
 	if store.IsState(v1.StateReady) {
 		if store.Status.CurrentImageTag != store.Spec.Container.Image {
 			log.Info("wait for migration to finish")
 			if err := r.reconcileMigrationJob(ctx, store); err != nil {
-				return fmt.Errorf("migration: %w", err)
+				return requeueWithError, fmt.Errorf("migration: %w", err)
 			}
 			log.Info("wait for migration to finish")
-			return nil
+			return requeue, nil
 		}
 	}
 
@@ -222,29 +226,56 @@ func (r *StoreReconciler) doReconcile(
 
 	log.Info("reconcile deployment")
 	if err := r.reconcileDeployment(ctx, store); err != nil {
-		return fmt.Errorf("deployment: %w", err)
+		return requeueWithError, fmt.Errorf("deployment: %w", err)
 	}
 
 	log.Info("reconcile services")
 	if err := r.reconcileServices(ctx, store); err != nil {
-		return fmt.Errorf("service: %w", err)
+		return requeueWithError, fmt.Errorf("service: %w", err)
 	}
 
 	if store.Spec.Network.EnabledIngress {
 		log.Info("reconcile ingress")
 		if err := r.reconcileIngress(ctx, store); err != nil {
-			return fmt.Errorf("service: %w", err)
+			return requeueWithError, fmt.Errorf("service: %w", err)
 		}
 	}
 
 	log.Info("reconcile CronJob scheduledTask")
 	if err := r.reconcileScheduledTask(ctx, store); err != nil {
-		return fmt.Errorf("cronjob: %w", err)
+		return requeueWithError, fmt.Errorf("cronjob: %w", err)
 	}
 
 	log.Info("reconcile horizontalPodAutoscaler")
 	if err := r.reconcileHoizontalPodAutoscaler(ctx, store); err != nil {
-		return fmt.Errorf("hpa: %w", err)
+		return requeueWithError, fmt.Errorf("hpa: %w", err)
+	}
+
+	log.Info("Reconcile finished")
+	return requeue, nil
+}
+
+func (r *StoreReconciler) publishReconcileStatus(ctx context.Context, store *v1.Store) error {
+	log := log.FromContext(ctx)
+
+	if store == nil {
+		return nil
+	}
+
+	if r.Publisher == nil {
+		return nil
+	}
+
+	payload := map[string]interface{}{
+		"name":       store.Name,
+		"namespace":  store.Namespace,
+		"state":      string(store.Status.State),
+		"conditions": store.Status.Conditions,
+	}
+
+	if err := r.Publisher.Publish(ctx, "ReconcileCRStatusFinished", payload); err != nil {
+		log.Error(err, "failed to publish event")
+		return err
 	}
 
 	return nil
