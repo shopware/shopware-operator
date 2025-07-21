@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -263,18 +262,14 @@ func (r *StoreReconciler) publishReconcileStatus(ctx context.Context, store *v1.
 		return
 	}
 
-	conditions, err := json.Marshal(store.Status.Conditions)
-	if err != nil {
-		log.Error(err, "failed to marshal conditions")
-		return
-	}
-
-	if err := r.Publisher.Publish(ctx, "ReconcileCRStatusFinished", map[string]string{
+	payload := map[string]interface{}{
 		"name":       store.Name,
 		"namespace":  store.Namespace,
 		"state":      string(store.Status.State),
-		"conditions": string(conditions),
-	}); err != nil {
+		"conditions": store.Status.Conditions,
+	}
+
+	if err := r.Publisher.Publish(ctx, "ReconcileCRStatusFinished", payload); err != nil {
 		log.Error(err, "failed to publish event")
 	}
 }

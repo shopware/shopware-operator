@@ -31,7 +31,7 @@ func NewNatsPublisher(url, subject, cluster string) (*NatsPublisher, error) {
 }
 
 // Publish sends a message to a NATS subject.
-func (p *NatsPublisher) Publish(ctx context.Context, name string, payload map[string]string) error {
+func (p *NatsPublisher) Publish(ctx context.Context, name string, payload interface{}) error {
 	if p.conn == nil {
 		return nil // Or return an error indicating not connected
 	}
