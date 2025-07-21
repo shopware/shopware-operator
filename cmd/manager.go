@@ -38,6 +38,7 @@ import (
 
 	shopv1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/controller"
+	"github.com/shopware/shopware-operator/internal/publisher"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -61,9 +62,16 @@ func main() {
 	var disableChecks bool
 	var probeAddr string
 	var namespace string
+	var natsURL string
+	var natsSubject string
+	var natsCluster string
+
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&namespace, "namespace", "default", "The namespace in which the operator is running in")
+	flag.StringVar(&natsURL, "nats-url", "", "The NATS URL to connect to")
+	flag.StringVar(&natsSubject, "nats-subject", "", "The NATS subject to publish to")
+	flag.StringVar(&natsCluster, "nats-cluster", "", "The cluster name")
 	flag.BoolVar(&debug, "debug", false, "Set's the logger to debug with more logging output")
 	flag.BoolVar(&logStructured, "log-structured", false, "Set's the logger to output with human logs")
 	flag.BoolVar(&disableChecks, "disable-checks", false,
@@ -138,13 +146,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	nsClient := client.NewNamespacedClient(mgr.GetClient(), namespace)
+	var pub publisher.Publisher
+	if natsURL != "" {
+		var err error
+		pub, err = publisher.NewNatsPublisher(natsURL, natsSubject, natsCluster)
+		if err != nil {
+			setupLog.Error(err, "unable to create nats publisher")
+			os.Exit(1)
+		}
+	}
 
+	nsClient := client.NewNamespacedClient(mgr.GetClient(), namespace)
 	if err = (&controller.StoreReconciler{
 		Client:               nsClient,
 		Scheme:               mgr.GetScheme(),
 		Recorder:             mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", namespace)),
 		DisableServiceChecks: disableChecks,
+		Publisher:            pub,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create store controller", "controller", "Store")
 		os.Exit(1)

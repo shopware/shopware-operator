@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -33,6 +34,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/shopware/shopware-operator/internal/publisher"
 )
 
 // StoreReconciler reconciles a Store object
@@ -43,6 +46,7 @@ type StoreReconciler struct {
 	Scheme               *runtime.Scheme
 	Recorder             record.EventRecorder
 	DisableServiceChecks bool
+	Publisher            publisher.Publisher
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -112,6 +116,29 @@ func (r *StoreReconciler) Reconcile(
 	defer func() {
 		if err := r.reconcileCRStatus(ctx, store, err); err != nil {
 			log.Error(err, "failed to update status")
+		}
+
+		if store == nil {
+			return
+		}
+
+		if r.Publisher == nil {
+			return
+		}
+
+		conditions, err := json.Marshal(store.Status.Conditions)
+		if err != nil {
+			log.Error(err, "failed to marshal conditions")
+			return
+		}
+
+		if err := r.Publisher.Publish(ctx, "ReconcileCRStatusFinished", map[string]string{
+			"name":       store.Name,
+			"namespace":  store.Namespace,
+			"state":      string(store.Status.State),
+			"conditions": string(conditions),
+		}); err != nil {
+			log.Error(err, "failed to publish event")
 		}
 	}()
 
