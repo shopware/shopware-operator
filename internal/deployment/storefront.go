@@ -55,6 +55,13 @@ func GetStorefrontDeploymentCondition(
 				Message:        "No deployment found",
 				Ready:          "0/0",
 			}
+		} else {
+			return v1.DeploymentCondition{
+				State:          v1.DeploymentStateError,
+				LastUpdateTime: metav1.Now(),
+				Message:        fmt.Errorf("Error on client get: %w", err).Error(),
+				Ready:          "0/0",
+			}
 		}
 	}
 	return getDeploymentCondition(search)
