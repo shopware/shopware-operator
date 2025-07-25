@@ -28,3 +28,4 @@ Dockerfile.cross
 *.swo
 *~
 dist/
+config/rbac/role.yaml
