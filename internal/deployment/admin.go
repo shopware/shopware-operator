@@ -57,8 +57,9 @@ func GetAdminDeploymentCondition(
 			return v1.DeploymentCondition{
 				State:          v1.DeploymentStateError,
 				LastUpdateTime: metav1.Now(),
-				Message:        fmt.Errorf("Error on client get: %w", err).Error(),
-				Ready:          "0/0",
+				//nolint:staticcheck
+				Message: fmt.Errorf("Error on client get: %w", err).Error(),
+				Ready:   "0/0",
 			}
 		}
 	}

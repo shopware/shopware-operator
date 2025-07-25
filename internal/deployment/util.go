@@ -23,7 +23,7 @@ func getDeploymentCondition(
 		}
 	}
 
-	if deployment.Status.UnavailableReplicas >= 0 {
+	if deployment.Status.UnavailableReplicas > 0 {
 		return v1.DeploymentCondition{
 			State:          v1.DeploymentStateError,
 			LastUpdateTime: metav1.Now(),
