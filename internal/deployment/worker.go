@@ -9,6 +9,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -29,6 +30,40 @@ func GetWorkerDeployment(
 		Name:      setup.Name,
 	}, search)
 	return search, err
+}
+
+func GetWorkerDeploymentCondition(
+	ctx context.Context,
+	store v1.Store,
+	client client.Client,
+) v1.DeploymentCondition {
+	deployment := WorkerDeployment(store)
+	search := &appsv1.Deployment{
+		ObjectMeta: deployment.ObjectMeta,
+	}
+	err := client.Get(ctx, types.NamespacedName{
+		Namespace: deployment.Namespace,
+		Name:      deployment.Name,
+	}, search)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return v1.DeploymentCondition{
+				State:          v1.DeploymentStateNotFound,
+				LastUpdateTime: metav1.Now(),
+				Message:        "No deployment found",
+				Ready:          "0/0",
+			}
+		} else {
+			return v1.DeploymentCondition{
+				State:          v1.DeploymentStateError,
+				LastUpdateTime: metav1.Now(),
+				//nolint:staticcheck
+				Message: fmt.Errorf("Error on client get: %w", err).Error(),
+				Ready:   "0/0",
+			}
+		}
+	}
+	return getDeploymentCondition(search)
 }
 
 func WorkerDeployment(store v1.Store) *appsv1.Deployment {

@@ -108,7 +108,14 @@ func (r *StoreReconciler) reconcileCRStatus(
 		}
 	}
 
+	store.Status.Message = store.Status.GetLastCondition().Message
+	store.Status.AdminState = deployment.GetAdminDeploymentCondition(ctx, *store, r.Client)
+	store.Status.WorkerState = deployment.GetWorkerDeploymentCondition(ctx, *store, r.Client)
+	store.Status.StorefrontState = deployment.GetStorefrontDeploymentCondition(ctx, *store, r.Client)
+
 	log.FromContext(ctx).Info("Update store status", "status", store.Status)
+	r.SendEvent(ctx, *store, "Update store status")
+
 	return writeStoreStatus(ctx, r.Client, types.NamespacedName{
 		Namespace: store.Namespace,
 		Name:      store.Name,
@@ -119,6 +126,7 @@ func printWarningForEnvs(ctx context.Context, store *v1.Store) {
 	l := log.FromContext(ctx)
 
 	envs := store.GetEnv()
+	// TODO: this check doesn't make sense, because the overwriten envs are in there
 	for _, obj2 := range store.Spec.Container.ExtraEnvs {
 		if slices.ContainsFunc(envs, func(c corev1.EnvVar) bool { return c.Name == obj2.Name }) {
 			l.Info("Overwriting env var. If you can, please use the crd to define it", "name", obj2.Name)

@@ -109,13 +109,21 @@ test-chart: install
 	helm install test shopware/shopware
 ##@ Build
 
-.PHONY: build
-build: manifests generate ## Build manager binary.
-	go build -o bin/manager cmd/manager.go
-
 .PHONY: run
 run: manifests generate zap-pretty ## Run a controller from your host.
-	go run ./cmd/manager.go --namespace ${NAMESPACE} --disable-checks --debug --log-structured 2>&1 | $(ZAP_PRETTY) --all
+	go run ./cmd/manager.go \
+		--namespace ${NAMESPACE} \
+		--enable-events \
+		--nats-address nats://localhost:4222 \
+		--disable-checks \
+		--debug \
+		--log-structured \
+		2>&1 | $(ZAP_PRETTY) --all
+
+.PHONY: debug
+debug: manifests generate zap-pretty ## Run a controller from your host.
+	go build -gcflags="all=-N -l" ./cmd/manager.go
+	dlv --log --listen=:40000 --headless=true --api-version=2 --accept-multiclient exec ./manager -- --namespace ${NAMESPACE} --enable-events --disable-checks --debug
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
@@ -171,16 +179,21 @@ install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
+.PHONY: build
+build: ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+	goreleaser release --snapshot --clean
+	# Doesn't overwrite the image
+	kind load docker-image --name helm-chart $(IMG_REPO):$(branch)-amd64
+
 .PHONY: deploy
 deploy: install manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	goreleaser release --snapshot --clean
+	kubectl config use-context kind-helm-chart
 	make helm path=temp version=0.0.0
 	@helm template shopware-operator temp \
 		--namespace shopware \
 		--set crds.install=false \
 		--set image.tag=$(branch)-amd64 \
 		--set image.pullPolicy=Always > temp/helm.yaml
-	kind load docker-image --name helm-chart $(IMG_REPO):$(branch)-amd64
 	kubectl apply -f temp/helm.yaml
 
 .PHONY: undeploy
