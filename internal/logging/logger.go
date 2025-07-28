@@ -73,7 +73,7 @@ func defaultTimeEncoder() zapcore.TimeEncoder {
 	}
 }
 
-// timeEncoder encodes the time as RFC3339 nano.
+// timeEncoderTS encodes the time as a Unix timestamp (seconds since the Unix epoch).
 func timeEncoderTS() zapcore.TimeEncoder {
 	return func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 		enc.AppendInt64(t.Unix())
