@@ -120,6 +120,10 @@ run: manifests generate zap-pretty ## Run a controller from your host.
 		--log-structured \
 		2>&1 | $(ZAP_PRETTY) --all
 
+.PHONY: run-debug
+run-debug: manifests generate zap-pretty ## Run a controller from your host.
+	dlv debug -l 127.0.0.1:38697 --headless ./cmd/manager.go
+
 .PHONY: debug
 debug: manifests generate zap-pretty ## Run a controller from your host.
 	go build -gcflags="all=-N -l" ./cmd/manager.go
