@@ -44,7 +44,7 @@ func NewLogger(level string, format string) *zap.SugaredLogger {
 		loggerCfg.EncoderConfig.StacktraceKey = "errorstack"
 		loggerCfg.EncoderConfig.FunctionKey = "logger.method_name"
 	default:
-		panic(fmt.Sprintf("invalid log format. possible values: json, text. %s given", format))
+		panic(fmt.Sprintf("invalid log format. possible values: json, text, zap-pretty. %s given", format))
 	}
 
 	zapLevel, err := zap.ParseAtomicLevel(strings.ToLower(level))
