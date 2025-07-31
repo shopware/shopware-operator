@@ -84,6 +84,7 @@ tolerations: []
 
 labels: {}
 podAnnotations: {}
+podLabels: {}
 
 # Supported levels: debug, info, warn, error, dpanic, panic, fatal
 logLevel: info

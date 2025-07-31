@@ -33,6 +33,9 @@ spec:
         {{- end }}
       labels:
         control-plane: shopware-operator
+        {{- with .Values.podLabels }}
+            {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       {{- if hasKey .Values "affinity" }}
       affinity:
