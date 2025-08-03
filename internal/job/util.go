@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/shopware/shopware-operator/internal/logging"
+	"go.uber.org/zap"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type JobState struct {
@@ -35,7 +36,7 @@ func IsJobContainerDone(
 		return JobState{}, fmt.Errorf("job to check is nil")
 	}
 
-	logger := log.FromContext(ctx).WithValues("job", job.Name)
+	logger := logging.FromContext(ctx).With(zap.String("job", job.Name))
 
 	var errorStates []JobState
 	for _, container := range job.Spec.Template.Spec.Containers {
@@ -68,8 +69,8 @@ func IsJobContainerDone(
 							}, nil
 						}
 						if c.State.Terminated.ExitCode != 0 {
-							logger.
-								Info("Job has not 0 as exit code, check job", "exitcode", c.State.Terminated.ExitCode)
+							logger.With(zap.Int32("exitcode", c.State.Terminated.ExitCode)).
+								Info("Job has not 0 as exit code, check job")
 							errorStates = append(errorStates, JobState{
 								ExitCode: int(c.State.Terminated.ExitCode),
 								Running:  false,
@@ -136,7 +137,7 @@ func deleteJobsByLabel(
 		return fmt.Errorf("get jobs: %w", err)
 	}
 
-	log.FromContext(ctx).WithValues("jobs", jobs.Items).Info("Delete jobs")
+	logging.FromContext(ctx).With(zap.Any("jobs", jobs.Items)).Info("Delete jobs")
 
 	for _, job := range jobs.Items {
 		err = c.Delete(ctx, &job, client.PropagationPolicy("Foreground"))

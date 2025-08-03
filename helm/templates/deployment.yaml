@@ -61,35 +61,39 @@ spec:
         {{- end }}
       containers:
       - args:
-        - --leader-elect
-        {{- if .Values.logStructured }}
-        - --log-structured
-        {{- end }}
-        {{- if .Values.debug }}
-        - --debug
-        {{- end }}
-        {{- if and (hasKey .Values "events") (.Values.events.enable) }}
-        - --enable-events
-        - -nats-address
-        - {{ .Values.events.nats.address }}
-        {{- if hasKey .Values.events.nats "credentialsRef" }}
-        - -nats-credentials 
-        - /secrets/{{ .Values.events.nats.credentialsRef.key }}
-        {{- end }}
-        {{- if hasKey .Values.events.nats "nkeyRef" }}
-        - -nats-nkey
-        - /secrets/{{ .Values.events.nats.nkeyRef.key }}
-        {{- end }}
-        - -nats-topic 
-        - {{ .Values.events.nats.topic }}
-        {{- end }}
         command:
         - /manager
         env:
+        - name: LEADER_ELECT
+          value: "true"
         - name: NAMESPACE
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        - name: LOG_LEVEL
+          value: "{{ .Values.logLevel | default "info" }}"
+        - name: LOG_FORMAT
+          value: "{{ .Values.logFormat | default "json" }}"
+        - name: DISABLE_CHECKS
+          value: "{{ .Values.disableChecks | default "false" }}"
+        {{- if and (hasKey .Values "events") (hasKey .Values.events "nats") (.Values.events.nats.enable) }}
+        - name: NATS_ENABLE
+          value: "true"
+        - name: NATS_ADDRESS
+          value: "{{ required "if nats is enabled set the address" .Values.events.nats.address }}"
+        {{- if hasKey .Values.events.nats "topic" }}
+        - name: NATS_TOPIC
+          value: "{{ .Values.events.nats.topic | default "shopware-events" }}"
+        {{- end }}
+        {{- if hasKey .Values.events.nats "credentialsRef" }}
+        - name: NATS_CREDENTIALS_FILE
+          value: "/secrets/{{ .Values.events.nats.credentialsRef.key }}"
+        {{- end }}
+        {{- if hasKey .Values.events.nats "nkeyRef" }}
+        - name: NATS_NKEY_FILE
+          value: "/secrets/{{ .Values.events.nats.nkeyRef.key }}"
+        {{- end }}
+        {{- end }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: "{{ .Values.image.pullPolicy }}"
         livenessProbe:
@@ -115,11 +119,11 @@ spec:
             drop:
             - ALL
         volumeMounts:
-          {{- if and (hasKey .Values "events") (.Values.events.enable) (hasKey .Values.events.nats "nkeyRef") }}
+          {{- if and (hasKey .Values "events") (hasKey .Values.events "nats") (.Values.events.nats.enable) (hasKey .Values.events.nats "nkeyRef") }}
           - mountPath: /secrets
             name: nkey
           {{- end }}
-          {{- if and (hasKey .Values "events") (.Values.events.enable) (hasKey .Values.events.nats "credentialsRef") }}
+          {{- if and (hasKey .Values "events") (hasKey .Values.events "nats") (.Values.events.nats.enable) (hasKey .Values.events.nats "credentialsRef") }}
           - mountPath: /secrets
             name: credentials
           {{- end }}
@@ -130,12 +134,12 @@ spec:
       serviceAccountName: '{{ .Release.Name }}-shopware-operator'
       terminationGracePeriodSeconds: 10
       volumes:
-        {{- if and (hasKey .Values "events") (.Values.events.enable) (hasKey .Values.events.nats "nkeyRef") }}
+        {{- if and (hasKey .Values "events") (hasKey .Values.events "nats") (.Values.events.nats.enable) (hasKey .Values.events.nats "nkeyRef") }}
         - name: nkey
           secret:
             secretName: {{ .Values.events.nats.nkeyRef.name }}
         {{- end }}
-        {{- if and (hasKey .Values "events") (.Values.events.enable) (hasKey .Values.events.nats "credentialsRef") }}
+        {{- if and (hasKey .Values "events") (hasKey .Values.events "nats") (.Values.events.nats.enable) (hasKey .Values.events.nats "credentialsRef") }}
         - name: credentials
           secret:
             secretName: {{ .Values.events.nats.credentialsRef.name }}

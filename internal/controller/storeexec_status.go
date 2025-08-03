@@ -7,12 +7,12 @@ import (
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/job"
+	"github.com/shopware/shopware-operator/internal/logging"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	k8sretry "k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
@@ -65,7 +65,7 @@ func (r *StoreExecReconciler) reconcileCRStatus(
 		ex.Status.State = r.stateRunning(ctx, store, ex)
 	}
 
-	log.FromContext(ctx).Info("Update exec status", "status", ex.Status)
+	logging.FromContext(ctx).Info("Update exec status", "status", ex.Status)
 	return writeExecStatus(ctx, r.Client, types.NamespacedName{
 		Namespace: ex.Namespace,
 		Name:      ex.Name,

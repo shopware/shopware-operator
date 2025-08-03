@@ -11,14 +11,15 @@ import (
 	"github.com/shopware/shopware-operator/internal/deployment"
 	"github.com/shopware/shopware-operator/internal/job"
 	"github.com/shopware/shopware-operator/internal/k8s"
+	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/util"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	k8sretry "k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func (r *StoreReconciler) reconcileCRStatus(
@@ -97,7 +98,7 @@ func (r *StoreReconciler) reconcileCRStatus(
 	if store.IsState(v1.StateMigration) {
 		store.Status.State = r.stateMigration(ctx, store)
 		if store.IsState(v1.StateInitializing) {
-			log.FromContext(ctx).Info("Update current image tag")
+			logging.FromContext(ctx).Info("Update current image tag")
 			r.Recorder.Event(store, "Normal", "Finish Migration",
 				fmt.Sprintf("Migration in Store %s/%s finished. From tag %s to %s ",
 					store.Namespace,
@@ -113,7 +114,7 @@ func (r *StoreReconciler) reconcileCRStatus(
 	store.Status.WorkerState = deployment.GetWorkerDeploymentCondition(ctx, *store, r.Client)
 	store.Status.StorefrontState = deployment.GetStorefrontDeploymentCondition(ctx, *store, r.Client)
 
-	log.FromContext(ctx).Info("Update store status", "status", store.Status)
+	logging.FromContext(ctx).Info("Update store status", "status", store.Status)
 	r.SendEvent(ctx, *store, "Update store status")
 
 	return writeStoreStatus(ctx, r.Client, types.NamespacedName{
@@ -123,7 +124,7 @@ func (r *StoreReconciler) reconcileCRStatus(
 }
 
 func printWarningForEnvs(ctx context.Context, store *v1.Store) {
-	l := log.FromContext(ctx)
+	l := logging.FromContext(ctx)
 
 	envs := store.GetEnv()
 	// TODO: this check doesn't make sense, because the overwriten envs are in there
@@ -373,7 +374,7 @@ func (r *StoreReconciler) stateMigration(ctx context.Context, store *v1.Store) v
 	migration, err := job.GetMigrationJob(ctx, r.Client, *store)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			log.FromContext(ctx).Info("Migration job is not found")
+			logging.FromContext(ctx).Info("Migration job is not found")
 			return v1.StateMigration
 		}
 		con.Reason = err.Error()
@@ -383,7 +384,7 @@ func (r *StoreReconciler) stateMigration(ctx context.Context, store *v1.Store) v
 
 	// Controller is to fast so we need to check the migration job
 	if migration == nil {
-		log.FromContext(ctx).Info("Migration is nil")
+		logging.FromContext(ctx).Info("Migration is nil")
 		return v1.StateMigration
 	}
 
@@ -491,8 +492,8 @@ func (r *StoreReconciler) stateReady(ctx context.Context, store *v1.Store) v1.St
 	if currentImage == store.Spec.Container.Image {
 		return v1.StateReady
 	} else {
-		log.FromContext(ctx).
-			WithValues("currentImage", currentImage, "containerImage", store.Spec.Container.Image).
+		logging.FromContext(ctx).
+			With(zap.String("currentImage", currentImage), zap.String("containerImage", store.Spec.Container.Image)).
 			Info("Change to state migration")
 		return v1.StateMigration
 	}
