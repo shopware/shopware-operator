@@ -100,6 +100,7 @@ func SetupJob(store v1.Store) *batchv1.Job {
 					RestartPolicy:                 "Never",
 					Containers:                    containers,
 					SecurityContext:               store.Spec.Container.SecurityContext,
+					InitContainers:                store.Spec.Container.InitContainers,
 				},
 			},
 		},

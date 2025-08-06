@@ -108,7 +108,8 @@ jobs:
           helm lint test
           kubectl create namespace test
 
-          helm install test --namespace test test --set image.tag="$version"
+          helm template test --namespace test test --set image.tag="$version" > rendered.yaml
+          kubectl apply --server-side -f rendered.yaml --namespace test
           kubectl wait --namespace test --for=condition=Available --timeout=20s deployment/test-shopware-operator
 
           kubectl get deployment --namespace test -o wide

@@ -215,6 +215,7 @@ type ContainerSpec struct {
 	RestartPolicy    corev1.RestartPolicy          `json:"restartPolicy,omitempty"`
 	SecurityContext  *corev1.PodSecurityContext    `json:"podSecurityContext,omitempty"`
 	ExtraContainers  []corev1.Container            `json:"extraContainers,omitempty"`
+	InitContainers   []corev1.Container            `json:"initContainers,omitempty"`
 
 	// +kubebuilder:default=2
 	Replicas int32 `json:"replicas,omitempty"`
@@ -259,6 +260,7 @@ type ContainerMergeSpec struct {
 	RestartPolicy                 corev1.RestartPolicy          `json:"restartPolicy,omitempty"`
 	SecurityContext               *corev1.PodSecurityContext    `json:"podSecurityContext,omitempty"`
 	ExtraContainers               []corev1.Container            `json:"extraContainers,omitempty"`
+	InitContainers                []corev1.Container            `json:"initContainers,omitempty"`
 	Replicas                      int32                         `json:"replicas,omitempty"`
 	ProgressDeadlineSeconds       int32                         `json:"progressDeadlineSeconds,omitempty"`
 	TerminationGracePeriodSeconds int64                         `json:"terminationGracePeriodSeconds,omitempty"`
@@ -398,6 +400,7 @@ func (s *Store) GetSecretName() string {
 	return s.Spec.SecretName
 }
 
+//nolint:gocyclo
 func (c *ContainerSpec) Merge(from ContainerMergeSpec) {
 	if from.Image != "" {
 		c.Image = from.Image
@@ -458,6 +461,9 @@ func (c *ContainerSpec) Merge(from ContainerMergeSpec) {
 
 	if from.ExtraContainers != nil {
 		c.ExtraContainers = from.ExtraContainers
+	}
+	if from.InitContainers != nil {
+		c.InitContainers = from.InitContainers
 	}
 	if from.NodeSelector != nil {
 		c.NodeSelector = from.NodeSelector
