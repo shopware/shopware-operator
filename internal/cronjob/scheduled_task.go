@@ -103,6 +103,7 @@ func ScheduledTaskJob(store v1.Store) *batchv1.CronJob {
 							Containers:                    containers,
 							SecurityContext:               store.Spec.Container.SecurityContext,
 							ServiceAccountName:            sa,
+							InitContainers:                store.Spec.Container.InitContainers,
 						},
 					},
 				},

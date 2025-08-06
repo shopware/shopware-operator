@@ -143,6 +143,7 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 					RestartPolicy:             store.Spec.Container.RestartPolicy,
 					Containers:                containers,
 					SecurityContext:           store.Spec.Container.SecurityContext,
+					InitContainers:            store.Spec.Container.InitContainers,
 				},
 			},
 		},
