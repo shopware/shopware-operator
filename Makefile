@@ -111,13 +111,7 @@ test-chart: install
 
 .PHONY: run
 run: manifests generate zap-pretty ## Run a controller from your host.
-	go run ./cmd/manager.go \
-		--namespace ${NAMESPACE} \
-		--enable-events \
-		--nats-address nats://localhost:4222 \
-		--disable-checks \
-		--debug \
-		--log-structured \
+	LEADER_ELECT=false DISABLE_CHECKS=true LOG_LEVEL=debug LOG_FORMAT=zap-pretty go run ./cmd/manager.go \
 		2>&1 | $(ZAP_PRETTY) --all
 
 .PHONY: run-debug
