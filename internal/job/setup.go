@@ -32,9 +32,8 @@ func SetupJob(store v1.Store) *batchv1.Job {
 	// Merge Overwritten jobContainer fields into container fields
 	store.Spec.Container.Merge(store.Spec.SetupJobContainer)
 
-	parallelism := int32(1)
-	completions := int32(1)
 	sharedProcessNamespace := true
+	backoffLimit := int32(3)
 
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.MigrationJobContainer.Labels)
 	labels["shop.shopware.com/store.type"] = "setup"
@@ -83,8 +82,7 @@ func SetupJob(store v1.Store) *batchv1.Job {
 			Annotations: annotations,
 		},
 		Spec: batchv1.JobSpec{
-			Parallelism: &parallelism,
-			Completions: &completions,
+			BackoffLimit: &backoffLimit,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
