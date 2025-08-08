@@ -68,7 +68,7 @@ func (r *StoreReconciler) reconcileCRStatus(
 		}
 	}
 
-	if store.IsState(v1.StateSetup) {
+	if store.IsState(v1.StateSetup, v1.StateSetupError) {
 		store.Status.State = r.stateSetup(ctx, store)
 	}
 
@@ -88,7 +88,7 @@ func (r *StoreReconciler) reconcileCRStatus(
 		store.Status.State = r.stateReady(ctx, store)
 	}
 
-	if store.IsState(v1.StateMigration) {
+	if store.IsState(v1.StateMigration, v1.StateMigrationError) {
 		store.Status.State = r.stateMigration(ctx, store)
 		if store.IsState(v1.StateInitializing) {
 			logging.FromContext(ctx).Info("Update current image tag")
@@ -301,7 +301,7 @@ func (r *StoreReconciler) stateSetup(ctx context.Context, store *v1.Store) v1.St
 		con.Reason = fmt.Sprintf("Exit code: %d", jobState.ExitCode)
 		con.Status = Error
 		con.LastTransitionTime = metav1.Now()
-		return v1.StateSetup
+		return v1.StateSetupError
 	}
 
 	if jobState.IsDone() && !jobState.HasErrors() {
@@ -362,7 +362,7 @@ func (r *StoreReconciler) stateMigration(ctx context.Context, store *v1.Store) v
 		con.Reason = fmt.Sprintf("Exit code: %d", jobState.ExitCode)
 		con.Status = Error
 		con.LastTransitionTime = metav1.Now()
-		return v1.StateMigration
+		return v1.StateMigrationError
 	}
 
 	if jobState.IsDone() && !jobState.HasErrors() {

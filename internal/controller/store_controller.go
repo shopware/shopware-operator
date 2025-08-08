@@ -185,8 +185,19 @@ func (r *StoreReconciler) doReconcile(
 		return fmt.Errorf("pdb: %w", err)
 	}
 
+	if store.Spec.Network.EnabledIngress {
+		log.Info("reconcile ingress")
+		if err := r.reconcileIngress(ctx, store); err != nil {
+			return fmt.Errorf("ingress: %w", err)
+		}
+	}
+
 	// State Setup
-	if store.IsState(v1.StateSetup) {
+	if store.IsState(v1.StateSetup, v1.StateSetupError) {
+		if store.IsState(v1.StateSetupError) {
+			log.Warn("Setup job has errors check setup logs. Waiting for new Image")
+		}
+
 		if err := r.reconcileSetupJob(ctx, store); err != nil {
 			return fmt.Errorf("setup: %w", err)
 		}
@@ -205,7 +216,10 @@ func (r *StoreReconciler) doReconcile(
 	}
 
 	// State Update
-	if store.IsState(v1.StateMigration) {
+	if store.IsState(v1.StateMigration, v1.StateMigrationError) {
+		if store.IsState(v1.StateMigrationError) {
+			log.Warn("Migration job has errors check migration logs. Waiting for new Image")
+		}
 		if err := r.reconcileMigrationJob(ctx, store); err != nil {
 			return fmt.Errorf("migration: %w", err)
 		}
@@ -250,13 +264,6 @@ func (r *StoreReconciler) doReconcile(
 	log.Info("reconcile services")
 	if err := r.reconcileServices(ctx, store); err != nil {
 		return fmt.Errorf("service: %w", err)
-	}
-
-	if store.Spec.Network.EnabledIngress {
-		log.Info("reconcile ingress")
-		if err := r.reconcileIngress(ctx, store); err != nil {
-			return fmt.Errorf("service: %w", err)
-		}
 	}
 
 	log.Info("reconcile CronJob scheduledTask")
