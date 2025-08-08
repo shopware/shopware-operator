@@ -188,7 +188,7 @@ func (r *StoreReconciler) doReconcile(
 	if store.Spec.Network.EnabledIngress {
 		log.Info("reconcile ingress")
 		if err := r.reconcileIngress(ctx, store); err != nil {
-			return fmt.Errorf("service: %w", err)
+			return fmt.Errorf("ingress: %w", err)
 		}
 	}
 
