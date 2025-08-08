@@ -63,7 +63,7 @@ type StoreSpec struct {
 	// Use ServiceAccountName in container spec
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
-	// +kubebuilder:default={currency: "EUR", locale: "en-GB"}
+	// +kubebuilder:default={currency: "EUR", locale: "en-GB", usageDataConsent: "allowed"}
 	ShopConfiguration Configuration `json:"shopConfiguration,omitempty"`
 
 	// +kubebuilder:default=false
@@ -110,6 +110,9 @@ func init() {
 type Configuration struct {
 	Currency string `json:"currency"`
 	Locale   string `json:"locale"`
+
+	// +kubebuilder:validation:Enum=revoked;allowed
+	UsageDataConsent string `json:"usageDataConsent"`
 }
 
 type Credentials struct {
