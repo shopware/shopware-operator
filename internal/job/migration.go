@@ -111,7 +111,7 @@ func MigrateJobName(store v1.Store) string {
 }
 
 func GetMigrateHash(store v1.Store) string {
-	data := []byte(fmt.Sprintf("%s|%s", store.Status.CurrentImageTag, store.Spec.Container.Image))
+	data := []byte(store.Status.CurrentImageTag)
 	return fmt.Sprintf("%x", md5.Sum(data))
 }
 
