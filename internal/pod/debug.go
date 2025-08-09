@@ -65,6 +65,7 @@ func DebugPod(store v1.Store, storeDebugInstance v1.StoreDebugInstance) *corev1.
 	podSpec.Spec.NodeSelector = store.Spec.Container.NodeSelector
 	podSpec.Spec.ImagePullSecrets = store.Spec.Container.ImagePullSecrets
 	podSpec.Spec.SecurityContext = store.Spec.Container.SecurityContext
+	podSpec.Spec.InitContainers = store.Spec.Container.InitContainers
 
 	if store.Spec.ServiceAccountName != "" {
 		podSpec.Spec.ServiceAccountName = store.Spec.ServiceAccountName

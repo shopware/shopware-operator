@@ -387,6 +387,13 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 		},
 	}
 
+	if s.Spec.ShopConfiguration.UsageDataConsent == "revoked" {
+		c = append(c, corev1.EnvVar{
+			Name:  "SHOPWARE_USAGE_DATA_CONSENT",
+			Value: "revoked",
+		})
+	}
+
 	c = append(c, s.getSessionCache()...)
 	c = append(c, s.getAppCache()...)
 	c = append(c, s.getOtel()...)
