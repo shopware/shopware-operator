@@ -14,12 +14,14 @@ type (
 )
 
 const (
-	StateEmpty        StatefulAppState = ""
-	StateWait         StatefulAppState = "waiting"
-	StateSetup        StatefulAppState = "setup"
-	StateInitializing StatefulAppState = "initializing"
-	StateMigration    StatefulAppState = "migrating"
-	StateReady        StatefulAppState = "ready"
+	StateEmpty          StatefulAppState = ""
+	StateWait           StatefulAppState = "waiting"
+	StateSetup          StatefulAppState = "setup"
+	StateSetupError     StatefulAppState = "setup_error"
+	StateInitializing   StatefulAppState = "initializing"
+	StateMigration      StatefulAppState = "migrating"
+	StateMigrationError StatefulAppState = "migrating_error"
+	StateReady          StatefulAppState = "ready"
 )
 
 const (
