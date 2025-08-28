@@ -41,6 +41,7 @@ func MigrationJob(store v1.Store) *batchv1.Job {
 
 	backoffLimit := int32(3)
 	sharedProcessNamespace := true
+	ttlSecondsAfterFinished := int32(86400) // Hardedcoded to 1 day for now
 
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.MigrationJobContainer.Labels)
 	labels["shop.shopware.com/store.hash"] = GetMigrateHash(store)
@@ -72,7 +73,8 @@ func MigrationJob(store v1.Store) *batchv1.Job {
 			Annotations: annotations,
 		},
 		Spec: batchv1.JobSpec{
-			BackoffLimit: &backoffLimit,
+			BackoffLimit:            &backoffLimit,
+			TTLSecondsAfterFinished: &ttlSecondsAfterFinished,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
