@@ -34,6 +34,7 @@ func SetupJob(store v1.Store) *batchv1.Job {
 
 	sharedProcessNamespace := true
 	backoffLimit := int32(3)
+	ttlSecondsAfterFinished := int32(86400) // Hardcoded to 1 day for now
 
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.MigrationJobContainer.Labels)
 	labels["shop.shopware.com/store.type"] = "setup"
@@ -82,7 +83,8 @@ func SetupJob(store v1.Store) *batchv1.Job {
 			Annotations: annotations,
 		},
 		Spec: batchv1.JobSpec{
-			BackoffLimit: &backoffLimit,
+			BackoffLimit:            &backoffLimit,
+			TTLSecondsAfterFinished: &ttlSecondsAfterFinished,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
