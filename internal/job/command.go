@@ -120,8 +120,6 @@ func getJobSpec(store v1.Store, ex v1.StoreExec, labels map[string]string) batch
 
 	envs := util.MergeEnv(store.GetEnv(), ex.Spec.ExtraEnvs)
 
-	ttlSecondsAfterFinished := int32(86400) // Hardcoded to 1 day for now
-
 	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
 		Name:            CONTAINER_NAME_COMMAND,
 		VolumeMounts:    store.Spec.Container.VolumeMounts,
