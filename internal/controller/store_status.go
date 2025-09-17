@@ -300,6 +300,7 @@ func (r *StoreReconciler) stateSetup(ctx context.Context, store *v1.Store) v1.St
 		con.Message = "Setup is Done but has Errors. Check logs for more details"
 		con.Reason = fmt.Sprintf("Exit code: %d", jobState.ExitCode)
 		con.Status = Error
+		con.Type = v1.StateSetupError
 		con.LastTransitionTime = metav1.Now()
 		return v1.StateSetupError
 	}
@@ -361,6 +362,7 @@ func (r *StoreReconciler) stateMigration(ctx context.Context, store *v1.Store) v
 		con.Message = "Migration is Done but has Errors. Check logs for more details"
 		con.Reason = fmt.Sprintf("Exit code: %d", jobState.ExitCode)
 		con.Status = Error
+		con.Type = v1.StateMigrationError
 		con.LastTransitionTime = metav1.Now()
 		return v1.StateMigrationError
 	}
