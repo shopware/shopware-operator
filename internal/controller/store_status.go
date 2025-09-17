@@ -196,7 +196,7 @@ func (r *StoreReconciler) checkS3Services(
 		LastUpdateTime:     metav1.Now(),
 		Message:            "Waiting for s3 connection",
 		Reason:             "",
-		Status:             "True",
+		Status:             "",
 	}
 	defer func() {
 		store.Status.AddCondition(con)
@@ -268,7 +268,7 @@ func (r *StoreReconciler) stateSetup(ctx context.Context, store *v1.Store) v1.St
 		LastUpdateTime:     metav1.Now(),
 		Message:            "Waiting for setup job to finish",
 		Reason:             "",
-		Status:             "True",
+		Status:             "",
 	}
 	defer func() {
 		store.Status.AddCondition(con)
@@ -327,7 +327,7 @@ func (r *StoreReconciler) stateMigration(ctx context.Context, store *v1.Store) v
 		LastUpdateTime:     metav1.Now(),
 		Message:            "Waiting for migration job to finish",
 		Reason:             "",
-		Status:             "True",
+		Status:             "",
 	}
 	defer func() {
 		store.Status.AddCondition(con)
@@ -391,7 +391,7 @@ func (r *StoreReconciler) stateInitializing(
 		LastUpdateTime:     metav1.Now(),
 		Message:            "Waiting for ingress to finish",
 		Reason:             "",
-		Status:             "True",
+		Status:             "",
 	}
 	defer func() {
 		store.Status.AddCondition(con)
@@ -435,7 +435,7 @@ func (r *StoreReconciler) stateReady(ctx context.Context, store *v1.Store) v1.St
 		LastUpdateTime:     metav1.Now(),
 		Message:            "Store is running waiting for image updates to migrate",
 		Reason:             "",
-		Status:             "True",
+		Status:             "",
 	}
 	defer func() {
 		store.Status.AddCondition(con)
@@ -452,11 +452,16 @@ func (r *StoreReconciler) stateReady(ctx context.Context, store *v1.Store) v1.St
 	}
 
 	if currentImage == store.Spec.Container.Image {
+		con.Status = Ready
 		return v1.StateReady
 	} else {
 		logging.FromContext(ctx).
 			With(zap.String("currentImage", currentImage), zap.String("containerImage", store.Spec.Container.Image)).
 			Info("Change to state migration")
+
+		con.Reason = "Detected image change, switch to migration"
+		con.Status = Ready
+		con.LastTransitionTime = metav1.Now()
 		return v1.StateMigration
 	}
 }
