@@ -144,36 +144,14 @@ func (r *StoreReconciler) checkDatabaseServices(
 		store.Status.AddCondition(con)
 	}()
 
-	secret, err := k8s.GetSecret(ctx, r.Client, types.NamespacedName{
-		Namespace: store.Namespace,
-		Name:      store.Spec.Database.PasswordSecretRef.Name,
-	})
+	dbSpec, err := util.GetDBSpec(ctx, *store, r.Client)
 	if err != nil {
 		con.Reason = err.Error()
 		con.Status = Error
 		return v1.StateWait
 	}
 
-	var password []byte
-	var ok bool
-	if password, ok = secret.Data[store.Spec.Database.PasswordSecretRef.Key]; !ok {
-		con.Reason = fmt.Sprintf(
-			"PasswordSecretRef doesn't contain the specified key '%s' in the secret '%s'",
-			store.Spec.Database.PasswordSecretRef.Key,
-			store.Spec.Database.PasswordSecretRef.Name,
-		)
-		con.Status = Error
-		return v1.StateWait
-	}
-
-	dbHost, err := util.GetDBHost(ctx, *store, r.Client)
-	if err != nil {
-		con.Reason = err.Error()
-		con.Status = Error
-		return v1.StateWait
-	}
-
-	err = util.TestSQLConnection(ctx, &store.Spec.Database, dbHost, password)
+	err = util.TestSQLConnection(ctx, dbSpec)
 	if err != nil {
 		con.Reason = err.Error()
 		con.Status = Error

@@ -60,7 +60,7 @@ func init() {
 
 func main() {
 	// Load configuration and set up flags
-	cfg, err := config.Load(context.Background())
+	cfg, err := config.LoadStoreConfig(context.Background())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
 		os.Exit(1)

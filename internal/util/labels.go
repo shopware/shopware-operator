@@ -6,6 +6,7 @@ import (
 	"time"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func GetDefaultStoreLabels(store v1.Store) map[string]string {
@@ -33,6 +34,16 @@ func GetDefaultStoreExecLabels(store v1.Store, ex v1.StoreExec) map[string]strin
 	}
 	labels["shop.shopware.com/store.name"] = store.Name
 	labels["shop.shopware.com/storeexec.name"] = ex.Name
+	return labels
+}
+
+func GetDefaultStoreSnapshotLabels(store v1.Store, meta metav1.ObjectMeta) map[string]string {
+	labels := make(map[string]string)
+	if store.Spec.Container.Labels != nil {
+		maps.Copy(labels, store.Spec.Container.Labels)
+	}
+	labels["shop.shopware.com/store.name"] = store.Name
+	labels["shop.shopware.com/storesnapshot.name"] = meta.Name
 	return labels
 }
 

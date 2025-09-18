@@ -2,10 +2,11 @@
 # since it depends on service name and namespace that are out of this kustomize package.
 # It should be run by config/default
 resources:
-- bases/shop.shopware.com_stores.yaml
-- bases/shop.shopware.com_storeexecs.yaml
-- bases/shop.shopware.com_storesnapshots.yaml
-- bases/shop.shopware.com_storedebuginstances.yaml
+  - bases/shop.shopware.com_stores.yaml
+  - bases/shop.shopware.com_storeexecs.yaml
+  - bases/shop.shopware.com_storedebuginstances.yaml
+  - bases/shop.shopware.com_storesnapshotcreates.yaml
+  - bases/shop.shopware.com_storesnapshotrestores.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 #patches:
