@@ -28,3 +28,13 @@ func GetDefaultContainerExecAnnotations(defaultContainer string, ex v1.StoreExec
 	annotations["kubectl.kubernetes.io/default-logs-container"] = defaultContainer
 	return annotations
 }
+
+func GetDefaultContainerSnapshotAnnotations(defaultContainer string, sn v1.StoreSnapshotSpec) map[string]string {
+	annotations := make(map[string]string)
+	if sn.Container.Annotations != nil {
+		annotations = sn.Container.Annotations
+	}
+	annotations["kubectl.kubernetes.io/default-container"] = defaultContainer
+	annotations["kubectl.kubernetes.io/default-logs-container"] = defaultContainer
+	return annotations
+}

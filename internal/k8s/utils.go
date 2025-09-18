@@ -102,12 +102,25 @@ func GetStoreExec(
 	return cr, nil
 }
 
-func GetStoreSnapshot(
+func GetStoreSnapshotCreate(
 	ctx context.Context,
 	cl client.Client,
 	nn types.NamespacedName,
-) (*v1.StoreSnapshot, error) {
-	cr := new(v1.StoreSnapshot)
+) (*v1.StoreSnapshotCreate, error) {
+	cr := new(v1.StoreSnapshotCreate)
+	if err := cl.Get(ctx, nn, cr); err != nil {
+		return nil, errors.Wrapf(err, "get %v", nn.String())
+	}
+
+	return cr, nil
+}
+
+func GetStoreSnapshotRestore(
+	ctx context.Context,
+	cl client.Client,
+	nn types.NamespacedName,
+) (*v1.StoreSnapshotRestore, error) {
+	cr := new(v1.StoreSnapshotRestore)
 	if err := cl.Get(ctx, nn, cr); err != nil {
 		return nil, errors.Wrapf(err, "get %v", nn.String())
 	}

@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"net/url"
 	"time"
 
 	"github.com/pkg/errors"
@@ -25,7 +26,7 @@ const (
 	rsaKeySize = 2024
 )
 
-func GenerateStoreSecret(ctx context.Context, store *v1.Store, secret *corev1.Secret, dbHost string, dbp []byte, esp []byte) error {
+func GenerateStoreSecret(ctx context.Context, store *v1.Store, secret *corev1.Secret, dbSpec *util.DatabaseSpec, esp []byte) error {
 	if secret.Data == nil {
 		secret.Data = make(map[string][]byte)
 	}
@@ -59,8 +60,13 @@ func GenerateStoreSecret(ctx context.Context, store *v1.Store, secret *corev1.Se
 		secret.Data["jwt-public-key"] = []byte(base64.StdEncoding.EncodeToString(publicKey))
 	}
 
-	secret.Data["database-url"] = util.GenerateDatabaseURLForShopware(&store.Spec.Database, dbHost, dbp)
-	secret.Data["opensearch-url"] = util.GenerateOpensearchURLForShopware(&store.Spec.OpensearchSpec, dbp)
+	// Used for snapshot controller
+	secret.Data["database-password"] = []byte(url.QueryEscape(string(dbSpec.Password)))
+	secret.Data["database-user"] = []byte(dbSpec.User)
+	secret.Data["database-host"] = []byte(dbSpec.Host)
+
+	secret.Data["database-url"] = util.GenerateDatabaseURLForShopware(dbSpec)
+	secret.Data["opensearch-url"] = util.GenerateOpensearchURLForShopware(&store.Spec.OpensearchSpec, dbSpec.Password)
 
 	return nil
 }
