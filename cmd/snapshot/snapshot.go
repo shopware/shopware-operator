@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -133,6 +134,17 @@ func main() {
 					}
 					//nolint: errcheck
 					defer os.RemoveAll(snapshotTempDir)
+
+					var tempMeta any
+					json.Unmarshal([]byte(cfg.MetaStoreJson), &tempMeta)
+					b, err := json.MarshalIndent(tempMeta, "", "  ")
+					if err != nil {
+						logger.Warnw("MetaStoreJson parsing failed, skip metadata creation", zap.Error(err))
+					}
+					err = os.WriteFile(fmt.Sprintf("%s/metadata.json", snapshotTempDir), b, 0644)
+					if err != nil {
+						logger.Warnw("Write metadata.json failed, skip metadata creation", zap.Error(err))
+					}
 
 					snapshotService := snapshot.NewSnapshotService(cfg)
 					logger.Infow("Starting snapshot restore process",

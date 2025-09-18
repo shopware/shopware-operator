@@ -48,8 +48,9 @@ type S3Config struct {
 
 type SnapshotConfig struct {
 	Config
-	Database DatabaseConfig `env:",prefix=DB_"`
-	S3       S3Config       `env:",prefix=AWS_"`
+	Database      DatabaseConfig `env:",prefix=DB_"`
+	S3            S3Config       `env:",prefix=AWS_"`
+	MetaStoreJson string         `env:"META_STORE_STATE"`
 }
 
 type StoreConfig struct {

@@ -8,6 +8,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/util"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -61,16 +62,32 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 	sharedProcessNamespace := true
 	res := resource.MustParse("20Gi")
 
+	vm := append(snapshot.Container.VolumeMounts, corev1.VolumeMount{
+		Name:      "tempdir",
+		ReadOnly:  false,
+		MountPath: "/temp",
+	})
 	containers := append(snapshot.Container.ExtraContainers, corev1.Container{
 		Name:            CONTAINER_NAME_SNAPSHOT,
-		VolumeMounts:    snapshot.Container.VolumeMounts,
+		VolumeMounts:    vm,
 		ImagePullPolicy: snapshot.Container.ImagePullPolicy,
 		Image:           snapshot.Container.Image,
 		Args: []string{
 			subCommand,
 			"--backup-file", snapshot.Path,
+			"--tempdir", "/temp",
 		},
 		Env: snapshot.GetEnv(store),
+	})
+
+	res := resource.MustParse("20Gi")
+	volumes := append(snapshot.Container.Volumes, corev1.Volume{
+		Name: "tempdir",
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{
+				SizeLimit: &res,
+			},
+		},
 	})
 
 	labels := util.GetDefaultStoreSnapshotLabels(store, meta)
@@ -97,7 +114,7 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 				Spec: corev1.PodSpec{
 					ServiceAccountName:            snapshot.Container.ServiceAccountName,
 					ShareProcessNamespace:         &sharedProcessNamespace,
-					Volumes:                       snapshot.Container.Volumes,
+					Volumes:                       volumes,
 					TopologySpreadConstraints:     snapshot.Container.TopologySpreadConstraints,
 					TerminationGracePeriodSeconds: &snapshot.Container.TerminationGracePeriodSeconds,
 					NodeSelector:                  snapshot.Container.NodeSelector,

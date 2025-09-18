@@ -1,6 +1,8 @@
 package v1
 
 import (
+	"encoding/json"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -33,7 +35,8 @@ type StoreSnapshotSpec struct {
 	// +kubebuilder:default=3
 	MaxRetries int32 `json:"maxRetries,omitempty"`
 
-	Container ContainerSpec `json:"container"`
+	// +kubebuilder:default={image: "ghcr.io/shopware/shopware-operator-snapshot:snapshot", terminationGracePeriodSeconds: 30}
+	Container ContainerSpec `json:"container,omitempty"`
 }
 
 type StoreSnapshotStatus struct {
@@ -84,7 +87,19 @@ func (s *StoreSnapshotStatus) IsState(states ...SnapshotState) bool {
 }
 
 func (s StoreSnapshotSpec) GetEnv(store Store) []corev1.EnvVar {
+	var statusValue string
+	js, err := json.Marshal(store.Status)
+	if err != nil {
+		statusValue = fmt.Sprintf("{'error': '%s'}", err.Error())
+	} else {
+		statusValue = string(js)
+	}
+
 	env := []corev1.EnvVar{
+		{
+			Name:  "META_STORE_STATE",
+			Value: statusValue,
+		},
 		{
 			Name: "DB_HOST",
 			ValueFrom: &corev1.EnvVarSource{
