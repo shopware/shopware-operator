@@ -23,6 +23,15 @@ builds:
       - linux
       - darwin
 
+  - id: snapshot
+    binary: snapshot
+    main: ./cmd/snapshot
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+
 snapshot:
   version_template: "{{.Branch}}"
 
@@ -38,8 +47,19 @@ dockers:
       - "ghcr.io/shopware/{{.ProjectName}}:{{.Version}}-amd64"
     build_flag_templates:
       - "--platform=linux/amd64"
-      #TODO: Can maybe removed in the future. Ask Patrick Weyck
-      #- "--builder=buildx-builder"
+
+  - id: snapshot-amd64
+    goarch: amd64
+    use: buildx
+    extra_files:
+      - "LICENSE"
+      - "third-party-licenses.md"
+    dockerfile: build/snapshot/Dockerfile
+    image_templates:
+      - "ghcr.io/shopware/{{.ProjectName}}-snapshot:{{.Version}}-amd64"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--build-arg=ARCH=x86-64"
 
   - id: operator-arm64
     goarch: arm64
@@ -52,8 +72,19 @@ dockers:
       - "ghcr.io/shopware/{{.ProjectName}}:{{.Version}}-arm64"
     build_flag_templates:
       - "--platform=linux/arm64"
-      #TODO: Can maybe removed in the future. Ask Patrick Weyck
-      #- "--builder=buildx-builder"
+
+  - id: snapshot-arm64
+    goarch: arm64
+    use: buildx
+    extra_files:
+      - "LICENSE"
+      - "third-party-licenses.md"
+    dockerfile: build/snapshot/Dockerfile
+    image_templates:
+      - "ghcr.io/shopware/{{.ProjectName}}-snapshot:{{.Version}}-arm64"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--build-arg=ARCH=arm-64"
 
 docker_manifests:
   - id: operator-merge
@@ -61,6 +92,12 @@ docker_manifests:
     image_templates:
       - "ghcr.io/shopware/{{.ProjectName}}:{{.Version}}-amd64"
       - "ghcr.io/shopware/{{.ProjectName}}:{{.Version}}-arm64"
+
+  - id: snapshot-merge
+    name_template: "ghcr.io/shopware/{{.ProjectName}}-snapshot:{{.Version}}"
+    image_templates:
+      - "ghcr.io/shopware/{{.ProjectName}}-snapshot:{{.Version}}-amd64"
+      - "ghcr.io/shopware/{{.ProjectName}}-snapshot:{{.Version}}-arm64"
 
 archives:
   - formats: ["tar.gz"]

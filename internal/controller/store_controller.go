@@ -349,21 +349,14 @@ func (r *StoreReconciler) ensureAppSecrets(ctx context.Context, store *v1.Store)
 		esp = es.Data[store.Spec.OpensearchSpec.PasswordSecretRef.Key]
 	}
 
-	dbHost, err := util.GetDBHost(ctx, *store, r.Client)
+	dbSpec, err := util.GetDBSpec(ctx, *store, r.Client)
 	if err != nil {
-		return fmt.Errorf("get db host: %w", err)
-	}
-
-	dbSecret := new(corev1.Secret)
-	if err := r.Get(ctx, types.NamespacedName{
-		Namespace: store.Namespace,
-		Name:      store.Spec.Database.PasswordSecretRef.Name,
-	}, dbSecret); err != nil {
 		if k8serrors.IsNotFound(err) {
 			r.Recorder.Event(store, "Warning", "DB secret not found",
-				fmt.Sprintf("Missing database secret for Store %s in namespace %s",
+				fmt.Sprintf("Missing database secret for Store %s in namespace %s: %s",
 					store.Name,
-					store.Namespace))
+					store.Namespace,
+					err.Error()))
 			return nil
 		}
 		return fmt.Errorf("can't read database secret: %w", err)
@@ -373,7 +366,7 @@ func (r *StoreReconciler) ensureAppSecrets(ctx context.Context, store *v1.Store)
 	if err = r.Get(ctx, nn, storeSecret); client.IgnoreNotFound(err) != nil {
 		return fmt.Errorf("get store secret: %w", err)
 	}
-	if err = secret.GenerateStoreSecret(ctx, store, storeSecret, dbHost, dbSecret.Data[store.Spec.Database.PasswordSecretRef.Key], esp); err != nil {
+	if err = secret.GenerateStoreSecret(ctx, store, storeSecret, dbSpec, esp); err != nil {
 		return fmt.Errorf("fill store secret: %w", err)
 	}
 	storeSecret.Name = store.GetSecretName()

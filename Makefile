@@ -16,6 +16,7 @@ CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ZAP_PRETTY ?= $(LOCALBIN)/zap-pretty
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 HELMIFY ?= $(LOCALBIN)/helmify
+MYSQLSH ?= $(LOCALBIN)/mysqlsh/bin/mysqlsh
 YQ ?= $(LOCALBIN)/yq
 GOLICENSES ?= $(LOCALBIN)/go-licenses
 
@@ -24,6 +25,7 @@ KUSTOMIZE_VERSION ?= v5.2.1
 CONTROLLER_TOOLS_VERSION ?= v0.17.0
 ZAP_PRETTY_VERSION ?= v0.3.0
 HELMIFY_VERSION ?= v0.4.11
+MYSQLSH_VERSION ?= 8.4.6
 YQ_VERSION ?= 4.44.2
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
@@ -111,16 +113,45 @@ test-chart: install
 
 .PHONY: run
 run: manifests generate zap-pretty ## Run a controller from your host.
-	LEADER_ELECT=false DISABLE_CHECKS=true LOG_LEVEL=debug LOG_FORMAT=zap-pretty go run ./cmd/manager.go \
+	LEADER_ELECT=false DISABLE_CHECKS=true LOG_LEVEL=debug LOG_FORMAT=zap-pretty go run ./cmd/main.go \
+		2>&1 | $(ZAP_PRETTY) --all
+
+
+.PHONY: snapshot-create
+snapshot-create: mysqlsh
+	LOG_LEVEL=debug LOG_FORMAT=zap-pretty \
+	  DB_HOST=<host> \
+		DB_PASSWORD=<password> \
+	  DB_USER=<user> \
+		AWS_ENDPOINT=s3.eu-central-1.amazonaws.com \
+		AWS_PRIVATE_BUCKET=<private-bucket-name> \
+		AWS_PUBLIC_BUCKET=<public-bucket-name> \
+	  DB_DATABASE=shopware \
+		DB_MYSQL_SHELL_BINARY_PATH=$(MYSQLSH) \
+		go run cmd/snapshot/snapshot.go create \
+		2>&1 | $(ZAP_PRETTY) --all
+
+.PHONY: snapshot-restore
+snapshot-restore: mysqlsh path
+	LOG_LEVEL=debug LOG_FORMAT=zap-pretty \
+	  DB_HOST=<host> \
+		DB_PASSWORD=<password> \
+	  DB_USER=<user> \
+		AWS_ENDPOINT=s3.eu-central-1.amazonaws.com \
+		AWS_PRIVATE_BUCKET=<private-bucket-name> \
+		AWS_PUBLIC_BUCKET=<public-bucket-name> \
+	  DB_DATABASE=shopware \
+		DB_MYSQL_SHELL_BINARY_PATH=$(MYSQLSH) \
+		go run cmd/snapshot/snapshot.go restore --backup-file $(path) \
 		2>&1 | $(ZAP_PRETTY) --all
 
 .PHONY: run-debug
 run-debug: manifests generate zap-pretty ## Run a controller from your host.
-	dlv debug -l 127.0.0.1:38697 --headless ./cmd/manager.go
+	dlv debug -l 127.0.0.1:38697 --headless ./cmd/main.go
 
 .PHONY: debug
 debug: manifests generate zap-pretty ## Run a controller from your host.
-	go build -gcflags="all=-N -l" ./cmd/manager.go
+	go build -gcflags="all=-N -l" ./cmd/main.go
 	dlv --log --listen=:40000 --headless=true --api-version=2 --accept-multiclient exec ./manager -- --namespace ${NAMESPACE} --enable-events --disable-checks --debug
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
@@ -278,6 +309,15 @@ helmify: $(HELMIFY) ## Download locally if necessary. If wrong version is instal
 $(HELMIFY): $(LOCALBIN)
 	test -s $(LOCALBIN)/helmify && $(LOCALBIN)/helmify --version | grep -q $(HELMIFY_VERSION) || \
 	GOBIN=$(LOCALBIN) go install github.com/arttor/helmify/cmd/helmify@$(HELMIFY_VERSION)
+
+.PHONY: mysqlsh
+mysqlsh: $(MYSQLSH) ## Download locally if necessary. If wrong version is installed, it will be overwritten.
+$(MYSQLSH): $(LOCALBIN)
+	test -s $(LOCALBIN)/mysqlsh/bin/mysqlsh && $(LOCALBIN)/mysqlsh/bin/mysqlsh --version | grep -q $(MYSQLSH_VERSION) || \
+	(echo "Binary mysqlsh not found or wrong version. Downloading..." && \
+	wget https://dev.mysql.com/get/Downloads/MySQL-Shell/mysql-shell-8.4.6-linux-glibc2.28-x86-64bit.tar.gz -O /home/patrick/dev/go/src/github.com/shopware/shopware-operator/bin/mysql-shell.tar.gz && \
+	mkdir -p $(LOCALBIN)/mysqlsh && \
+	tar -xzf $(LOCALBIN)/mysql-shell.tar.gz -C $(LOCALBIN)/mysqlsh --strip-components=1)
 
 .PHONY: envtest
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.

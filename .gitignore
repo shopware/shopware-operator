@@ -6,8 +6,12 @@
 *.exe
 *.exe~
 *.dll
+*.tar.gz
+*.zip
+*.gz
 *.so
 *.dylib
+*.zip
 bin/*
 Dockerfile.cross
 
@@ -29,3 +33,4 @@ Dockerfile.cross
 *~
 dist/
 config/rbac/role.yaml
+.claude/

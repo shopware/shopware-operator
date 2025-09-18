@@ -1,0 +1,8 @@
+apiVersion: shop.shopware.com/v1
+kind: StoreSnapshotCreate
+metadata:
+  name: test
+spec:
+  storeNameRef: store-name
+  path: /temp/test.zip
+  maxRetries: 3
