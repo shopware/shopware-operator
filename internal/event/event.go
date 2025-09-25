@@ -7,6 +7,8 @@ import (
 )
 
 type Event struct {
+	// Kind Type {store, snapshotCreate, snapshotRestore, exec, debugInstance}
+	KindType string `json:"kindType"`
 	// Custom Message
 	Message string `json:"message"`
 	// Last condition of the store

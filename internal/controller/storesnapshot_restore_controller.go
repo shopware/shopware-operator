@@ -101,23 +101,23 @@ func (r *StoreSnapshotRestoreReconciler) reconcileRestore(ctx context.Context, r
 		return shortRequeue
 	}
 
-	defer func() {
-		if err := r.reconcileRestoreCRStatus(ctx, *store, snapshot); err != nil {
-			if err != nil {
-				logger.Errorw("reconcile snapshot create status", zap.Error(err))
-			}
-		}
-
-		err = writeSnapshotRestoreStatus(ctx, r.Client, types.NamespacedName{
-			Namespace: snapshot.Namespace,
-			Name:      snapshot.Name,
-		}, snapshot.Status)
-		if err != nil {
-			logger.Errorw("write snapshot status", zap.Error(err))
-		}
-	}()
-
 	if !snapshot.Status.IsState(v1.SnapshotStateFailed, v1.SnapshotStateSucceeded) {
+		defer func() {
+			if err := r.reconcileRestoreCRStatus(ctx, *store, snapshot); err != nil {
+				if err != nil {
+					logger.Errorw("reconcile snapshot create status", zap.Error(err))
+				}
+			}
+
+			err = writeSnapshotRestoreStatus(ctx, r.Client, types.NamespacedName{
+				Namespace: snapshot.Namespace,
+				Name:      snapshot.Name,
+			}, snapshot.Status)
+			if err != nil {
+				logger.Errorw("write snapshot status", zap.Error(err))
+			}
+		}()
+
 		// Restore PV and PVC for snapshot storage
 		// pv := volume.SnapshotPersistentVolume(*store, snapshot.ObjectMeta)
 		// if err := k8s.EnsurePersistentVolume(ctx, r.Client, store, pv, r.Scheme, true); err != nil {
@@ -132,10 +132,11 @@ func (r *StoreSnapshotRestoreReconciler) reconcileRestore(ctx context.Context, r
 		// }
 
 		obj := job.SnapshotRestoreJob(*store, *snapshot)
-		if err := r.reconcileSnapshotJob(ctx, store, obj); err != nil {
+		if err := r.reconcileSnapshotJob(ctx, store, snapshot, obj); err != nil {
 			logger.Errorw("reconcile snapshot create job", zap.Error(err))
 			return shortRequeue
 		}
+		return shortRequeue
 	}
 
 	return longRequeue
@@ -152,10 +153,16 @@ func (r *StoreSnapshotRestoreReconciler) reconcileRestoreCRStatus(ctx context.Co
 			snapshot.Status.State = v1.SnapshotStatePending
 			return nil
 		}
-		snapshot.Status.State = v1.SnapshotStateFailed
+		snapshot.Status.State = v1.SnapshotStatePending
 		snapshot.Status.Message = "Error in getting snapshot job"
-		snapshot.Status.CompletedAt = metav1.Now()
-		return fmt.Errorf("get snapshot job: %w", err)
+		return nil
+	}
+
+	// Controller is to fast so we need to check the setup job
+	if snapshotJob == nil {
+		snapshot.Status.State = v1.SnapshotStatePending
+		snapshot.Status.Message = "Waiting for snapshot job to be created"
+		return nil
 	}
 
 	jobState, err := job.IsJobContainerDone(ctx, r.Client, snapshotJob, job.CONTAINER_NAME_SNAPSHOT)
@@ -170,7 +177,7 @@ func (r *StoreSnapshotRestoreReconciler) reconcileRestoreCRStatus(ctx context.Co
 		snapshot.Status.State = v1.SnapshotStateFailed
 		snapshot.Status.Message = fmt.Sprintf("Snapshot is Done but has Errors. Check logs for more details. Exit code: %d", jobState.ExitCode)
 		snapshot.Status.CompletedAt = metav1.Now()
-		return fmt.Errorf("snapshot job has errors exit code: %d", jobState.ExitCode)
+		return nil
 	}
 
 	if jobState.IsDone() && !jobState.HasErrors() {
@@ -190,7 +197,7 @@ func (r *StoreSnapshotRestoreReconciler) reconcileRestoreCRStatus(ctx context.Co
 	return nil
 }
 
-func (r *StoreSnapshotRestoreReconciler) reconcileSnapshotJob(ctx context.Context, store *v1.Store, obj *batchv1.Job) (err error) {
+func (r *StoreSnapshotRestoreReconciler) reconcileSnapshotJob(ctx context.Context, store *v1.Store, owner metav1.Object, obj *batchv1.Job) (err error) {
 	var changed bool
 	if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
 		return fmt.Errorf("reconcile unready setup job: %w", err)
@@ -200,7 +207,7 @@ func (r *StoreSnapshotRestoreReconciler) reconcileSnapshotJob(ctx context.Contex
 			fmt.Sprintf("Update Store %s snapshot job in namespace %s. Diff hash",
 				store.Name,
 				store.Namespace))
-		if err := k8s.EnsureJob(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
+		if err := k8s.EnsureJob(ctx, r.Client, owner, obj, r.Scheme, true); err != nil {
 			return fmt.Errorf("reconcile unready snapshot job: %w", err)
 		}
 	}

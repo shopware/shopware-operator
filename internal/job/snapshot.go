@@ -80,7 +80,6 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 		Env: snapshot.GetEnv(store),
 	})
 
-	res := resource.MustParse("20Gi")
 	volumes := append(snapshot.Container.Volumes, corev1.Volume{
 		Name: "tempdir",
 		VolumeSource: corev1.VolumeSource{

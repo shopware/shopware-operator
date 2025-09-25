@@ -38,6 +38,8 @@ func IsJobContainerDone(
 
 	logger := logging.FromContext(ctx).With(zap.String("job", job.Name))
 
+	// TODO: if job is created this returns an error JobNotFoundInContainer
+
 	var errorStates []JobState
 	for _, container := range job.Spec.Template.Spec.Containers {
 		if container.Name == containerName {
