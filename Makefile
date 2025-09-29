@@ -145,14 +145,10 @@ snapshot-restore: mysqlsh path
 		go run cmd/snapshot/snapshot.go restore --backup-file $(path) \
 		2>&1 | $(ZAP_PRETTY) --all
 
-.PHONY: run-debug
-run-debug: manifests generate zap-pretty ## Run a controller from your host.
-	dlv debug -l 127.0.0.1:38697 --headless ./cmd/main.go
-
 .PHONY: debug
 debug: manifests generate zap-pretty ## Run a controller from your host.
 	go build -gcflags="all=-N -l" ./cmd/main.go
-	dlv --log --listen=:40000 --headless=true --api-version=2 --accept-multiclient exec ./manager -- --namespace ${NAMESPACE} --enable-events --disable-checks --debug
+	LEADER_ELECT=false DISABLE_CHECKS=true LOG_LEVEL=debug dlv --log --listen=:40000 --headless=true --api-version=2 --accept-multiclient exec ./main
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
@@ -238,6 +234,7 @@ helm: path version manifests kustomize yq ## Undeploy controller from the K8s cl
 	$(KUSTOMIZE) build config/helm > $(path)/templates/operator.yaml
 	$(YQ) e -i '.appVersion = "$(version)"' $(path)/Chart.yaml
 	$(YQ) e -i '.version = "$(version)"' $(path)/Chart.yaml
+	sed -i 's|image: ghcr.io/shopware/shopware-operator-snapshot:main|image: ghcr.io/shopware/shopware-operator-snapshot:'${version}'|g' $(path)/templates/crds/all.yaml
 	$(YQ) $(path)/templates/crds/all.yaml -s '"$(path)/templates/crds/" + .spec.names.kind' --no-doc
 	rm $(path)/templates/crds/all.yaml
 	rm $(path)/templates/.gitkeep

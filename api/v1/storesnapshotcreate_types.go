@@ -35,7 +35,8 @@ type StoreSnapshotSpec struct {
 	// +kubebuilder:default=3
 	MaxRetries int32 `json:"maxRetries,omitempty"`
 
-	// +kubebuilder:default={image: "ghcr.io/shopware/shopware-operator-snapshot:snapshot", terminationGracePeriodSeconds: 30}
+	// The Image gets replaces with the tag of the crd
+	// +kubebuilder:default={image: "ghcr.io/shopware/shopware-operator-snapshot:main", terminationGracePeriodSeconds: 30}
 	Container ContainerSpec `json:"container,omitempty"`
 }
 
