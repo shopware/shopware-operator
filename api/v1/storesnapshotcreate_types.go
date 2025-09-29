@@ -85,6 +85,21 @@ func init() {
 	SchemeBuilder.Register(&StoreSnapshotCreate{}, &StoreSnapshotCreateList{})
 }
 
+// GetObjectMeta implements SnapshotResource interface
+func (s *StoreSnapshotCreate) GetObjectMeta() metav1.Object {
+	return s
+}
+
+// GetSpec implements SnapshotResource interface
+func (s *StoreSnapshotCreate) GetSpec() StoreSnapshotSpec {
+	return s.Spec
+}
+
+// GetStatus implements SnapshotResource interface
+func (s *StoreSnapshotCreate) GetStatus() *StoreSnapshotStatus {
+	return &s.Status
+}
+
 func (s *StoreSnapshotStatus) IsState(states ...SnapshotState) bool {
 	return slices.Contains(states, s.State)
 }

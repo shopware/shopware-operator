@@ -34,3 +34,18 @@ type StoreSnapshotRestoreList struct {
 func init() {
 	SchemeBuilder.Register(&StoreSnapshotRestore{}, &StoreSnapshotRestoreList{})
 }
+
+// GetObjectMeta implements SnapshotResource interface
+func (s *StoreSnapshotRestore) GetObjectMeta() metav1.Object {
+	return s
+}
+
+// GetSpec implements SnapshotResource interface
+func (s *StoreSnapshotRestore) GetSpec() StoreSnapshotSpec {
+	return s.Spec
+}
+
+// GetStatus implements SnapshotResource interface
+func (s *StoreSnapshotRestore) GetStatus() *StoreSnapshotStatus {
+	return &s.Status
+}

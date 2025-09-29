@@ -158,21 +158,25 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controller.StoreSnapshotCreateReconciler{
-		Client:        nsClient,
-		Logger:        logger,
-		EventHandlers: handlers,
-		Scheme:        mgr.GetScheme(),
-		Recorder:      mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
+		StoreSnapshotBaseReconciler: controller.StoreSnapshotBaseReconciler{
+			Client:        nsClient,
+			EventHandlers: handlers,
+			Scheme:        mgr.GetScheme(),
+			Recorder:      mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
+			Logger:        logger,
+		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create snapshot create controller", "controller", "StoreSnapshot")
 		os.Exit(1)
 	}
 	if err = (&controller.StoreSnapshotRestoreReconciler{
-		Client:        nsClient,
-		Logger:        logger,
-		EventHandlers: handlers,
-		Scheme:        mgr.GetScheme(),
-		Recorder:      mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
+		StoreSnapshotBaseReconciler: controller.StoreSnapshotBaseReconciler{
+			Client:        nsClient,
+			EventHandlers: handlers,
+			Scheme:        mgr.GetScheme(),
+			Recorder:      mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
+			Logger:        logger,
+		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create snapshot restore controller", "controller", "StoreSnapshot")
 		os.Exit(1)

@@ -38,6 +38,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+var (
+	shortRequeue = ctrl.Result{RequeueAfter: 10 * time.Second}
+	longRequeue  = ctrl.Result{RequeueAfter: 5 * time.Minute}
+)
+
 // StoreReconciler reconciles a Store object
 type StoreReconciler struct {
 	client.Client
