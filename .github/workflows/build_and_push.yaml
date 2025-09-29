@@ -17,7 +17,7 @@ env:
 
 jobs:
   goreleaser:
-    runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=2
+    runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=8
     outputs:
       tag: ${{ steps.get_tag.outputs.tag }}
     steps:
