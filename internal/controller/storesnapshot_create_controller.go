@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/shopware/shopware-operator/internal/event"
 	"github.com/shopware/shopware-operator/internal/job"
 	"github.com/shopware/shopware-operator/internal/k8s"
 	"github.com/shopware/shopware-operator/internal/logging"
@@ -42,9 +43,10 @@ import (
 // StoreSnapshotCreateReconciler reconciles a StoreSnapshot object
 type StoreSnapshotCreateReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
-	Logger   *zap.SugaredLogger
+	EventHandlers []event.EventHandler
+	Scheme        *runtime.Scheme
+	Recorder      record.EventRecorder
+	Logger        *zap.SugaredLogger
 }
 
 var (
@@ -111,12 +113,13 @@ func (r *StoreSnapshotCreateReconciler) reconcileCreate(ctx context.Context, req
 
 	if !snapshot.Status.IsState(v1.SnapshotStateFailed, v1.SnapshotStateSucceeded) {
 		defer func() {
-			if err := r.reconcileCreateCRStatus(ctx, *store, snapshot); err != nil {
+			if err := r.reconcileCRStatus(ctx, *store, snapshot); err != nil {
 				if err != nil {
 					logger.Errorw("reconcile snapshot create status", zap.Error(err))
 				}
 			}
 
+			r.SendEvent(ctx, *snapshot)
 			err = writeSnapshotCreateStatus(ctx, r.Client, types.NamespacedName{
 				Namespace: snapshot.Namespace,
 				Name:      snapshot.Name,
@@ -150,10 +153,28 @@ func (r *StoreSnapshotCreateReconciler) reconcileCreate(ctx context.Context, req
 	return longRequeue
 }
 
-func (r *StoreSnapshotCreateReconciler) reconcileCreateCRStatus(ctx context.Context, store v1.Store, snapshot *v1.StoreSnapshotCreate) error {
+func (r *StoreSnapshotCreateReconciler) reconcileCRStatus(ctx context.Context, store v1.Store, snapshot *v1.StoreSnapshotCreate) error {
 	if snapshot.Status.IsState(v1.SnapshotStateEmpty) {
 		snapshot.Status.State = v1.SnapshotStatePending
 	}
+	privousState := snapshot.Status.State
+
+	con := v1.StoreCondition{
+		Type:               string(v1.SnapshotStatePending),
+		LastTransitionTime: metav1.Time{},
+		LastUpdateTime:     metav1.Now(),
+		Message:            "",
+		Reason:             "",
+		Status:             "",
+	}
+	defer func() {
+		con.Type = string(snapshot.Status.State)
+		con.Message = snapshot.Status.Message
+		if privousState != snapshot.Status.State {
+			con.LastTransitionTime = metav1.Now()
+		}
+		snapshot.Status.AddCondition(con)
+	}()
 
 	snapshotJob, err := job.GetSnapshotCreateJob(ctx, r.Client, store, *snapshot)
 	if err != nil {
@@ -163,6 +184,8 @@ func (r *StoreSnapshotCreateReconciler) reconcileCreateCRStatus(ctx context.Cont
 		}
 		snapshot.Status.State = v1.SnapshotStatePending
 		snapshot.Status.Message = "Error in getting snapshot job"
+		con.Status = Error
+		con.Reason = fmt.Errorf("InternalError: Error in getting snapshot job: %w", err).Error()
 		return nil
 	}
 
@@ -170,6 +193,8 @@ func (r *StoreSnapshotCreateReconciler) reconcileCreateCRStatus(ctx context.Cont
 	if snapshotJob == nil {
 		snapshot.Status.State = v1.SnapshotStatePending
 		snapshot.Status.Message = "Waiting for snapshot job to be created"
+		con.Status = ""
+		con.Reason = "Waiting for snapshot job to be created"
 		return nil
 	}
 
@@ -178,6 +203,8 @@ func (r *StoreSnapshotCreateReconciler) reconcileCreateCRStatus(ctx context.Cont
 		snapshot.Status.State = v1.SnapshotStateFailed
 		snapshot.Status.Message = "Error in getting snapshot state job"
 		snapshot.Status.CompletedAt = metav1.Now()
+		con.Status = Error
+		con.Reason = fmt.Errorf("InternalError: Error in getting snapshot state job: %w", err).Error()
 		return fmt.Errorf("get snapshot job state: %w", err)
 	}
 
@@ -185,6 +212,9 @@ func (r *StoreSnapshotCreateReconciler) reconcileCreateCRStatus(ctx context.Cont
 		snapshot.Status.State = v1.SnapshotStateFailed
 		snapshot.Status.Message = fmt.Sprintf("Snapshot is Done but has Errors. Check logs for more details. Exit code: %d", jobState.ExitCode)
 		snapshot.Status.CompletedAt = metav1.Now()
+		con.Status = Error
+		//nolint:staticcheck
+		con.Reason = fmt.Errorf("Error in Snapshot, exit code: %d", jobState.ExitCode).Error()
 		return nil
 	}
 
@@ -192,6 +222,8 @@ func (r *StoreSnapshotCreateReconciler) reconcileCreateCRStatus(ctx context.Cont
 		snapshot.Status.State = v1.SnapshotStateSucceeded
 		snapshot.Status.Message = "Snapshot is successfully run"
 		snapshot.Status.CompletedAt = metav1.Now()
+		con.Status = Ready
+		con.Reason = "Snapshot successfully created"
 		return nil
 	}
 
@@ -201,6 +233,8 @@ func (r *StoreSnapshotCreateReconciler) reconcileCreateCRStatus(ctx context.Cont
 		snapshotJob.Status.Active,
 		snapshotJob.Status.Failed,
 	)
+	con.Status = ""
+	con.Reason = "Still running"
 
 	return nil
 }

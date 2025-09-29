@@ -32,12 +32,16 @@ const (
 )
 
 type StoreCondition struct {
-	Type               StatefulAppState `json:"type,omitempty"`
-	LastTransitionTime metav1.Time      `json:"lastTransitionTime,omitempty"`
-	LastUpdateTime     metav1.Time      `json:"lastUpdatedTime,omitempty"`
-	Message            string           `json:"message,omitempty"`
-	Reason             string           `json:"reason,omitempty"`
-	Status             string           `json:"status,omitempty"`
+	Type               string      `json:"type,omitempty"`
+	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty"`
+	LastUpdateTime     metav1.Time `json:"lastUpdatedTime,omitempty"`
+	Message            string      `json:"message,omitempty"`
+	Reason             string      `json:"reason,omitempty"`
+	Status             string      `json:"status,omitempty"`
+}
+
+type StoreConditionsList struct {
+	Conditions []StoreCondition `json:"conditions,omitempty"`
 }
 
 type DeploymentCondition struct {
@@ -56,10 +60,10 @@ type StoreStatus struct {
 	AdminState      DeploymentCondition `json:"adminState,omitempty"`
 	StorefrontState DeploymentCondition `json:"storefrontState,omitempty"`
 
-	Conditions []StoreCondition `json:"conditions,omitempty"`
+	StoreConditionsList `json:",inline"`
 }
 
-func (s *StoreStatus) AddCondition(c StoreCondition) {
+func (s *StoreConditionsList) AddCondition(c StoreCondition) {
 	if len(s.Conditions) == 0 {
 		s.Conditions = append(s.Conditions, c)
 		return
@@ -82,7 +86,7 @@ func (s *StoreStatus) AddCondition(c StoreCondition) {
 	}
 }
 
-func (s *StoreStatus) GetLastCondition() StoreCondition {
+func (s *StoreConditionsList) GetLastCondition() StoreCondition {
 	if len(s.Conditions) == 0 {
 		return StoreCondition{}
 	}

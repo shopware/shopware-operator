@@ -34,7 +34,7 @@ func (r *StoreReconciler) reconcileCRStatus(
 	if reconcileError != nil {
 		store.Status.AddCondition(
 			v1.StoreCondition{
-				Type:               store.Status.State,
+				Type:               string(store.Status.State),
 				LastTransitionTime: metav1.Time{},
 				LastUpdateTime:     metav1.NewTime(time.Now()),
 				Message:            reconcileError.Error(),
@@ -133,12 +133,12 @@ func (r *StoreReconciler) checkDatabaseServices(
 	store *v1.Store,
 ) v1.StatefulAppState {
 	con := v1.StoreCondition{
-		Type:               v1.StateWait,
+		Type:               string(v1.StateWait),
 		LastTransitionTime: metav1.Time{},
 		LastUpdateTime:     metav1.Now(),
 		Message:            "Waiting for database connection",
 		Reason:             "",
-		Status:             "True",
+		Status:             "",
 	}
 	defer func() {
 		store.Status.AddCondition(con)
@@ -169,12 +169,12 @@ func (r *StoreReconciler) checkS3Services(
 	store *v1.Store,
 ) v1.StatefulAppState {
 	con := v1.StoreCondition{
-		Type:               v1.StateWait,
+		Type:               string(v1.StateWait),
 		LastTransitionTime: metav1.Time{},
 		LastUpdateTime:     metav1.Now(),
 		Message:            "Waiting for s3 connection",
 		Reason:             "",
-		Status:             "True",
+		Status:             "",
 	}
 	defer func() {
 		store.Status.AddCondition(con)
@@ -241,12 +241,12 @@ func (r *StoreReconciler) checkS3Services(
 
 func (r *StoreReconciler) stateSetup(ctx context.Context, store *v1.Store) v1.StatefulAppState {
 	con := v1.StoreCondition{
-		Type:               v1.StateSetup,
+		Type:               string(v1.StateSetup),
 		LastTransitionTime: metav1.Time{},
 		LastUpdateTime:     metav1.Now(),
 		Message:            "Waiting for setup job to finish",
 		Reason:             "",
-		Status:             "True",
+		Status:             "",
 	}
 	defer func() {
 		store.Status.AddCondition(con)
@@ -300,12 +300,12 @@ func (r *StoreReconciler) stateSetup(ctx context.Context, store *v1.Store) v1.St
 
 func (r *StoreReconciler) stateMigration(ctx context.Context, store *v1.Store) v1.StatefulAppState {
 	con := v1.StoreCondition{
-		Type:               v1.StateMigration,
+		Type:               string(v1.StateMigration),
 		LastTransitionTime: metav1.Time{},
 		LastUpdateTime:     metav1.Now(),
 		Message:            "Waiting for migration job to finish",
 		Reason:             "",
-		Status:             "True",
+		Status:             "",
 	}
 	defer func() {
 		store.Status.AddCondition(con)
@@ -364,12 +364,12 @@ func (r *StoreReconciler) stateInitializing(
 	store *v1.Store,
 ) v1.StatefulAppState {
 	con := v1.StoreCondition{
-		Type:               v1.StateInitializing,
+		Type:               string(v1.StateInitializing),
 		LastTransitionTime: metav1.Time{},
 		LastUpdateTime:     metav1.Now(),
 		Message:            "Waiting for ingress to finish",
 		Reason:             "",
-		Status:             "True",
+		Status:             "",
 	}
 	defer func() {
 		store.Status.AddCondition(con)
@@ -408,12 +408,12 @@ func (r *StoreReconciler) stateInitializing(
 
 func (r *StoreReconciler) stateReady(ctx context.Context, store *v1.Store) v1.StatefulAppState {
 	con := v1.StoreCondition{
-		Type:               v1.StateReady,
+		Type:               string(v1.StateReady),
 		LastTransitionTime: metav1.Time{},
 		LastUpdateTime:     metav1.Now(),
 		Message:            "Store is running waiting for image updates to migrate",
 		Reason:             "",
-		Status:             "True",
+		Status:             "",
 	}
 	defer func() {
 		store.Status.AddCondition(con)

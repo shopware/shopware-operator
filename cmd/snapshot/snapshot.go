@@ -24,6 +24,12 @@ var (
 	includeS3  = true
 )
 
+// Write errors into this file: /dev/termination-log when running in k8s
+// Termination Message
+// Kubernetes supports writing to /dev/termination-log inside the container.
+// Whatever is written there ends up in the Pod status under .status.containerStatuses[].state.terminated.message.
+// Your operator can grab this message once the Pod is done.
+// This is a neat way to get a short result string directly without extra objects.
 func main() {
 	ctx := context.Background()
 	cfg, err := config.LoadSnapshotConfig(ctx)

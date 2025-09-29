@@ -40,9 +40,12 @@ type StoreSnapshotSpec struct {
 }
 
 type StoreSnapshotStatus struct {
-	State       SnapshotState `json:"state,omitempty"`
-	CompletedAt metav1.Time   `json:"completed,omitempty"`
-	Message     string        `json:"message,omitempty"`
+	State                     SnapshotState `json:"state,omitempty"`
+	CompletedAt               metav1.Time   `json:"completed,omitempty"`
+	Message                   string        `json:"message,omitempty"`
+	Duration                  metav1.Time   `json:"duration,omitempty"`
+	TerminationMessageFromJob string        `json:"terminationMessageFromJob,omitempty"`
+	StoreConditionsList       `json:",inline"`
 }
 
 const (

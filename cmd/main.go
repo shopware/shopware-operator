@@ -158,19 +158,21 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controller.StoreSnapshotCreateReconciler{
-		Client:   nsClient,
-		Logger:   logger,
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
+		Client:        nsClient,
+		Logger:        logger,
+		EventHandlers: handlers,
+		Scheme:        mgr.GetScheme(),
+		Recorder:      mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create snapshot create controller", "controller", "StoreSnapshot")
 		os.Exit(1)
 	}
 	if err = (&controller.StoreSnapshotRestoreReconciler{
-		Client:   nsClient,
-		Logger:   logger,
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
+		Client:        nsClient,
+		Logger:        logger,
+		EventHandlers: handlers,
+		Scheme:        mgr.GetScheme(),
+		Recorder:      mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create snapshot restore controller", "controller", "StoreSnapshot")
 		os.Exit(1)
@@ -181,7 +183,7 @@ func main() {
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "StoreDebugInstance")
+		setupLog.Error(err, "unable to create instance controller", "controller", "StoreDebugInstance")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
