@@ -1,14 +1,14 @@
 resources:
-# All RBAC will be applied under this service account in
-# the deployment namespace. You may comment out this resource
-# if your manager will use a service account that exists at
-# runtime. Be sure to update RoleBinding and ClusterRoleBinding
-# subjects if changing service account names.
-- service_account.yaml
-- role.yaml
-- role_binding.yaml
-- leader_election_role.yaml
-- leader_election_role_binding.yaml
+  # All RBAC will be applied under this service account in
+  # the deployment namespace. You may comment out this resource
+  # if your manager will use a service account that exists at
+  # runtime. Be sure to update RoleBinding and ClusterRoleBinding
+  # subjects if changing service account names.
+  - service_account.yaml
+  - role.yaml
+  - role_binding.yaml
+  - leader_election_role.yaml
+  - leader_election_role_binding.yaml
 # Comment the following 4 lines if you want to disable
 # the auth proxy (https://github.com/brancz/kube-rbac-proxy)
 # which protects your /metrics endpoint.
@@ -27,7 +27,3 @@ patches:
 # default, aiding admins in cluster management. Those roles are
 # not used by the {{ .ProjectName }} itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
-- storesnapshotrestore_admin_role.yaml
-- storesnapshotrestore_editor_role.yaml
-- storesnapshotrestore_viewer_role.yaml
-
