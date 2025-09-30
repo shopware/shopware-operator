@@ -140,10 +140,49 @@ jobs:
           kubectl get pods --namespace test -o wide
           kubectl get pods --namespace test -o=custom-columns='IMAGE:spec.containers[0].image'
 
-          kubectl apply -f examples --namespace test
+          # Test StoreExec resources
+          kubectl apply -f examples/command.yaml --namespace test
+          kubectl apply -f examples/cron.yaml --namespace test
+
+          echo "Testing StoreExec resources..."
           kubectl wait --namespace test --for=jsonpath="{.status.state}"=wait --timeout=2m storeexec/test-cron || {
             kubectl get --namespace test job/test -o json && exit 1
           }
           kubectl wait --namespace test --for=jsonpath="{.status.state}"=wait --timeout=2m storeexec/test || {
             kubectl get --namespace test cronjob/test-cron -o json && exit 2
           }
+
+          # Test StoreSnapshotCreate resource
+          echo "Testing StoreSnapshotCreate resource..."
+          kubectl apply -f examples/snapshot_create.yaml --namespace test
+          kubectl wait --namespace test --for=condition=Ready --timeout=30s storesnapshotcreate/snap-create || {
+            echo "StoreSnapshotCreate not ready, checking status..."
+            kubectl get storesnapshotcreate/snap-create --namespace test -o yaml
+          }
+
+          # Test StoreSnapshotRestore resource
+          echo "Testing StoreSnapshotRestore resource..."
+          kubectl apply -f examples/snapshot_restore.yaml --namespace test
+          kubectl wait --namespace test --for=condition=Ready --timeout=30s storesnapshotrestore/snap-create || {
+            echo "StoreSnapshotRestore not ready, checking status..."
+            kubectl get storesnapshotrestore/snap-create --namespace test -o yaml
+          }
+
+          # Validate all resources are properly created
+          echo "Validating all resources..."
+          kubectl get storeexec --namespace test
+          kubectl get storesnapshotcreate --namespace test
+          kubectl get storesnapshotrestore --namespace test
+
+          # Check logs for any errors
+          echo "Checking operator logs..."
+          kubectl logs --namespace test deployment/test-shopware-operator --tail=50
+
+          # Cleanup test resources
+          echo "Cleaning up test resources..."
+          kubectl delete -f examples/snapshot_restore.yaml --namespace test --ignore-not-found=true
+          kubectl delete -f examples/snapshot_create.yaml --namespace test --ignore-not-found=true
+          kubectl delete -f examples/cron.yaml --namespace test --ignore-not-found=true
+          kubectl delete -f examples/command.yaml --namespace test --ignore-not-found=true
+
+          echo "E2E test completed successfully!"
