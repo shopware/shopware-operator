@@ -43,9 +43,9 @@ func (r *StoreSnapshotRestoreReconciler) SetupWithManager(mgr ctrl.Manager) erro
 		Complete(r)
 }
 
-// +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storesnapshotsrestore,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storesnapshotsrestore/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storesnapshotsrestore/finalizers,verbs=update
+// +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storesnapshotrestores,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storesnapshotrestores/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storesnapshotrestores/finalizers,verbs=update
 // +kubebuilder:rbac:groups="batch",namespace=default,resources=jobs,verbs=get;list;watch;create;delete
 // +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=stores,verbs=get;list;update;patch
 // +kubebuilder:rbac:groups="",namespace=default,resources=persistentvolumes,verbs=get;list;watch;create;delete
@@ -78,4 +78,3 @@ func (r *StoreSnapshotRestoreReconciler) Reconcile(ctx context.Context, req ctrl
 
 	return r.ReconcileSnapshot(ctx, req, "restore", getSnapshot, getJob, createJob, writeStatus)
 }
-

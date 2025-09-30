@@ -35,7 +35,6 @@ type StoreSnapshotCreateReconciler struct {
 	StoreSnapshotBaseReconciler
 }
 
-
 // TODO: Filter if the state is failed or succeeded, because then we don't reconcile finished snapshots
 // SetupWithManager sets up the controller with the Manager.
 func (r *StoreSnapshotCreateReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -46,9 +45,9 @@ func (r *StoreSnapshotCreateReconciler) SetupWithManager(mgr ctrl.Manager) error
 		Complete(r)
 }
 
-// +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storesnapshotscreate,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storesnapshotscreate/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storesnapshotscreate/finalizers,verbs=update
+// +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storesnapshotcreates,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storesnapshotcreates/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storesnapshotcreates/finalizers,verbs=update
 // +kubebuilder:rbac:groups="batch",namespace=default,resources=jobs,verbs=get;list;watch;create;delete
 // +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=stores,verbs=get;list;update;patch
 // +kubebuilder:rbac:groups="",namespace=default,resources=persistentvolumes,verbs=get;list;watch;create;delete
@@ -81,4 +80,3 @@ func (r *StoreSnapshotCreateReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	return r.ReconcileSnapshot(ctx, req, "create", getSnapshot, getJob, createJob, writeStatus)
 }
-
