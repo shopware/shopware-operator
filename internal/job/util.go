@@ -12,6 +12,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+var ttlSecondsAfterFinished int32 = 86400 // Hardcoded to 1 day for now
+
 type JobState struct {
 	ExitCode int
 	Running  bool

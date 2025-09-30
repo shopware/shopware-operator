@@ -239,6 +239,8 @@ func (r *StoreReconciler) doReconcile(
 		return nil
 	}
 
+	// Should be optional because we check the image in the status and switch to migration state. This should
+	// also be the prefired way to update a store. But might cause issues needs more testing.
 	if store.IsState(v1.StateReady) {
 		if store.Status.CurrentImageTag != store.Spec.Container.Image {
 			log.Info("wait for migration to finish")

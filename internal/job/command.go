@@ -141,7 +141,8 @@ func getJobSpec(store v1.Store, ex v1.StoreExec, labels map[string]string) batch
 	}
 
 	return batchv1.JobSpec{
-		BackoffLimit: &ex.Spec.MaxRetries,
+		BackoffLimit:            &ex.Spec.MaxRetries,
+		TTLSecondsAfterFinished: &ttlSecondsAfterFinished,
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: labels,
