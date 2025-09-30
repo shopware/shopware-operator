@@ -142,7 +142,9 @@ func main() {
 					defer os.RemoveAll(snapshotTempDir)
 
 					var tempMeta any
-					json.Unmarshal([]byte(cfg.MetaStoreJson), &tempMeta)
+					if err := json.Unmarshal([]byte(cfg.MetaStoreJson), &tempMeta); err != nil {
+						logger.Warnw("MetaStoreJson unmarshaling failed", zap.Error(err))
+					}
 					b, err := json.MarshalIndent(tempMeta, "", "  ")
 					if err != nil {
 						logger.Warnw("MetaStoreJson parsing failed, skip metadata creation", zap.Error(err))

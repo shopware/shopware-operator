@@ -33,11 +33,16 @@ func (s *SnapshotService) ExtractArchive(ctx context.Context, cfg *config.Snapsh
 }
 
 func (s *SnapshotService) extractLocalArchive(ctx context.Context, snapshotCtx *SnapshotContext) error {
+	logger := logging.FromContext(ctx)
 	r, err := zip.OpenReader(snapshotCtx.BackupFile)
 	if err != nil {
 		return fmt.Errorf("failed to open zip file %s: %w", snapshotCtx.BackupFile, err)
 	}
-	defer r.Close()
+	defer func() {
+		if err := r.Close(); err != nil {
+			logger.Warnw("failed to close zip reader", zap.Error(err))
+		}
+	}()
 
 	return s.extractZipFiles(r.File, snapshotCtx.TempArchiveDir)
 }
@@ -50,15 +55,27 @@ func (s *SnapshotService) extractArchiveFromS3(ctx context.Context, cfg *config.
 	if err != nil {
 		return fmt.Errorf("failed to download archive from S3: %w", err)
 	}
-	defer reader.Close()
+	defer func() {
+		if err := reader.Close(); err != nil {
+			logger.Warnw("failed to close S3 reader", zap.Error(err))
+		}
+	}()
 
 	// Create temporary file to stream the archive to disk instead of memory
 	tempFile, err := os.CreateTemp("", "snapshot-archive-*.zip")
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer os.Remove(tempFile.Name()) // Clean up temp file
-	defer tempFile.Close()
+	defer func() {
+		if err := os.Remove(tempFile.Name()); err != nil {
+			logger.Warnw("failed to remove temp file", zap.String("file", tempFile.Name()), zap.Error(err))
+		}
+	}() // Clean up temp file
+	defer func() {
+		if err := tempFile.Close(); err != nil {
+			logger.Warnw("failed to close temp file", zap.Error(err))
+		}
+	}()
 
 	// Stream from S3 to temp file
 	written, err := io.Copy(tempFile, reader)
@@ -69,14 +86,20 @@ func (s *SnapshotService) extractArchiveFromS3(ctx context.Context, cfg *config.
 	logger.Infow("Downloaded archive from S3 to temp file", zap.String("s3URL", snapshotCtx.BackupFile), zap.Int64("archiveSize", written), zap.String("tempFile", tempFile.Name()))
 
 	// Close the temp file so we can open it with zip.OpenReader
-	tempFile.Close()
+	if err := tempFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp file: %w", err)
+	}
 
 	// Open zip file from temp file
 	zipReader, err := zip.OpenReader(tempFile.Name())
 	if err != nil {
 		return fmt.Errorf("failed to open temp zip file: %w", err)
 	}
-	defer zipReader.Close()
+	defer func() {
+		if err := zipReader.Close(); err != nil {
+			logger.Warnw("failed to close zip reader", zap.Error(err))
+		}
+	}()
 
 	return s.extractZipFiles(zipReader.File, snapshotCtx.TempArchiveDir)
 }
@@ -109,6 +132,7 @@ func (s *SnapshotService) extractZipFiles(files []*zip.File, destDir string) err
 
 		outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
 		if err != nil {
+			//nolint: errcheck
 			rc.Close()
 			return fmt.Errorf("failed to create file %s: %w", fpath, err)
 		}
@@ -116,8 +140,14 @@ func (s *SnapshotService) extractZipFiles(files []*zip.File, destDir string) err
 		_, err = io.Copy(outFile, rc)
 
 		// Close in correct order
-		outFile.Close()
-		rc.Close()
+		if err := outFile.Close(); err != nil {
+			//nolint: errcheck
+			rc.Close()
+			return fmt.Errorf("failed to close output file %s: %w", fpath, err)
+		}
+		if err := rc.Close(); err != nil {
+			return fmt.Errorf("failed to close zip file reader for %s: %w", f.Name, err)
+		}
 
 		if err != nil {
 			return fmt.Errorf("failed to extract file %s: %w", fpath, err)

@@ -372,7 +372,7 @@ func (s *S3Downloader) DownloadBucket(ctx context.Context, batchCount int, f fun
 
 		select {
 		case <-ctx.Done():
-			break
+			return ctx.Err()
 		default:
 		}
 

@@ -167,7 +167,11 @@ func (s *SnapshotService) createAssetBackup(
 			if err != nil {
 				return fmt.Errorf("failed to create file: %w", err)
 			}
-			defer f.Close()
+			defer func() {
+				if err := f.Close(); err != nil {
+					logger.Warnw("failed to close private bucket file", zap.String("file", file), zap.Error(err))
+				}
+			}()
 
 			_, err = io.CopyBuffer(f, o, make([]byte, 1024*8))
 			if err != nil {
@@ -203,7 +207,11 @@ func (s *SnapshotService) createAssetBackup(
 			if err != nil {
 				return fmt.Errorf("failed to create file: %w", err)
 			}
-			defer f.Close()
+			defer func() {
+				if err := f.Close(); err != nil {
+					logger.Warnw("failed to close public bucket file", zap.String("file", file), zap.Error(err))
+				}
+			}()
 
 			_, err = io.CopyBuffer(f, o, make([]byte, 1024*8))
 			if err != nil {
@@ -308,7 +316,11 @@ func (s *SnapshotService) restoreAssetBackup(
 }
 
 func (s *SnapshotService) uploadToS3(ctx context.Context, cfg *config.SnapshotConfig, s3Url string, contentType string, reader io.ReadCloser) error {
-	defer reader.Close()
+	defer func() {
+		if err := reader.Close(); err != nil {
+			logging.FromContext(ctx).Warnw("failed to close S3 upload reader", zap.Error(err))
+		}
+	}()
 	bucket, objectFile, err := parseS3URL(s3Url)
 	if err != nil {
 		return fmt.Errorf("failed to parse S3 URL: %w", err)
@@ -363,38 +375,4 @@ func (s *SnapshotService) downloadFromS3(ctx context.Context, cfg *config.Snapsh
 		return nil, fmt.Errorf("failed to download from s3: %w", err)
 	}
 	return reader, nil
-}
-
-func (s *SnapshotService) writeToFile(ctx context.Context, cfg *config.SnapshotConfig, file string, reader io.ReadCloser) error {
-	outFile, err := os.Create(file)
-	if err != nil {
-		return fmt.Errorf("failed to create backup file: %w", err)
-	}
-	//nolint: errcheck
-	defer reader.Close()
-	//nolint: errcheck
-	defer outFile.Close()
-
-	if _, err := io.CopyBuffer(outFile, reader, make([]byte, 3<<20)); err != nil {
-		return fmt.Errorf("failed to compress dump: %w", err)
-	}
-
-	return nil
-}
-
-func (s *SnapshotService) readFromFile(ctx context.Context, cfg *config.SnapshotConfig, file string, writer io.WriteCloser) error {
-	fileReader, err := os.Open(file)
-	if err != nil {
-		return fmt.Errorf("failed to open backup file: %w", err)
-	}
-	//nolint: errcheck
-	defer writer.Close()
-	//nolint: errcheck
-	defer fileReader.Close()
-
-	if _, err := io.CopyBuffer(writer, fileReader, make([]byte, 3<<20)); err != nil {
-		return fmt.Errorf("failed to copy dump: %w", err)
-	}
-
-	return nil
 }
