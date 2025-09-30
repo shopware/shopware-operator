@@ -1,8 +1,9 @@
 apiVersion: shop.shopware.com/v1
 kind: StoreSnapshotCreate
 metadata:
-  name: test
+  name: snap-create
+  namespace: default
 spec:
   storeNameRef: store-name
-  path: /temp/test.zip
+  path: s3://<bucket>/<zip-file>
   maxRetries: 3

@@ -1,0 +1,9 @@
+apiVersion: shop.shopware.com/v1
+kind: StoreSnapshotRestore
+metadata:
+  name: snap-create
+  namespace: default
+spec:
+  storeNameRef: store-name
+  path: s3://<bucket>/<zip-file>
+  maxRetries: 3
