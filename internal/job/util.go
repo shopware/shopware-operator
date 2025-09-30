@@ -40,6 +40,8 @@ func IsJobContainerDone(
 
 	logger := logging.FromContext(ctx).With(zap.String("job", job.Name))
 
+	// TODO: if job is created this returns an error JobNotFoundInContainer
+
 	var errorStates []JobState
 	for _, container := range job.Spec.Template.Spec.Containers {
 		if container.Name == containerName {
@@ -60,9 +62,17 @@ func IsJobContainerDone(
 			}
 
 			for _, pod := range pods.Items {
+				if pod.Status.Phase == corev1.PodPending {
+					logger.Warnw("The job pod is still pending. Could be stuck, check the conditions", zap.Any("conditions", pod.Status.Conditions))
+					return JobState{
+						ExitCode: -1,
+						Running:  true,
+					}, nil
+				}
+
 				for _, c := range pod.Status.ContainerStatuses {
 					if c.Name == containerName {
-						logger.Info(fmt.Sprintf("Found container for job `%s`", c.Name))
+						logger.Infof("Found container for job `%s`", c.Name)
 						if c.State.Terminated == nil {
 							logger.Info("Job not terminated still running")
 							return JobState{

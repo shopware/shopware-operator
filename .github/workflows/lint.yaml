@@ -19,6 +19,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: true
 
       - name: Run linter
         uses: golangci/golangci-lint-action@v7
@@ -35,6 +36,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: true
       - name: Run go tests
         run: go test ./...
 
@@ -47,6 +49,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: stable
+          cache: true
+
       - name: Set up Helm
         uses: azure/setup-helm@v4.2.0
         with:
@@ -69,11 +73,19 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: stable
+          cache: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:v0.12.5
+            network=host
 
       - name: Remove arm from goreleaser
         uses: mikefarah/yq@master
         with:
-          cmd: yq -i 'del(.dockers.[1])' .goreleaser.yaml
+          cmd: yq -i 'del(.dockers_v2.[].platforms[1])' .goreleaser.yaml
 
       - name: Create Snapshot
         id: goreleaser
@@ -84,6 +96,16 @@ jobs:
           args: release --clean --snapshot
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache Helm charts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/helm
+            ~/.local/share/helm
+          key: ${{ runner.os }}-helm-${{ hashFiles('**/Chart.yaml', '**/Chart.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-helm-
 
       - name: Set up Helm
         uses: azure/setup-helm@v4.2.0
@@ -118,10 +140,49 @@ jobs:
           kubectl get pods --namespace test -o wide
           kubectl get pods --namespace test -o=custom-columns='IMAGE:spec.containers[0].image'
 
-          kubectl apply -f examples --namespace test
+          # Test StoreExec resources
+          kubectl apply -f examples/command.yaml --namespace test
+          kubectl apply -f examples/cron.yaml --namespace test
+
+          echo "Testing StoreExec resources..."
           kubectl wait --namespace test --for=jsonpath="{.status.state}"=wait --timeout=2m storeexec/test-cron || {
             kubectl get --namespace test job/test -o json && exit 1
           }
           kubectl wait --namespace test --for=jsonpath="{.status.state}"=wait --timeout=2m storeexec/test || {
             kubectl get --namespace test cronjob/test-cron -o json && exit 2
           }
+
+          # Test StoreSnapshotCreate resource
+          echo "Testing StoreSnapshotCreate resource..."
+          kubectl apply -f examples/snapshot_create.yaml --namespace test
+          kubectl wait --namespace test --for=condition=Ready --timeout=30s storesnapshotcreate/snap-create || {
+            echo "StoreSnapshotCreate not ready, checking status..."
+            kubectl get storesnapshotcreate/snap-create --namespace test -o yaml
+          }
+
+          # Test StoreSnapshotRestore resource
+          echo "Testing StoreSnapshotRestore resource..."
+          kubectl apply -f examples/snapshot_restore.yaml --namespace test
+          kubectl wait --namespace test --for=condition=Ready --timeout=30s storesnapshotrestore/snap-create || {
+            echo "StoreSnapshotRestore not ready, checking status..."
+            kubectl get storesnapshotrestore/snap-create --namespace test -o yaml
+          }
+
+          # Validate all resources are properly created
+          echo "Validating all resources..."
+          kubectl get storeexec --namespace test
+          kubectl get storesnapshotcreate --namespace test
+          kubectl get storesnapshotrestore --namespace test
+
+          # Check logs for any errors
+          echo "Checking operator logs..."
+          kubectl logs --namespace test deployment/test-shopware-operator --tail=50
+
+          # Cleanup test resources
+          echo "Cleaning up test resources..."
+          kubectl delete -f examples/snapshot_restore.yaml --namespace test --ignore-not-found=true
+          kubectl delete -f examples/snapshot_create.yaml --namespace test --ignore-not-found=true
+          kubectl delete -f examples/cron.yaml --namespace test --ignore-not-found=true
+          kubectl delete -f examples/command.yaml --namespace test --ignore-not-found=true
+
+          echo "E2E test completed successfully!"

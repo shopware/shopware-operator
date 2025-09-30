@@ -23,44 +23,44 @@ builds:
       - linux
       - darwin
 
-snapshot:
-  version_template: "{{.Branch}}"
+  - id: snapshot
+    binary: snapshot
+    main: ./cmd/snapshot
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
 
-dockers:
-  - id: operator-amd64
-    goarch: amd64
-    use: buildx
+# snapshot:
+#   version_template: "{{.Branch}}"
+
+dockers_v2:
+  - id: operator
+    images:
+      - "ghcr.io/shopware/{{.ProjectName}}"
+    tags:
+      - "{{.Version}}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
     extra_files:
       - "LICENSE"
       - "third-party-licenses.md"
     dockerfile: build/Dockerfile
-    image_templates:
-      - "ghcr.io/shopware/{{.ProjectName}}:{{.Version}}-amd64"
-    build_flag_templates:
-      - "--platform=linux/amd64"
-      #TODO: Can maybe removed in the future. Ask Patrick Weyck
-      #- "--builder=buildx-builder"
 
-  - id: operator-arm64
-    goarch: arm64
-    use: buildx
+  - id: snapshot
+    images:
+      - "ghcr.io/shopware/{{.ProjectName}}-snapshot"
+    tags:
+      - "{{.Version}}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
     extra_files:
       - "LICENSE"
       - "third-party-licenses.md"
-    dockerfile: build/Dockerfile
-    image_templates:
-      - "ghcr.io/shopware/{{.ProjectName}}:{{.Version}}-arm64"
-    build_flag_templates:
-      - "--platform=linux/arm64"
-      #TODO: Can maybe removed in the future. Ask Patrick Weyck
-      #- "--builder=buildx-builder"
-
-docker_manifests:
-  - id: operator-merge
-    name_template: "ghcr.io/shopware/{{.ProjectName}}:{{.Version}}"
-    image_templates:
-      - "ghcr.io/shopware/{{.ProjectName}}:{{.Version}}-amd64"
-      - "ghcr.io/shopware/{{.ProjectName}}:{{.Version}}-arm64"
+    dockerfile: build/snapshot/Dockerfile
 
 archives:
   - formats: ["tar.gz"]

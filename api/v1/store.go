@@ -226,7 +226,7 @@ type ContainerSpec struct {
 	ProgressDeadlineSeconds int32 `json:"progressDeadlineSeconds,omitempty"`
 
 	// +kubebuilder:default=30
-	TerminationGracePeriodSeconds int64 `json:"terminationGracePeriodSeconds"`
+	TerminationGracePeriodSeconds int64 `json:"terminationGracePeriodSeconds,omitempty"`
 
 	// StartupProbe   corev1.Probe `json:"startupProbe,omitempty"`
 	// ReadinessProbe corev1.Probe `json:"readinessProbe,omitempty"`

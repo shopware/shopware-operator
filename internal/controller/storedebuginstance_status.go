@@ -8,6 +8,7 @@ import (
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/pod"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -61,7 +62,7 @@ func (r *StoreDebugInstanceReconciler) reconcileCRStatus(
 		storeDebugInstance.Status.State = r.stateRunning(ctx, store, storeDebugInstance)
 	}
 
-	logging.FromContext(ctx).Info("Update store debug instance status", "status", storeDebugInstance.Status)
+	logging.FromContext(ctx).Infow("Update store debug instance status", zap.Any("status", storeDebugInstance.Status))
 	return writeStoreDebugInstanceStatus(ctx, r.Client, types.NamespacedName{
 		Namespace: storeDebugInstance.Namespace,
 		Name:      storeDebugInstance.Name,
