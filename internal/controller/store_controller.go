@@ -91,7 +91,7 @@ func (r *StoreReconciler) findStoreForReconcile(
 	for _, store := range stores.Items {
 		if store.Spec.Database.PasswordSecretRef.Name == secret.GetName() {
 			logging.FromContext(ctx).
-				Info("Do reconcile on store because db secret has changed", "Store", store.Name)
+				Infow("Do reconcile on store because db secret has changed", "Store", store.Name)
 			requests = append(requests, reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Namespace: store.Namespace,
