@@ -76,8 +76,6 @@ archives:
     format_overrides:
       - goos: windows
         formats: ["zip"]
-    files:
-      - release/*
 
 changelog:
   sort: asc
