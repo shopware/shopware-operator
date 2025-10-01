@@ -1,6 +1,6 @@
 # The name of this file is used in the helm charts repo for octo-sts.
 # Please keep that in mind if you want to rename this file.
-name: Build and push
+name: Release Tag version
 
 on:
   push:
@@ -19,7 +19,7 @@ env:
 
 jobs:
   goreleaser:
-    runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=2
+    runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=8
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -56,6 +56,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Create resources for release
+        run: |
+          make resources path=release
+          make licenses path=release
+
       - name: Run goreleaser on release branch
         id: goreleaser
         uses: goreleaser/goreleaser-action@v6
@@ -65,11 +70,6 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create resources for release
-        run: |
-          make resources path=release
-          make licenses path=release
 
       - name: Update release with kube generated files
         uses: svenstaro/upload-release-action@v2
