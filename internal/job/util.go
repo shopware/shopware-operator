@@ -3,6 +3,7 @@ package job
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/shopware/shopware-operator/internal/logging"
 	"go.uber.org/zap"
@@ -123,7 +124,14 @@ func IsJobContainerDone(
 	}
 
 	err := fmt.Errorf("job not found in container: %s", containerName)
-	logger.Info(err.Error())
+	if job.CreationTimestamp.Add(time.Second * 10).Before(time.Now()) {
+		logger.Infof("%s, but it's less then 10 seconds until created so return nil", err.Error())
+		return JobState{
+			ExitCode: 0,
+			Running:  true,
+		}, nil
+	}
+
 	return JobState{}, err
 }
 
