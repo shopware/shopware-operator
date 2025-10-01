@@ -32,8 +32,8 @@ builds:
       - linux
       - darwin
 
-# snapshot:
-#   version_template: "{{.Branch}}"
+snapshot:
+  version_template: "{{.Branch}}"
 
 dockers_v2:
   - id: operator
@@ -76,6 +76,8 @@ archives:
     format_overrides:
       - goos: windows
         formats: ["zip"]
+    files:
+      - release/*
 
 changelog:
   sort: asc
