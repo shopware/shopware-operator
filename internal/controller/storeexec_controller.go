@@ -63,7 +63,7 @@ func (r *StoreExecReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			log.Info("Skip exec reconcile, because store is not found", zap.String("storeRef", ex.Spec.StoreRef))
+			log.Infow("Skip exec reconcile, because store is not found", zap.String("storeRef", ex.Spec.StoreRef))
 			return rr, nil
 		}
 		log.Errorw("get CR store", zap.Error(err))
@@ -71,7 +71,7 @@ func (r *StoreExecReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	if !store.IsState(v1.StateReady) {
-		log.Info("Skip exec reconcile, because store is not ready yet.", zap.Any("store", store.Status))
+		log.Infow("Skip exec reconcile, because store is not ready yet.", zap.Any("store", store.Status))
 		return rr, nil
 	}
 

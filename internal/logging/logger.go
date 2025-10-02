@@ -129,9 +129,9 @@ func LogCommandExecution(ctx context.Context, commandName string, cmd interface{
 	).Desugar().WithOptions(zap.AddCallerSkip(1)).Sugar()
 
 	if err == nil {
-		logger.Infow(commandName + " command succeed")
+		logger.Info(commandName + " command succeed")
 	} else {
-		logger.Errorw(commandName + " command failed")
+		logger.Error(commandName + " command failed")
 	}
 }
 
@@ -167,5 +167,5 @@ func (l *LeveledLogger) Warn(msg string, keysAndVals ...interface{}) {
 }
 
 func (l *LeveledLogger) Log(msg string) {
-	l.logger.Infow(msg)
+	l.logger.Info(msg)
 }

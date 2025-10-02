@@ -86,7 +86,7 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 	})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			log.Info("Skip reconcile, because store is not found", zap.String("storeRef", storeDebugInstance.Spec.StoreRef))
+			log.Infow("Skip reconcile, because store is not found", zap.String("storeRef", storeDebugInstance.Spec.StoreRef))
 			return rr, nil
 		}
 		log.Errorw("get CR store", zap.Error(err))
@@ -111,7 +111,7 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	if !store.IsState(shopv1.StateReady) {
-		log.Info("Skip reconcile, because store is not ready yet.", zap.Any("store", store.Status))
+		log.Infow("Skip reconcile, because store is not ready yet.", zap.Any("store", store.Status))
 		return rr, nil
 	}
 

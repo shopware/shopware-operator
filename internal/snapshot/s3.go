@@ -68,7 +68,7 @@ func (s *SnapshotService) RestoreBackup(
 		return fmt.Errorf("snapshot restore failed: %w", err)
 	}
 
-	logger.Infow("Successfully restored snapshot")
+	logger.Info("Successfully restored snapshot")
 	return nil
 }
 

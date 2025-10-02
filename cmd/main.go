@@ -194,7 +194,7 @@ func main() {
 
 	defer func() {
 		if err := recover(); err != nil {
-			logger.Fatal("Panic occurred", zapz.Any("error", err))
+			logger.Fatalw("Panic occurred", zapz.Any("error", err))
 		}
 	}()
 

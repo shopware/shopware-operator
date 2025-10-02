@@ -157,7 +157,7 @@ func deleteJobsByLabel(
 		return fmt.Errorf("get jobs: %w", err)
 	}
 
-	logging.FromContext(ctx).With(zap.Any("jobs", jobs.Items)).Info("Delete jobs")
+	logging.FromContext(ctx).Infow("Delete jobs", zap.Any("jobs", jobs.Items))
 
 	for _, job := range jobs.Items {
 		err = c.Delete(ctx, &job, client.PropagationPolicy("Foreground"))
