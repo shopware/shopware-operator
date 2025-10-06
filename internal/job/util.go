@@ -3,7 +3,6 @@ package job
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/shopware/shopware-operator/internal/logging"
 	"go.uber.org/zap"
@@ -64,7 +63,7 @@ func IsJobContainerDone(
 
 			for _, pod := range pods.Items {
 				if pod.Status.Phase == corev1.PodPending {
-					logger.Warnw("The job pod is still pending. Could be stuck, check the conditions", zap.Any("conditions", pod.Status.Conditions))
+					logger.Infow("The job pod is still pending. Could be stuck, check the conditions", zap.Any("conditions", pod.Status.Conditions))
 					return JobState{
 						ExitCode: -1,
 						Running:  true,
@@ -123,16 +122,15 @@ func IsJobContainerDone(
 		}, nil
 	}
 
-	err := fmt.Errorf("job not found in container: %s", containerName)
-	if job.CreationTimestamp.Add(time.Second * 10).Before(time.Now()) {
-		logger.Infof("%s, but it's less then 10 seconds until created so return nil", err.Error())
-		return JobState{
-			ExitCode: 0,
-			Running:  true,
-		}, nil
-	}
-
-	return JobState{}, err
+	// We tried to detect if this is a timing issue, but unfortunately we could no verify this. So it's better to run into
+	// an endless loop until the job is done. If the container name is not found it should be catched by an e2e test.
+	logger.Debugw(
+		"No result yet for job completed, this can be a timing problem but if the job never finishes this is a operator problem",
+		zap.Any("job_status", job.Status), zap.Any("job_spec", job.Spec),
+	)
+	return JobState{
+		Running: true,
+	}, nil
 }
 
 func deleteJobsByLabel(
