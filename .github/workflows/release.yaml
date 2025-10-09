@@ -115,6 +115,6 @@ jobs:
           git add .
           git commit -m "New shopware operator image"
           git push origin auto-release-${tag}
-          gh pr create --title "Autorelease from shopware operator" --body "Auto pr from shopware operator" --head "auto-release-${tag}" --base main
+          gh pr create --title "Autorelease from shopware operator" --body "Auto pr from shopware operator" --head "auto-release-${tag}" --base main --reviewer shopware/product-paas
         env:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
