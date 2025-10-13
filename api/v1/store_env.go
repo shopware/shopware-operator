@@ -45,6 +45,29 @@ func (s *Store) getAppCache() []corev1.EnvVar {
 	return []corev1.EnvVar{}
 }
 
+func (s *Store) getFastlyKey() []corev1.EnvVar {
+	if s.Spec.ShopConfiguration.Fastly.ServiceID != "" {
+		return []corev1.EnvVar{
+			{
+				Name:  "FASTLY_SERVICE_ID",
+				Value: s.Spec.ShopConfiguration.Fastly.ServiceID,
+			},
+			{
+				Name: "FASTLY_API_TOKEN",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: s.Spec.SecretName,
+						},
+						Key: "fastly-token",
+					},
+				},
+			},
+		}
+	}
+	return []corev1.EnvVar{}
+}
+
 // Handled by PHP itself
 func (s *Store) getSessionCache() []corev1.EnvVar {
 	if s.Spec.SessionCache.Adapter == "redis" {
@@ -401,6 +424,7 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 	c = append(c, s.getStorage()...)
 	c = append(c, s.getWorker()...)
 	c = append(c, s.getOpensearch()...)
+	c = append(c, s.getFastlyKey()...)
 	c = append(c, s.Spec.FPM.getFPMConfiguration()...)
 
 	for _, obj2 := range s.Spec.Container.ExtraEnvs {
