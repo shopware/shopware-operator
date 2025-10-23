@@ -1,8 +1,11 @@
 package controller
 
 import (
+	"encoding/json"
 	"reflect"
 
+	"github.com/pmezard/go-difflib/difflib"
+	"go.uber.org/zap"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -13,28 +16,102 @@ type SkipStatusUpdates = TypedSkipStatusPredicate[client.Object]
 // TypedSkipStatusPredicate filters out status-only updates.
 type TypedSkipStatusPredicate[object client.Object] struct {
 	predicate.TypedFuncs[object]
+	Logger    *zap.SugaredLogger
+	AllowList []client.Object
 }
 
 // Update returns false if only the status has changed, skipping reconciliation.
-func (TypedSkipStatusPredicate[object]) Update(e event.TypedUpdateEvent[object]) bool {
+func (t TypedSkipStatusPredicate[object]) Update(e event.TypedUpdateEvent[object]) (update bool) {
+	var oldStatusJson []byte
+	var newStatusJson []byte
+	var oldObjectJson []byte
+	var newObjectJson []byte
+	var err error
+
+	// We need to use reflection because the GetObjectKind is empty
+	kind := "unknown"
+	objType := reflect.TypeOf(e.ObjectNew)
+	if objType != nil {
+		if objType.Kind() == reflect.Ptr {
+			objType = objType.Elem()
+		}
+		kind = objType.Name()
+	}
+
+	defer func() {
+		if update {
+			// Log the update trigger
+			t.Logger.Debugw("Update trigger",
+				zap.Bool("triggerReconcile", update),
+				zap.String("name", e.ObjectNew.GetName()),
+				zap.String("kind", kind),
+			)
+
+			// Generate and log status diff
+			statusDiff := difflib.UnifiedDiff{
+				A:        difflib.SplitLines(string(oldStatusJson)),
+				B:        difflib.SplitLines(string(newStatusJson)),
+				FromFile: "Old Status",
+				ToFile:   "New Status",
+				Context:  3,
+			}
+			statusDiffText, _ := difflib.GetUnifiedDiffString(statusDiff)
+			if statusDiffText != "" {
+				t.Logger.Debugf("Status diff: \n%s", statusDiffText)
+			}
+
+			// Generate and log spec diff
+			specDiff := difflib.UnifiedDiff{
+				A:        difflib.SplitLines(string(oldObjectJson)),
+				B:        difflib.SplitLines(string(newObjectJson)),
+				FromFile: "Old Spec",
+				ToFile:   "New Spec",
+				Context:  3,
+			}
+			specDiffText, _ := difflib.GetUnifiedDiffString(specDiff)
+			if specDiffText != "" {
+				t.Logger.Debugf("Spec Diff: \n%s", specDiffText)
+			}
+		}
+	}()
 	if isNil(e.ObjectOld) || isNil(e.ObjectNew) {
 		return false
 	}
 
+	oldSpec, okOld := getSpec(e.ObjectOld)
+	newSpec, okNew := getSpec(e.ObjectNew)
+	if okOld && okNew {
+		oldObjectJson, err = json.MarshalIndent(oldSpec, "", "  ")
+		if err != nil {
+			t.Logger.Warnw("parse old spec json", zap.Error(err))
+		}
+		newObjectJson, err = json.MarshalIndent(newSpec, "", "  ")
+		if err != nil {
+			t.Logger.Warnw("parse new spec json", zap.Error(err))
+		}
+	}
+
 	oldStatus, okOld := getStatus(e.ObjectOld)
 	newStatus, okNew := getStatus(e.ObjectNew)
-
 	if !okOld || !okNew {
 		// Fallback to allow reconcile if we can't extract status
 		return true
 	}
 
-	// If status changed, skip reconcile
-	if !reflect.DeepEqual(oldStatus, newStatus) {
-		return false
+	oldStatusJson, err = json.MarshalIndent(oldStatus, "", "  ")
+	if err != nil {
+		t.Logger.Warnw("parse old status json", zap.Error(err))
+	}
+	newStatusJson, err = json.MarshalIndent(newStatus, "", "  ")
+	if err != nil {
+		t.Logger.Warnw("parse new status json", zap.Error(err))
 	}
 
-	// Otherwise, allow reconcile
+	// If status changed check if object is in allow list and allow reconcile
+	if !reflect.DeepEqual(oldStatus, newStatus) {
+		return t.isInAllowList(kind)
+	}
+
 	return true
 }
 
@@ -58,6 +135,25 @@ func getStatus(obj any) (any, bool) {
 	return status.Interface(), true
 }
 
+func getSpec(obj any) (any, bool) {
+	v := reflect.ValueOf(obj)
+	if !v.IsValid() {
+		return nil, false
+	}
+	if v.Kind() == reflect.Pointer {
+		v = v.Elem()
+	}
+	if !v.IsValid() || v.Kind() != reflect.Struct {
+		return nil, false
+	}
+
+	spec := v.FieldByName("Spec")
+	if !spec.IsValid() {
+		return nil, false
+	}
+	return spec.Interface(), true
+}
+
 // isNil safely checks for nil values via reflection.
 func isNil(arg any) bool {
 	if arg == nil {
@@ -70,4 +166,20 @@ func isNil(arg any) bool {
 	default:
 		return false
 	}
+}
+
+// isInAllowList checks if the given kind matches any object type in the allow list.
+func (t TypedSkipStatusPredicate[object]) isInAllowList(kind string) bool {
+	for _, allowedObj := range t.AllowList {
+		objType := reflect.TypeOf(allowedObj)
+		if objType != nil {
+			if objType.Kind() == reflect.Ptr {
+				objType = objType.Elem()
+			}
+			if objType.Name() == kind {
+				return true
+			}
+		}
+	}
+	return false
 }

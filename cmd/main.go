@@ -144,7 +144,7 @@ func main() {
 		Scheme:               mgr.GetScheme(),
 		Recorder:             mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
 		DisableServiceChecks: cfg.DisableChecks,
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(mgr, logger); err != nil {
 		setupLog.Error(err, "unable to create store controller", "controller", "Store")
 		os.Exit(1)
 	}
