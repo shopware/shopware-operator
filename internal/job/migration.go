@@ -61,6 +61,7 @@ func MigrationJob(store v1.Store) *batchv1.Job {
 		Command:         []string{"sh", "-c"},
 		Args:            []string{store.Spec.MigrationScript},
 		Env:             envs,
+		Resources:       containerSpec.Resources,
 	})
 
 	job := &batchv1.Job{
