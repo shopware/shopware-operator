@@ -1,22 +1,18 @@
-package job_test
+package deployment_test
 
 import (
 	"testing"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
-	"github.com/shopware/shopware-operator/internal/job"
+	"github.com/shopware/shopware-operator/internal/deployment"
 	"github.com/shopware/shopware-operator/internal/util"
 	"github.com/stretchr/testify/assert"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestStoreContainer(t *testing.T) {
-}
-
-func TestSetupJob(t *testing.T) {
+func TestWorkerDeployment(t *testing.T) {
 	t.Run("test annotation merging", func(t *testing.T) {
 		store := v1.Store{
 			ObjectMeta: metav1.ObjectMeta{
@@ -33,82 +29,25 @@ func TestSetupJob(t *testing.T) {
 						"container.only": "stays",
 					},
 				},
-				SetupJobContainer: v1.ContainerMergeSpec{
+				WorkerDeploymentContainer: v1.ContainerMergeSpec{
 					Annotations: map[string]string{
-						"shared.key": "setup-value",
-						"setup.key":  "setup-value",
-						"setup.only": "added",
+						"shared.key":  "worker-value",
+						"worker.key":  "worker-value",
+						"worker.only": "added",
 					},
-				},
-				SetupScript: "/setup.sh",
-				AdminCredentials: v1.Credentials{
-					Username: "admin",
-					Password: "abcd123",
 				},
 				SecretName: "store-secret",
 			},
 		}
 
-		expected := &batchv1.Job{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-store-setup",
-				Namespace: "test",
-				Labels: map[string]string{
-					"shop.shopware.com/store.name": "test-store",
-					"shop.shopware.com/store.type": "setup",
-				},
-				Annotations: map[string]string{
-					"shared.key":     "setup-value",     // Should be overwritten by setup
-					"container.key":  "container-value", // Should stay from container
-					"container.only": "stays",           // Should stay from container
-					"setup.key":      "setup-value",     // Should be added from setup
-					"setup.only":     "added",           // Should be added from setup
-					"kubectl.kubernetes.io/default-container":      "shopware-setup",
-					"kubectl.kubernetes.io/default-logs-container": "shopware-setup",
-				},
-			},
-			Spec: batchv1.JobSpec{
-				Template: corev1.PodTemplateSpec{
-					Spec: corev1.PodSpec{
-						RestartPolicy: "Never",
-						Containers: []corev1.Container{
-							{
-								Name:            "shopware-setup",
-								Image:           "shopware:latest",
-								ImagePullPolicy: "IfNotPresent",
-								Command:         []string{"sh", "-c"},
-								Args:            []string{"/setup.sh"},
-							},
-						},
-					},
-				},
-			},
-		}
+		result := deployment.WorkerDeployment(store)
 
-		result := job.SetupJob(store)
-
-		// Basic assertions
-		assert.Equal(t, expected.Name, result.Name)
-		assert.Equal(t, expected.Namespace, result.Namespace)
-		assert.Equal(t, expected.Labels, result.Labels)
-
-		// Detailed annotation assertions
-		assert.Equal(t, expected.Annotations, result.Annotations, "Annotations should match expected values")
-
-		// Verify specific annotation merging behavior
-		assert.Equal(t, "setup-value", result.Annotations["shared.key"], "Shared key should be overwritten by setup")
+		// Verify annotations are merged correctly
+		assert.Equal(t, "worker-value", result.Annotations["shared.key"], "Shared key should be overwritten by worker")
 		assert.Equal(t, "container-value", result.Annotations["container.key"], "Container-specific key should be preserved")
 		assert.Equal(t, "stays", result.Annotations["container.only"], "Container-only annotation should stay")
-		assert.Equal(t, "setup-value", result.Annotations["setup.key"], "Setup-specific key should be added")
-		assert.Equal(t, "added", result.Annotations["setup.only"], "Setup-only annotation should be added")
-
-		// Container assertions
-		container := result.Spec.Template.Spec.Containers[0]
-		assert.Equal(t, "shopware-setup", container.Name)
-		assert.Equal(t, store.Spec.Container.Image, container.Image)
-		assert.Equal(t, store.Spec.Container.ImagePullPolicy, container.ImagePullPolicy)
-		assert.Equal(t, []string{"sh", "-c"}, container.Command)
-		assert.Equal(t, []string{store.Spec.SetupScript}, container.Args)
+		assert.Equal(t, "worker-value", result.Annotations["worker.key"], "Worker-specific key should be added")
+		assert.Equal(t, "added", result.Annotations["worker.only"], "Worker-only annotation should be added")
 	})
 
 	t.Run("test container merge spec", func(t *testing.T) {
@@ -121,6 +60,7 @@ func TestSetupJob(t *testing.T) {
 				Container: v1.ContainerSpec{
 					Image:           "shopware:latest",
 					ImagePullPolicy: "IfNotPresent",
+					Replicas:        1,
 					Resources: corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
 							"cpu": resource.MustParse("1"),
@@ -139,9 +79,10 @@ func TestSetupJob(t *testing.T) {
 						},
 					},
 				},
-				SetupJobContainer: v1.ContainerMergeSpec{
-					Image:           "shopware:setup",
+				WorkerDeploymentContainer: v1.ContainerMergeSpec{
+					Image:           "shopware:worker",
 					ImagePullPolicy: "Always",
+					Replicas:        3,
 					Resources: corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
 							"memory": resource.MustParse("1Gi"),
@@ -149,13 +90,13 @@ func TestSetupJob(t *testing.T) {
 					},
 					VolumeMounts: []corev1.VolumeMount{
 						{
-							Name:      "setup-volume",
-							MountPath: "/setup",
+							Name:      "worker-volume",
+							MountPath: "/worker",
 						},
 					},
 					ExtraEnvs: []corev1.EnvVar{
 						{
-							Name:  "SETUP_ENV",
+							Name:  "WORKER_ENV",
 							Value: "value",
 						},
 						{
@@ -164,17 +105,19 @@ func TestSetupJob(t *testing.T) {
 						},
 					},
 				},
-				SetupScript: "/setup.sh",
-				SecretName:  "store-secret",
+				SecretName: "store-secret",
 			},
 		}
 
-		result := job.SetupJob(store)
+		result := deployment.WorkerDeployment(store)
 		container := result.Spec.Template.Spec.Containers[0]
 
 		// Verify image and policy are overwritten
-		assert.Equal(t, "shopware:setup", container.Image)
+		assert.Equal(t, "shopware:worker", container.Image)
 		assert.Equal(t, corev1.PullPolicy("Always"), container.ImagePullPolicy)
+
+		// Verify replicas
+		assert.Equal(t, int32(3), *result.Spec.Replicas)
 
 		// Verify resources are merged
 		assert.Equal(t, resource.MustParse("1"), container.Resources.Limits["cpu"])
@@ -182,15 +125,15 @@ func TestSetupJob(t *testing.T) {
 
 		// Verify volume mounts are replaced
 		assert.Len(t, container.VolumeMounts, 1)
-		assert.Equal(t, "setup-volume", container.VolumeMounts[0].Name)
-		assert.Equal(t, "/setup", container.VolumeMounts[0].MountPath)
+		assert.Equal(t, "worker-volume", container.VolumeMounts[0].Name)
+		assert.Equal(t, "/worker", container.VolumeMounts[0].MountPath)
 
-		// Verify env vars are replaced
-		hasSetupEnv := false
+		// Verify env vars are merged
+		hasWorkerEnv := false
 		hasContainerEnv := false
 		for _, env := range container.Env {
-			if env.Name == "SETUP_ENV" {
-				hasSetupEnv = true
+			if env.Name == "WORKER_ENV" {
+				hasWorkerEnv = true
 				assert.Equal(t, "value", env.Value)
 			}
 			if env.Name == "CONTAINER_ENV" {
@@ -198,8 +141,8 @@ func TestSetupJob(t *testing.T) {
 				assert.Equal(t, "overwritten", env.Value)
 			}
 		}
-		assert.True(t, hasSetupEnv, "Setup env var should be present")
-		assert.True(t, hasContainerEnv, "container env var should be present")
+		assert.True(t, hasWorkerEnv, "Worker env var should be present")
+		assert.True(t, hasContainerEnv, "Container env var should be present and overwritten")
 	})
 
 	t.Run("test container security context merge", func(t *testing.T) {
@@ -214,16 +157,16 @@ func TestSetupJob(t *testing.T) {
 						RunAsUser: util.Int64(1000),
 					},
 				},
-				SetupJobContainer: v1.ContainerMergeSpec{
+				WorkerDeploymentContainer: v1.ContainerMergeSpec{
 					SecurityContext: &corev1.PodSecurityContext{
 						RunAsGroup: util.Int64(2000),
 					},
 				},
-				SetupScript: "/setup.sh",
+				SecretName: "store-secret",
 			},
 		}
 
-		result := job.SetupJob(store)
+		result := deployment.WorkerDeployment(store)
 
 		// Verify security context is overwritten
 		assert.NotNil(t, result.Spec.Template.Spec.SecurityContext)
@@ -241,16 +184,46 @@ func TestSetupJob(t *testing.T) {
 				Container: v1.ContainerSpec{
 					ServiceAccountName: "container-sa",
 				},
-				SetupJobContainer: v1.ContainerMergeSpec{
-					ServiceAccountName: "setup-sa",
+				WorkerDeploymentContainer: v1.ContainerMergeSpec{
+					ServiceAccountName: "worker-sa",
 				},
-				SetupScript: "/setup.sh",
+				SecretName: "store-secret",
 			},
 		}
 
-		result := job.SetupJob(store)
+		result := deployment.WorkerDeployment(store)
 
 		// Verify service account is overwritten
-		assert.Equal(t, "setup-sa", result.Spec.Template.Spec.ServiceAccountName)
+		assert.Equal(t, "worker-sa", result.Spec.Template.Spec.ServiceAccountName)
+	})
+
+	t.Run("test worker command and args", func(t *testing.T) {
+		store := v1.Store{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-store",
+				Namespace: "test",
+			},
+			Spec: v1.StoreSpec{
+				Container: v1.ContainerSpec{
+					Image:           "shopware:latest",
+					ImagePullPolicy: "IfNotPresent",
+				},
+				SecretName: "store-secret",
+			},
+		}
+
+		result := deployment.WorkerDeployment(store)
+		container := result.Spec.Template.Spec.Containers[0]
+
+		// Verify worker command and args
+		assert.Equal(t, []string{"bin/console"}, container.Command)
+		assert.Equal(t, []string{
+			"messenger:consume",
+			"async",
+			"low_priority",
+			"failed",
+			"scheduler_shopware",
+		}, container.Args)
+		assert.Equal(t, "shopware-worker", container.Name)
 	})
 }

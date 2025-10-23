@@ -39,8 +39,8 @@ import (
 )
 
 var (
-	shortRequeue = ctrl.Result{RequeueAfter: 10 * time.Second}
-	longRequeue  = ctrl.Result{RequeueAfter: 5 * time.Minute}
+	shortRequeue = ctrl.Result{RequeueAfter: 5 * time.Second}
+	longRequeue  = ctrl.Result{RequeueAfter: 2 * time.Minute}
 )
 
 // StoreReconciler reconciles a Store object
@@ -56,9 +56,10 @@ type StoreReconciler struct {
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager, logger *zap.SugaredLogger) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1.Store{}).
+		// We get triggerd by every update on the created resources, this leeads to high reconciles at the start.
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.Service{}).
 		Owns(&networkingv1.Ingress{}).
@@ -66,8 +67,13 @@ func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.Deployment{}).
 		Owns(&batchv1.Job{}).
 		Owns(&batchv1.CronJob{}).
-		// Skip status updates of sub resources
-		WithEventFilter(SkipStatusUpdates{}).
+		// Skip status updates of all resources
+		WithEventFilter(SkipStatusUpdates{
+			Logger: logger,
+			AllowList: []client.Object{
+				&appsv1.Deployment{},
+			},
+		}).
 		// This will watch the db secret and run a reconcile if the db secret will change.
 		Watches(
 			&corev1.Secret{},
@@ -128,17 +134,7 @@ func (r *StoreReconciler) Reconcile(
 	ctx = logging.WithLogger(ctx, log)
 	log.Info("Reconciling store")
 
-	shortRequeue := ctrl.Result{RequeueAfter: 10 * time.Second}
-	longRequeue := ctrl.Result{RequeueAfter: 5 * time.Minute}
-
-	var store *v1.Store
-	defer func() {
-		if err := r.reconcileCRStatus(ctx, store, err); err != nil {
-			log.Errorw("failed to update status", zap.Error(err))
-		}
-	}()
-
-	store, err = k8s.GetStore(ctx, r.Client, req.NamespacedName)
+	store, err := k8s.GetStore(ctx, r.Client, req.NamespacedName)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return shortRequeue, nil
@@ -157,7 +153,11 @@ func (r *StoreReconciler) Reconcile(
 		return rr, nil
 	}
 
-	log.Info("Reconcile finished")
+	log.Info("Reconcile finished, run status update")
+
+	if err := r.reconcileCRStatus(ctx, store, err); err != nil {
+		log.Errorw("failed to update status", zap.Error(err))
+	}
 
 	if store.IsState(v1.StateReady) {
 		log.Info("Schedule long Reconcile")

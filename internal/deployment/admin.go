@@ -63,12 +63,12 @@ func GetAdminDeploymentCondition(
 			}
 		}
 	}
-	return getDeploymentCondition(search)
+	return getDeploymentCondition(search, *deployment.Spec.Replicas)
 }
 
 func AdminDeployment(store v1.Store) *appsv1.Deployment {
-	// Merge Overwritten adminContainer fields into container fields
-	store.Spec.Container.Merge(store.Spec.AdminDeploymentContainer)
+	containerSpec := store.Spec.Container.DeepCopy()
+	containerSpec.Merge(store.Spec.AdminDeploymentContainer)
 
 	appName := "shopware-admin"
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.AdminDeploymentContainer.Labels)
@@ -76,14 +76,17 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 
 	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.AdminDeploymentContainer.Annotations)
 
-	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
+	// Merge containerSpec.ExtraEnvs to override with merged values from AdminDeploymentContainer
+	envs := util.MergeEnv(store.GetEnv(), containerSpec.ExtraEnvs)
+
+	containers := append(containerSpec.ExtraContainers, corev1.Container{
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path: "/api/_info/health-check",
 					Port: intstr.IntOrString{
 						Type:   intstr.Int,
-						IntVal: store.Spec.Container.Port,
+						IntVal: containerSpec.Port,
 					},
 				},
 			},
@@ -96,7 +99,7 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 					Path: "/api/_info/health-check",
 					Port: intstr.IntOrString{
 						Type:   intstr.Int,
-						IntVal: store.Spec.Container.Port,
+						IntVal: containerSpec.Port,
 					},
 				},
 			},
@@ -104,17 +107,17 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 			InitialDelaySeconds: 5,
 		},
 		Name:            appName,
-		Image:           store.Spec.Container.Image,
-		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
-		Env:             store.GetEnv(),
-		VolumeMounts:    store.Spec.Container.VolumeMounts,
+		Image:           containerSpec.Image,
+		ImagePullPolicy: containerSpec.ImagePullPolicy,
+		Env:             envs,
+		VolumeMounts:    containerSpec.VolumeMounts,
 		Ports: []corev1.ContainerPort{
 			{
-				ContainerPort: store.Spec.Container.Port,
+				ContainerPort: containerSpec.Port,
 				Protocol:      corev1.ProtocolTCP,
 			},
 		},
-		Resources: store.Spec.Container.Resources,
+		Resources: containerSpec.Resources,
 	})
 
 	deployment := &appsv1.Deployment{
@@ -129,8 +132,8 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 			Annotations: annotations,
 		},
 		Spec: appsv1.DeploymentSpec{
-			ProgressDeadlineSeconds: &store.Spec.Container.ProgressDeadlineSeconds,
-			Replicas:                &store.Spec.Container.Replicas,
+			ProgressDeadlineSeconds: &containerSpec.ProgressDeadlineSeconds,
+			Replicas:                &containerSpec.Replicas,
 
 			Selector: &metav1.LabelSelector{
 				MatchLabels: util.GetAdminDeploymentMatchLabel(),
@@ -153,14 +156,14 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
-					Volumes:                   store.Spec.Container.Volumes,
-					TopologySpreadConstraints: store.Spec.Container.TopologySpreadConstraints,
-					NodeSelector:              store.Spec.Container.NodeSelector,
-					ImagePullSecrets:          store.Spec.Container.ImagePullSecrets,
-					RestartPolicy:             store.Spec.Container.RestartPolicy,
+					Volumes:                   containerSpec.Volumes,
+					TopologySpreadConstraints: containerSpec.TopologySpreadConstraints,
+					NodeSelector:              containerSpec.NodeSelector,
+					ImagePullSecrets:          containerSpec.ImagePullSecrets,
+					RestartPolicy:             containerSpec.RestartPolicy,
 					Containers:                containers,
-					SecurityContext:           store.Spec.Container.SecurityContext,
-					InitContainers:            store.Spec.Container.InitContainers,
+					SecurityContext:           containerSpec.SecurityContext,
+					InitContainers:            containerSpec.InitContainers,
 				},
 			},
 		},
@@ -171,8 +174,8 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 		deployment.Spec.Template.Spec.ServiceAccountName = store.Spec.ServiceAccountName
 	}
 	// New way
-	if store.Spec.Container.ServiceAccountName != "" {
-		deployment.Spec.Template.Spec.ServiceAccountName = store.Spec.Container.ServiceAccountName
+	if containerSpec.ServiceAccountName != "" {
+		deployment.Spec.Template.Spec.ServiceAccountName = containerSpec.ServiceAccountName
 	}
 
 	return deployment

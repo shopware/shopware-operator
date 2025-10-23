@@ -29,8 +29,8 @@ func GetSetupJob(ctx context.Context, client client.Client, store v1.Store) (*ba
 }
 
 func SetupJob(store v1.Store) *batchv1.Job {
-	// Merge Overwritten jobContainer fields into container fields
-	store.Spec.Container.Merge(store.Spec.SetupJobContainer)
+	containerSpec := store.Spec.Container.DeepCopy()
+	containerSpec.Merge(store.Spec.SetupJobContainer)
 
 	sharedProcessNamespace := true
 	backoffLimit := int32(3)
@@ -59,15 +59,18 @@ func SetupJob(store v1.Store) *batchv1.Job {
 		},
 	)
 
-	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
+	// Merge containerSpec.ExtraEnvs to override with merged values from SetupJobContainer
+	envs = util.MergeEnv(envs, containerSpec.ExtraEnvs)
+
+	containers := append(containerSpec.ExtraContainers, corev1.Container{
 		Name:            CONTAINER_NAME_SETUP_JOB,
-		VolumeMounts:    store.Spec.Container.VolumeMounts,
-		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
-		Image:           store.Spec.Container.Image,
+		VolumeMounts:    containerSpec.VolumeMounts,
+		ImagePullPolicy: containerSpec.ImagePullPolicy,
+		Image:           containerSpec.Image,
 		Command:         []string{"sh", "-c"},
 		Args:            []string{store.Spec.SetupScript},
 		Env:             envs,
-		Resources:       store.Spec.Container.Resources, // Add Resources here
+		Resources:       containerSpec.Resources, // Add Resources here
 	})
 
 	job := &batchv1.Job{
@@ -91,15 +94,15 @@ func SetupJob(store v1.Store) *batchv1.Job {
 				},
 				Spec: corev1.PodSpec{
 					ShareProcessNamespace:         &sharedProcessNamespace,
-					TerminationGracePeriodSeconds: &store.Spec.Container.TerminationGracePeriodSeconds,
-					Volumes:                       store.Spec.Container.Volumes,
-					TopologySpreadConstraints:     store.Spec.Container.TopologySpreadConstraints,
-					NodeSelector:                  store.Spec.Container.NodeSelector,
-					ImagePullSecrets:              store.Spec.Container.ImagePullSecrets,
+					TerminationGracePeriodSeconds: &containerSpec.TerminationGracePeriodSeconds,
+					Volumes:                       containerSpec.Volumes,
+					TopologySpreadConstraints:     containerSpec.TopologySpreadConstraints,
+					NodeSelector:                  containerSpec.NodeSelector,
+					ImagePullSecrets:              containerSpec.ImagePullSecrets,
 					RestartPolicy:                 "Never",
 					Containers:                    containers,
-					SecurityContext:               store.Spec.Container.SecurityContext,
-					InitContainers:                store.Spec.Container.InitContainers,
+					SecurityContext:               containerSpec.SecurityContext,
+					InitContainers:                containerSpec.InitContainers,
 				},
 			},
 		},
@@ -110,8 +113,8 @@ func SetupJob(store v1.Store) *batchv1.Job {
 		job.Spec.Template.Spec.ServiceAccountName = store.Spec.ServiceAccountName
 	}
 	// Per container way
-	if store.Spec.Container.ServiceAccountName != "" {
-		job.Spec.Template.Spec.ServiceAccountName = store.Spec.Container.ServiceAccountName
+	if containerSpec.ServiceAccountName != "" {
+		job.Spec.Template.Spec.ServiceAccountName = containerSpec.ServiceAccountName
 	}
 
 	return job

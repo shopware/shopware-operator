@@ -72,7 +72,7 @@ func (r *StoreReconciler) reconcileCRStatus(
 		store.Status.State = r.stateSetup(ctx, store)
 	}
 
-	if store.IsState(v1.StateInitializing) {
+	if store.IsState(v1.StateReady, v1.StateInitializing) {
 		store.Status.State = r.stateInitializing(ctx, store)
 		store.Status.CurrentImageTag = store.Spec.Container.Image
 	}
@@ -107,7 +107,17 @@ func (r *StoreReconciler) reconcileCRStatus(
 	store.Status.WorkerState = deployment.GetWorkerDeploymentCondition(ctx, *store, r.Client)
 	store.Status.StorefrontState = deployment.GetStorefrontDeploymentCondition(ctx, *store, r.Client)
 
-	logging.FromContext(ctx).Info("Update store status", "status", store.Status)
+	// We need to check again if the
+	if store.Status.AdminState.State != v1.DeploymentStateRunning ||
+		store.Status.WorkerState.State != v1.DeploymentStateRunning ||
+		store.Status.StorefrontState.State != v1.DeploymentStateRunning {
+
+		logging.FromContext(ctx).Info("Set store state to Initialization, because deployment scaling is not ready yet")
+		store.Status.State = v1.StateInitializing
+		store.Status.Message = "Change replicas for deployment, wait until finished"
+	}
+
+	logging.FromContext(ctx).Infow("Update store status", zap.Any("status", store.Status))
 	r.SendEvent(ctx, *store, "Update store status")
 
 	return writeStoreStatus(ctx, r.Client, types.NamespacedName{
@@ -373,38 +383,68 @@ func (r *StoreReconciler) stateInitializing(
 		Reason:             "",
 		Status:             "",
 	}
-	defer func() {
-		store.Status.AddCondition(con)
-	}()
 
-	deployment, err := deployment.GetStorefrontDeployment(ctx, *store, r.Client)
+	storefront, err := deployment.GetStorefrontDeployment(ctx, *store, r.Client)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return v1.StateInitializing
 		}
 		con.Reason = err.Error()
 		con.Status = Error
+		store.Status.AddCondition(con)
+		return v1.StateInitializing
+	}
+
+	admin, err := deployment.GetAdminDeployment(ctx, *store, r.Client)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return v1.StateInitializing
+		}
+		con.Reason = err.Error()
+		con.Status = Error
+		store.Status.AddCondition(con)
+		return v1.StateInitializing
+	}
+
+	worker, err := deployment.GetAdminDeployment(ctx, *store, r.Client)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return v1.StateInitializing
+		}
+		con.Reason = err.Error()
+		con.Status = Error
+		store.Status.AddCondition(con)
 		return v1.StateInitializing
 	}
 
 	// This can be nil, even if err is not nil :shrug:
-	if deployment == nil {
+	if storefront == nil || admin == nil || worker == nil {
+		store.Status.AddCondition(con)
 		return v1.StateInitializing
 	}
 
-	if deployment.Status.ReadyReplicas == store.Spec.Container.Replicas {
+	store.Status.AdminState = deployment.GetAdminDeploymentCondition(ctx, *store, r.Client)
+	store.Status.WorkerState = deployment.GetWorkerDeploymentCondition(ctx, *store, r.Client)
+	store.Status.StorefrontState = deployment.GetStorefrontDeploymentCondition(ctx, *store, r.Client)
+
+	if store.Status.StorefrontState.State == v1.DeploymentStateRunning &&
+		store.Status.WorkerState.State == v1.DeploymentStateRunning &&
+		store.Status.AdminState.State == v1.DeploymentStateRunning {
+
 		con.Message = "Initialization finished"
 		con.Status = Ready
 		con.LastTransitionTime = metav1.Now()
+
+		// Only update con if we are in the stateInitializing face to prevent message hopping
+		// Because this check is also run when we are ready
+		if store.Status.State != v1.StateReady {
+			store.Status.AddCondition(con)
+		}
 		return v1.StateReady
 	}
 
-	con.Message = fmt.Sprintf(
-		"Waiting for deployment to get ready. Target replicas: %d, Ready replicas: %d",
-		store.Spec.Container.Replicas,
-		deployment.Status.ReadyReplicas,
-	)
-
+	con.Message = "Waiting for deployments to get ready"
+	store.Status.AddCondition(con)
 	return v1.StateInitializing
 }
 
