@@ -107,7 +107,7 @@ func (r *StoreReconciler) reconcileCRStatus(
 	store.Status.WorkerState = deployment.GetWorkerDeploymentCondition(ctx, *store, r.Client)
 	store.Status.StorefrontState = deployment.GetStorefrontDeploymentCondition(ctx, *store, r.Client)
 
-	logging.FromContext(ctx).Info("Update store status", "status", store.Status)
+	logging.FromContext(ctx).Infow("Update store status", zap.Any("status", store.Status))
 	r.SendEvent(ctx, *store, "Update store status")
 
 	return writeStoreStatus(ctx, r.Client, types.NamespacedName{
