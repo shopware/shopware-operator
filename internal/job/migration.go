@@ -36,8 +36,8 @@ func GetMigrationJob(
 }
 
 func MigrationJob(store v1.Store) *batchv1.Job {
-	// Merge Overwritten jobContainer fields into container fields
-	store.Spec.Container.Merge(store.Spec.MigrationJobContainer)
+	containerSpec := store.Spec.Container.DeepCopy()
+	containerSpec.Merge(store.Spec.MigrationJobContainer)
 
 	backoffLimit := int32(3)
 	sharedProcessNamespace := true
@@ -48,16 +48,19 @@ func MigrationJob(store v1.Store) *batchv1.Job {
 
 	annotations := util.GetDefaultContainerAnnotations(CONTAINER_NAME_MIGRATION_JOB, store, store.Spec.MigrationJobContainer.Annotations)
 	annotations["shop.shopware.com/store.oldImage"] = store.Status.CurrentImageTag
-	annotations["shop.shopware.com/store.newImage"] = store.Spec.Container.Image
+	annotations["shop.shopware.com/store.newImage"] = containerSpec.Image
 
-	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
+	// Merge containerSpec.ExtraEnvs to override with merged values from MigrationJobContainer
+	envs := util.MergeEnv(store.GetEnv(), containerSpec.ExtraEnvs)
+
+	containers := append(containerSpec.ExtraContainers, corev1.Container{
 		Name:            CONTAINER_NAME_MIGRATION_JOB,
-		VolumeMounts:    store.Spec.Container.VolumeMounts,
-		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
-		Image:           store.Spec.Container.Image,
+		VolumeMounts:    containerSpec.VolumeMounts,
+		ImagePullPolicy: containerSpec.ImagePullPolicy,
+		Image:           containerSpec.Image,
 		Command:         []string{"sh", "-c"},
 		Args:            []string{store.Spec.MigrationScript},
-		Env:             store.GetEnv(),
+		Env:             envs,
 	})
 
 	job := &batchv1.Job{
@@ -81,15 +84,15 @@ func MigrationJob(store v1.Store) *batchv1.Job {
 				},
 				Spec: corev1.PodSpec{
 					ShareProcessNamespace:         &sharedProcessNamespace,
-					Volumes:                       store.Spec.Container.Volumes,
-					TopologySpreadConstraints:     store.Spec.Container.TopologySpreadConstraints,
-					TerminationGracePeriodSeconds: &store.Spec.Container.TerminationGracePeriodSeconds,
-					NodeSelector:                  store.Spec.Container.NodeSelector,
-					ImagePullSecrets:              store.Spec.Container.ImagePullSecrets,
+					Volumes:                       containerSpec.Volumes,
+					TopologySpreadConstraints:     containerSpec.TopologySpreadConstraints,
+					TerminationGracePeriodSeconds: &containerSpec.TerminationGracePeriodSeconds,
+					NodeSelector:                  containerSpec.NodeSelector,
+					ImagePullSecrets:              containerSpec.ImagePullSecrets,
 					RestartPolicy:                 "Never",
 					Containers:                    containers,
-					SecurityContext:               store.Spec.Container.SecurityContext,
-					InitContainers:                store.Spec.Container.InitContainers,
+					SecurityContext:               containerSpec.SecurityContext,
+					InitContainers:                containerSpec.InitContainers,
 				},
 			},
 		},
@@ -100,8 +103,8 @@ func MigrationJob(store v1.Store) *batchv1.Job {
 		job.Spec.Template.Spec.ServiceAccountName = store.Spec.ServiceAccountName
 	}
 	// Per container way
-	if store.Spec.Container.ServiceAccountName != "" {
-		job.Spec.Template.Spec.ServiceAccountName = store.Spec.Container.ServiceAccountName
+	if containerSpec.ServiceAccountName != "" {
+		job.Spec.Template.Spec.ServiceAccountName = containerSpec.ServiceAccountName
 	}
 
 	return job

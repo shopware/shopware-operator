@@ -158,6 +158,10 @@ func TestSetupJob(t *testing.T) {
 							Name:  "SETUP_ENV",
 							Value: "value",
 						},
+						{
+							Name:  "CONTAINER_ENV",
+							Value: "overwritten",
+						},
 					},
 				},
 				SetupScript: "/setup.sh",
@@ -183,14 +187,19 @@ func TestSetupJob(t *testing.T) {
 
 		// Verify env vars are replaced
 		hasSetupEnv := false
+		hasContainerEnv := false
 		for _, env := range container.Env {
 			if env.Name == "SETUP_ENV" {
 				hasSetupEnv = true
 				assert.Equal(t, "value", env.Value)
 			}
-			assert.NotEqual(t, "CONTAINER_ENV", env.Name, "Container env should be replaced")
+			if env.Name == "CONTAINER_ENV" {
+				hasContainerEnv = true
+				assert.Equal(t, "overwritten", env.Value)
+			}
 		}
 		assert.True(t, hasSetupEnv, "Setup env var should be present")
+		assert.True(t, hasContainerEnv, "container env var should be present")
 	})
 
 	t.Run("test container security context merge", func(t *testing.T) {

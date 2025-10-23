@@ -50,9 +50,6 @@ func GetCommandCronJob(
 }
 
 func CommandCronJob(store v1.Store, ex v1.StoreExec) *batchv1.CronJob {
-	// Copy container spec from store to exec
-	store.Spec.Container.DeepCopyInto(&ex.Spec.Container)
-
 	labels := util.GetDefaultStoreExecLabels(store, ex)
 	labels["shop.shopware.com/storeexec.type"] = "command"
 	annotations := util.GetDefaultContainerExecAnnotations(CONTAINER_NAME_COMMAND, ex)
@@ -116,15 +113,16 @@ func CommandJobName(exec v1.StoreExec) string {
 }
 
 func getJobSpec(store v1.Store, ex v1.StoreExec, labels map[string]string) batchv1.JobSpec {
+	containerSpec := store.Spec.Container.DeepCopy()
 	sharedProcessNamespace := true
 
 	envs := util.MergeEnv(store.GetEnv(), ex.Spec.ExtraEnvs)
 
-	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
+	containers := append(containerSpec.ExtraContainers, corev1.Container{
 		Name:            CONTAINER_NAME_COMMAND,
-		VolumeMounts:    store.Spec.Container.VolumeMounts,
-		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
-		Image:           store.Spec.Container.Image,
+		VolumeMounts:    containerSpec.VolumeMounts,
+		ImagePullPolicy: containerSpec.ImagePullPolicy,
+		Image:           containerSpec.Image,
 		Command:         []string{"sh", "-c"},
 		Args:            []string{ex.Spec.Script},
 		Env:             envs,
@@ -136,8 +134,8 @@ func getJobSpec(store v1.Store, ex v1.StoreExec, labels map[string]string) batch
 		sa = store.Spec.ServiceAccountName
 	}
 	// Per container way
-	if store.Spec.Container.ServiceAccountName != "" {
-		sa = store.Spec.Container.ServiceAccountName
+	if containerSpec.ServiceAccountName != "" {
+		sa = containerSpec.ServiceAccountName
 	}
 
 	return batchv1.JobSpec{
@@ -150,15 +148,15 @@ func getJobSpec(store v1.Store, ex v1.StoreExec, labels map[string]string) batch
 			Spec: corev1.PodSpec{
 				ServiceAccountName:            sa,
 				ShareProcessNamespace:         &sharedProcessNamespace,
-				Volumes:                       store.Spec.Container.Volumes,
-				TopologySpreadConstraints:     store.Spec.Container.TopologySpreadConstraints,
-				TerminationGracePeriodSeconds: &store.Spec.Container.TerminationGracePeriodSeconds,
-				NodeSelector:                  store.Spec.Container.NodeSelector,
-				ImagePullSecrets:              store.Spec.Container.ImagePullSecrets,
+				Volumes:                       containerSpec.Volumes,
+				TopologySpreadConstraints:     containerSpec.TopologySpreadConstraints,
+				TerminationGracePeriodSeconds: &containerSpec.TerminationGracePeriodSeconds,
+				NodeSelector:                  containerSpec.NodeSelector,
+				ImagePullSecrets:              containerSpec.ImagePullSecrets,
 				RestartPolicy:                 "Never",
 				Containers:                    containers,
-				SecurityContext:               store.Spec.Container.SecurityContext,
-				InitContainers:                store.Spec.Container.InitContainers,
+				SecurityContext:               containerSpec.SecurityContext,
+				InitContainers:                containerSpec.InitContainers,
 			},
 		},
 	}

@@ -67,8 +67,8 @@ func GetWorkerDeploymentCondition(
 }
 
 func WorkerDeployment(store v1.Store) *appsv1.Deployment {
-	// Merge Overwritten storefrontContainer fields into container fields
-	store.Spec.Container.Merge(store.Spec.WorkerDeploymentContainer)
+	containerSpec := store.Spec.Container.DeepCopy()
+	containerSpec.Merge(store.Spec.WorkerDeploymentContainer)
 
 	appName := "shopware-worker"
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.WorkerDeploymentContainer.Labels)
@@ -76,11 +76,14 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 
 	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.WorkerDeploymentContainer.Annotations)
 
-	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
+	// Merge containerSpec.ExtraEnvs to override with merged values from WorkerDeploymentContainer
+	envs := util.MergeEnv(store.GetEnv(), containerSpec.ExtraEnvs)
+
+	containers := append(containerSpec.ExtraContainers, corev1.Container{
 		Name:            appName,
-		Image:           store.Spec.Container.Image,
-		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
-		Env:             store.GetEnv(),
+		Image:           containerSpec.Image,
+		ImagePullPolicy: containerSpec.ImagePullPolicy,
+		Env:             envs,
 		Command: []string{
 			"bin/console",
 		},
@@ -91,14 +94,14 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 			"failed",
 			"scheduler_shopware",
 		},
-		VolumeMounts: store.Spec.Container.VolumeMounts,
+		VolumeMounts: containerSpec.VolumeMounts,
 		Ports: []corev1.ContainerPort{
 			{
-				ContainerPort: store.Spec.Container.Port,
+				ContainerPort: containerSpec.Port,
 				Protocol:      corev1.ProtocolTCP,
 			},
 		},
-		Resources: store.Spec.Container.Resources,
+		Resources: containerSpec.Resources,
 	})
 
 	deployment := &appsv1.Deployment{
@@ -113,8 +116,8 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 			Annotations: annotations,
 		},
 		Spec: appsv1.DeploymentSpec{
-			ProgressDeadlineSeconds: &store.Spec.Container.ProgressDeadlineSeconds,
-			Replicas:                &store.Spec.Container.Replicas,
+			ProgressDeadlineSeconds: &containerSpec.ProgressDeadlineSeconds,
+			Replicas:                &containerSpec.Replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: util.GetWorkerDeploymentMatchLabel(),
 			},
@@ -136,14 +139,14 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
-					Volumes:                   store.Spec.Container.Volumes,
-					TopologySpreadConstraints: store.Spec.Container.TopologySpreadConstraints,
-					NodeSelector:              store.Spec.Container.NodeSelector,
-					ImagePullSecrets:          store.Spec.Container.ImagePullSecrets,
-					RestartPolicy:             store.Spec.Container.RestartPolicy,
+					Volumes:                   containerSpec.Volumes,
+					TopologySpreadConstraints: containerSpec.TopologySpreadConstraints,
+					NodeSelector:              containerSpec.NodeSelector,
+					ImagePullSecrets:          containerSpec.ImagePullSecrets,
+					RestartPolicy:             containerSpec.RestartPolicy,
 					Containers:                containers,
-					SecurityContext:           store.Spec.Container.SecurityContext,
-					InitContainers:            store.Spec.Container.InitContainers,
+					SecurityContext:           containerSpec.SecurityContext,
+					InitContainers:            containerSpec.InitContainers,
 				},
 			},
 		},
@@ -154,8 +157,8 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 		deployment.Spec.Template.Spec.ServiceAccountName = store.Spec.ServiceAccountName
 	}
 	// New way
-	if store.Spec.Container.ServiceAccountName != "" {
-		deployment.Spec.Template.Spec.ServiceAccountName = store.Spec.Container.ServiceAccountName
+	if containerSpec.ServiceAccountName != "" {
+		deployment.Spec.Template.Spec.ServiceAccountName = containerSpec.ServiceAccountName
 	}
 
 	return deployment
