@@ -13,13 +13,37 @@ import (
 
 func getDeploymentCondition(
 	deployment *appsv1.Deployment,
+	storeReplicas int32,
 ) v1.DeploymentCondition {
-	if deployment.Status.AvailableReplicas >= deployment.Status.Replicas {
+	if deployment.Status.AvailableReplicas == deployment.Status.Replicas {
+
+		// This happens if you use a hpa or scaling the deployment manually
+		if deployment.Status.AvailableReplicas != storeReplicas {
+			return v1.DeploymentCondition{
+				State:          v1.DeploymentStateRunning,
+				LastUpdateTime: metav1.Now(),
+				Message:        "Deployment is running, but has own scaling",
+				Ready:          fmt.Sprintf("%d/%d", deployment.Status.AvailableReplicas, storeReplicas),
+				StoreReplicas:  storeReplicas,
+			}
+		}
+
 		return v1.DeploymentCondition{
 			State:          v1.DeploymentStateRunning,
 			LastUpdateTime: metav1.Now(),
 			Message:        "Deployment is running",
-			Ready:          fmt.Sprintf("%d/%d", deployment.Status.AvailableReplicas, deployment.Status.Replicas),
+			Ready:          fmt.Sprintf("%d/%d", deployment.Status.AvailableReplicas, storeReplicas),
+			StoreReplicas:  storeReplicas,
+		}
+	}
+
+	if deployment.Status.AvailableReplicas != deployment.Status.Replicas {
+		return v1.DeploymentCondition{
+			State:          v1.DeploymentStateScaling,
+			LastUpdateTime: metav1.Now(),
+			Message:        "Deployment is scaling",
+			Ready:          fmt.Sprintf("%d/%d", deployment.Status.AvailableReplicas, storeReplicas),
+			StoreReplicas:  storeReplicas,
 		}
 	}
 
@@ -28,7 +52,8 @@ func getDeploymentCondition(
 			State:          v1.DeploymentStateError,
 			LastUpdateTime: metav1.Now(),
 			Message:        "Deployment has UnavailableReplicas",
-			Ready:          fmt.Sprintf("%d/%d", deployment.Status.AvailableReplicas, deployment.Status.Replicas),
+			Ready:          fmt.Sprintf("%d/%d", deployment.Status.AvailableReplicas, storeReplicas),
+			StoreReplicas:  storeReplicas,
 		}
 	}
 
@@ -39,6 +64,7 @@ func getDeploymentCondition(
 		LastUpdateTime: metav1.Now(),
 		Message:        "Unknown state of the deployment",
 		Ready:          "0/0",
+		StoreReplicas:  storeReplicas,
 	}
 }
 

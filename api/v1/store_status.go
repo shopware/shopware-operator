@@ -29,6 +29,7 @@ const (
 	DeploymentStateError    DeploymentState = "error"
 	DeploymentStateNotFound DeploymentState = "not-found"
 	DeploymentStateRunning  DeploymentState = "running"
+	DeploymentStateScaling  DeploymentState = "scaling"
 )
 
 type StoreCondition struct {
@@ -49,6 +50,7 @@ type DeploymentCondition struct {
 	LastUpdateTime metav1.Time     `json:"lastUpdatedTime,omitempty"`
 	Message        string          `json:"message,omitempty"`
 	Ready          string          `json:"ready,omitempty"`
+	StoreReplicas  int32           `json:"storeReplicas,omitempty"`
 }
 
 type StoreStatus struct {

@@ -63,7 +63,7 @@ func GetWorkerDeploymentCondition(
 			}
 		}
 	}
-	return getDeploymentCondition(search)
+	return getDeploymentCondition(search, *deployment.Spec.Replicas)
 }
 
 func WorkerDeployment(store v1.Store) *appsv1.Deployment {

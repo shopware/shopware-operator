@@ -65,7 +65,7 @@ func GetStorefrontDeploymentCondition(
 			}
 		}
 	}
-	return getDeploymentCondition(search)
+	return getDeploymentCondition(search, *deployment.Spec.Replicas)
 }
 
 func StorefrontDeployment(store v1.Store) *appsv1.Deployment {

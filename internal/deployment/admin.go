@@ -63,7 +63,7 @@ func GetAdminDeploymentCondition(
 			}
 		}
 	}
-	return getDeploymentCondition(search)
+	return getDeploymentCondition(search, *deployment.Spec.Replicas)
 }
 
 func AdminDeployment(store v1.Store) *appsv1.Deployment {
