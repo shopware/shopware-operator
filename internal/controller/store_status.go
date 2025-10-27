@@ -107,16 +107,6 @@ func (r *StoreReconciler) reconcileCRStatus(
 	store.Status.WorkerState = deployment.GetWorkerDeploymentCondition(ctx, *store, r.Client)
 	store.Status.StorefrontState = deployment.GetStorefrontDeploymentCondition(ctx, *store, r.Client)
 
-	// We need to check again if the
-	if store.Status.AdminState.State != v1.DeploymentStateRunning ||
-		store.Status.WorkerState.State != v1.DeploymentStateRunning ||
-		store.Status.StorefrontState.State != v1.DeploymentStateRunning {
-
-		logging.FromContext(ctx).Info("Set store state to Initialization, because deployment scaling is not ready yet")
-		store.Status.State = v1.StateInitializing
-		store.Status.Message = "Change replicas for deployment, wait until finished"
-	}
-
 	logging.FromContext(ctx).Infow("Update store status", zap.Any("status", store.Status))
 	r.SendEvent(ctx, *store, "Update store status")
 
