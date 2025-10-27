@@ -108,11 +108,17 @@ func init() {
 }
 
 type Configuration struct {
-	Currency string `json:"currency"`
-	Locale   string `json:"locale"`
+	Currency string     `json:"currency"`
+	Locale   string     `json:"locale"`
+	Fastly   FastlySpec `json:"fastly,omitempty"`
 
 	// +kubebuilder:validation:Enum=revoked;allowed
 	UsageDataConsent string `json:"usageDataConsent"`
+}
+
+type FastlySpec struct {
+	ApiTokenSecretRef SecretRef `json:"apiTokenSecretRef"`
+	ServiceID         string    `json:"serviceID"`
 }
 
 type Credentials struct {
