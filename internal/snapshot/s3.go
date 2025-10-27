@@ -342,7 +342,12 @@ func (s *SnapshotService) uploadToS3(ctx context.Context, cfg *config.SnapshotCo
 	}
 
 	_, err = minioClient.PutObject(ctx, bucket, objectFile, reader, -1,
-		minio.PutObjectOptions{ContentType: contentType})
+		minio.PutObjectOptions{
+			ContentType: contentType,
+			UserTags: map[string]string{
+				"object-type": "store-snapshot-backup",
+			},
+		})
 	if err != nil {
 		return fmt.Errorf("failed to upload to s3: %w", err)
 	}
