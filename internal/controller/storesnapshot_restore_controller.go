@@ -36,10 +36,14 @@ type StoreSnapshotRestoreReconciler struct {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *StoreSnapshotRestoreReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	skipStatusUpdates, err := NewSkipStatusUpdates(r.Logger)
+	if err != nil {
+		return err
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1.StoreSnapshotRestore{}).
 		Owns(&batchv1.Job{}).
-		WithEventFilter(SkipStatusUpdates{}).
+		WithEventFilter(skipStatusUpdates).
 		Complete(r)
 }
 

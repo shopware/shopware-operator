@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"errors"
 	"reflect"
 
 	"github.com/pmezard/go-difflib/difflib"
@@ -12,6 +13,18 @@ import (
 )
 
 type SkipStatusUpdates = TypedSkipStatusPredicate[client.Object]
+
+// NewSkipStatusUpdates creates a new SkipStatusUpdates predicate with the given logger and allow list.
+// The logger is required to prevent nil pointer panics during logging operations.
+func NewSkipStatusUpdates(logger *zap.SugaredLogger, allowList ...client.Object) (SkipStatusUpdates, error) {
+	if logger == nil {
+		return SkipStatusUpdates{}, errors.New("logger is required")
+	}
+	return TypedSkipStatusPredicate[client.Object]{
+		Logger:    logger,
+		AllowList: allowList,
+	}, nil
+}
 
 // TypedSkipStatusPredicate filters out status-only updates.
 type TypedSkipStatusPredicate[object client.Object] struct {
@@ -39,39 +52,41 @@ func (t TypedSkipStatusPredicate[object]) Update(e event.TypedUpdateEvent[object
 	}
 
 	defer func() {
-		if update {
-			// Log the update trigger
-			t.Logger.Debugw("Update trigger",
-				zap.Bool("triggerReconcile", update),
-				zap.String("name", e.ObjectNew.GetName()),
-				zap.String("kind", kind),
-			)
+		if t.Logger == nil || !update {
+			return
+		}
 
-			// Generate and log status diff
-			statusDiff := difflib.UnifiedDiff{
-				A:        difflib.SplitLines(string(oldStatusJson)),
-				B:        difflib.SplitLines(string(newStatusJson)),
-				FromFile: "Old Status",
-				ToFile:   "New Status",
-				Context:  3,
-			}
-			statusDiffText, _ := difflib.GetUnifiedDiffString(statusDiff)
-			if statusDiffText != "" {
-				t.Logger.Debugf("Status diff: \n%s", statusDiffText)
-			}
+		// Log the update trigger
+		t.Logger.Debugw("Update trigger",
+			zap.Bool("triggerReconcile", update),
+			zap.String("name", e.ObjectNew.GetName()),
+			zap.String("kind", kind),
+		)
 
-			// Generate and log spec diff
-			specDiff := difflib.UnifiedDiff{
-				A:        difflib.SplitLines(string(oldObjectJson)),
-				B:        difflib.SplitLines(string(newObjectJson)),
-				FromFile: "Old Spec",
-				ToFile:   "New Spec",
-				Context:  3,
-			}
-			specDiffText, _ := difflib.GetUnifiedDiffString(specDiff)
-			if specDiffText != "" {
-				t.Logger.Debugf("Spec Diff: \n%s", specDiffText)
-			}
+		// Generate and log status diff
+		statusDiff := difflib.UnifiedDiff{
+			A:        difflib.SplitLines(string(oldStatusJson)),
+			B:        difflib.SplitLines(string(newStatusJson)),
+			FromFile: "Old Status",
+			ToFile:   "New Status",
+			Context:  3,
+		}
+		statusDiffText, _ := difflib.GetUnifiedDiffString(statusDiff)
+		if statusDiffText != "" {
+			t.Logger.Debugf("Status diff: \n%s", statusDiffText)
+		}
+
+		// Generate and log spec diff
+		specDiff := difflib.UnifiedDiff{
+			A:        difflib.SplitLines(string(oldObjectJson)),
+			B:        difflib.SplitLines(string(newObjectJson)),
+			FromFile: "Old Spec",
+			ToFile:   "New Spec",
+			Context:  3,
+		}
+		specDiffText, _ := difflib.GetUnifiedDiffString(specDiff)
+		if specDiffText != "" {
+			t.Logger.Debugf("Spec Diff: \n%s", specDiffText)
 		}
 	}()
 	if isNil(e.ObjectOld) || isNil(e.ObjectNew) {
@@ -82,11 +97,11 @@ func (t TypedSkipStatusPredicate[object]) Update(e event.TypedUpdateEvent[object
 	newSpec, okNew := getSpec(e.ObjectNew)
 	if okOld && okNew {
 		oldObjectJson, err = json.MarshalIndent(oldSpec, "", "  ")
-		if err != nil {
+		if t.Logger != nil && err != nil {
 			t.Logger.Warnw("parse old spec json", zap.Error(err))
 		}
 		newObjectJson, err = json.MarshalIndent(newSpec, "", "  ")
-		if err != nil {
+		if t.Logger != nil && err != nil {
 			t.Logger.Warnw("parse new spec json", zap.Error(err))
 		}
 	}
@@ -99,11 +114,11 @@ func (t TypedSkipStatusPredicate[object]) Update(e event.TypedUpdateEvent[object
 	}
 
 	oldStatusJson, err = json.MarshalIndent(oldStatus, "", "  ")
-	if err != nil {
+	if t.Logger != nil && err != nil {
 		t.Logger.Warnw("parse old status json", zap.Error(err))
 	}
 	newStatusJson, err = json.MarshalIndent(newStatus, "", "  ")
-	if err != nil {
+	if t.Logger != nil && err != nil {
 		t.Logger.Warnw("parse new status json", zap.Error(err))
 	}
 
