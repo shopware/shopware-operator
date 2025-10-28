@@ -38,10 +38,14 @@ type StoreSnapshotCreateReconciler struct {
 // TODO: Filter if the state is failed or succeeded, because then we don't reconcile finished snapshots
 // SetupWithManager sets up the controller with the Manager.
 func (r *StoreSnapshotCreateReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	skipStatusUpdates, err := NewSkipStatusUpdates(r.Logger)
+	if err != nil {
+		return err
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1.StoreSnapshotCreate{}).
 		Owns(&batchv1.Job{}).
-		WithEventFilter(NewSkipStatusUpdates(r.Logger)).
+		WithEventFilter(skipStatusUpdates).
 		Complete(r)
 }
 

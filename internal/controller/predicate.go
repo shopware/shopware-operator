@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"errors"
 	"reflect"
 
 	"github.com/pmezard/go-difflib/difflib"
@@ -15,11 +16,14 @@ type SkipStatusUpdates = TypedSkipStatusPredicate[client.Object]
 
 // NewSkipStatusUpdates creates a new SkipStatusUpdates predicate with the given logger and allow list.
 // The logger is required to prevent nil pointer panics during logging operations.
-func NewSkipStatusUpdates(logger *zap.SugaredLogger, allowList ...client.Object) SkipStatusUpdates {
+func NewSkipStatusUpdates(logger *zap.SugaredLogger, allowList ...client.Object) (SkipStatusUpdates, error) {
+	if logger == nil {
+		return SkipStatusUpdates{}, errors.New("logger is required")
+	}
 	return TypedSkipStatusPredicate[client.Object]{
 		Logger:    logger,
 		AllowList: allowList,
-	}
+	}, nil
 }
 
 // TypedSkipStatusPredicate filters out status-only updates.
