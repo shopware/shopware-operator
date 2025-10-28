@@ -68,12 +68,7 @@ func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager, logger *zap.Sugared
 		Owns(&batchv1.Job{}).
 		Owns(&batchv1.CronJob{}).
 		// Skip status updates of all resources
-		WithEventFilter(SkipStatusUpdates{
-			Logger: logger,
-			AllowList: []client.Object{
-				&appsv1.Deployment{},
-			},
-		}).
+		WithEventFilter(NewSkipStatusUpdates(logger, &appsv1.Deployment{})).
 		// This will watch the db secret and run a reconcile if the db secret will change.
 		Watches(
 			&corev1.Secret{},

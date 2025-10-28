@@ -41,7 +41,7 @@ func (r *StoreSnapshotCreateReconciler) SetupWithManager(mgr ctrl.Manager) error
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1.StoreSnapshotCreate{}).
 		Owns(&batchv1.Job{}).
-		WithEventFilter(SkipStatusUpdates{}).
+		WithEventFilter(NewSkipStatusUpdates(r.Logger)).
 		Complete(r)
 }
 

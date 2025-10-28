@@ -13,6 +13,15 @@ import (
 
 type SkipStatusUpdates = TypedSkipStatusPredicate[client.Object]
 
+// NewSkipStatusUpdates creates a new SkipStatusUpdates predicate with the given logger and allow list.
+// The logger is required to prevent nil pointer panics during logging operations.
+func NewSkipStatusUpdates(logger *zap.SugaredLogger, allowList ...client.Object) SkipStatusUpdates {
+	return TypedSkipStatusPredicate[client.Object]{
+		Logger:    logger,
+		AllowList: allowList,
+	}
+}
+
 // TypedSkipStatusPredicate filters out status-only updates.
 type TypedSkipStatusPredicate[object client.Object] struct {
 	predicate.TypedFuncs[object]
@@ -39,7 +48,7 @@ func (t TypedSkipStatusPredicate[object]) Update(e event.TypedUpdateEvent[object
 	}
 
 	defer func() {
-		if update {
+		if update && t.Logger != nil {
 			// Log the update trigger
 			t.Logger.Debugw("Update trigger",
 				zap.Bool("triggerReconcile", update),
@@ -56,7 +65,7 @@ func (t TypedSkipStatusPredicate[object]) Update(e event.TypedUpdateEvent[object
 				Context:  3,
 			}
 			statusDiffText, _ := difflib.GetUnifiedDiffString(statusDiff)
-			if statusDiffText != "" {
+			if statusDiffText != "" && t.Logger != nil {
 				t.Logger.Debugf("Status diff: \n%s", statusDiffText)
 			}
 
@@ -69,7 +78,7 @@ func (t TypedSkipStatusPredicate[object]) Update(e event.TypedUpdateEvent[object
 				Context:  3,
 			}
 			specDiffText, _ := difflib.GetUnifiedDiffString(specDiff)
-			if specDiffText != "" {
+			if specDiffText != "" && t.Logger != nil {
 				t.Logger.Debugf("Spec Diff: \n%s", specDiffText)
 			}
 		}
@@ -82,11 +91,11 @@ func (t TypedSkipStatusPredicate[object]) Update(e event.TypedUpdateEvent[object
 	newSpec, okNew := getSpec(e.ObjectNew)
 	if okOld && okNew {
 		oldObjectJson, err = json.MarshalIndent(oldSpec, "", "  ")
-		if err != nil {
+		if err != nil && t.Logger != nil {
 			t.Logger.Warnw("parse old spec json", zap.Error(err))
 		}
 		newObjectJson, err = json.MarshalIndent(newSpec, "", "  ")
-		if err != nil {
+		if err != nil && t.Logger != nil {
 			t.Logger.Warnw("parse new spec json", zap.Error(err))
 		}
 	}
@@ -99,11 +108,11 @@ func (t TypedSkipStatusPredicate[object]) Update(e event.TypedUpdateEvent[object
 	}
 
 	oldStatusJson, err = json.MarshalIndent(oldStatus, "", "  ")
-	if err != nil {
+	if err != nil && t.Logger != nil {
 		t.Logger.Warnw("parse old status json", zap.Error(err))
 	}
 	newStatusJson, err = json.MarshalIndent(newStatus, "", "  ")
-	if err != nil {
+	if err != nil && t.Logger != nil {
 		t.Logger.Warnw("parse new status json", zap.Error(err))
 	}
 
