@@ -136,7 +136,8 @@ func (r *StoreReconciler) Reconcile(
 	store, err := k8s.GetStore(ctx, r.Client, req.NamespacedName)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			return shortRequeue, nil
+			log.Info("Don't reconcile anymore, because resource was not found")
+			return ctrl.Result{Requeue: false}, nil
 		}
 		log.Errorw("get CR", zap.Error(err))
 		return rr, nil
