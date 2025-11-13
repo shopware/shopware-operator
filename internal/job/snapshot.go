@@ -99,7 +99,7 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 			APIVersion: "batch/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        SnapshotJobName(store, meta, subCommand),
+			Name:        SnapshotJobName(meta, subCommand),
 			Namespace:   meta.Namespace,
 			Labels:      labels,
 			Annotations: annotations,
@@ -130,8 +130,8 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 	return job
 }
 
-func SnapshotJobName(store v1.Store, snap metav1.ObjectMeta, subCommand string) string {
-	return fmt.Sprintf("%s-snapshot-%s-%s", store.Name, subCommand, snap.Name)
+func SnapshotJobName(snap metav1.ObjectMeta, subCommand string) string {
+	return fmt.Sprintf("snapshot-%s-%s", subCommand, snap.Name)
 }
 
 func IsSnapshotJobCompleted(
