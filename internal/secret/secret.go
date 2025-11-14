@@ -17,6 +17,10 @@ import (
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -26,7 +30,115 @@ const (
 	rsaKeySize = 2024
 )
 
-func GenerateStoreSecret(ctx context.Context, store *v1.Store, secret *corev1.Secret, dbSpec *util.DatabaseSpec, esp []byte) error {
+type EventRecorder interface {
+	Event(object runtime.Object, eventType, reason, message string)
+}
+
+func EnsureStoreSecret(ctx context.Context, r client.Client, recorder EventRecorder, store *v1.Store) (*corev1.Secret, error) {
+	if store.Spec.Database.Host == "" && store.Spec.Database.HostRef.Name == "" {
+		return nil, fmt.Errorf("database host is empty for store %s. Either set host or a hostRef", store.Name)
+	}
+
+	if store.Spec.OpensearchSpec.Enabled && (store.Spec.OpensearchSpec.PasswordSecretRef.Name == "" || store.Spec.OpensearchSpec.PasswordSecretRef.Key == "") {
+		return nil, fmt.Errorf("opensearch is enabled but passwordSecretRef key or name is empty for store %s", store.Name)
+	}
+
+	// Validate Fastly configuration: if ServiceRef is provided, TokenRef must also be provided
+	if (store.Spec.ShopConfiguration.Fastly.ServiceRef.Name != "" || store.Spec.ShopConfiguration.Fastly.ServiceRef.Key != "") &&
+		(store.Spec.ShopConfiguration.Fastly.TokenRef.Name == "" || store.Spec.ShopConfiguration.Fastly.TokenRef.Key == "") {
+		return nil, fmt.Errorf("fastly apiTokenSecretRef key or name is empty for store %s. Unset the fastlyServiceID or provide a secret", store.Name)
+	}
+
+	var opensearchPassword []byte
+	if store.Spec.OpensearchSpec.Enabled {
+		es := new(corev1.Secret)
+		if err := r.Get(ctx, types.NamespacedName{
+			Namespace: store.Namespace,
+			Name:      store.Spec.OpensearchSpec.PasswordSecretRef.Name,
+		}, es); err != nil {
+			if k8serrors.IsNotFound(err) {
+				recorder.Event(store, "Warning", "Opensearch secret not found",
+					fmt.Sprintf("Missing opensearch secret for Store %s in namespace %s",
+						store.Name,
+						store.Namespace))
+				return nil, fmt.Errorf("can't find opensearch secret: %w", err)
+			}
+			return nil, fmt.Errorf("can't read opensearch secret: %w", err)
+		}
+		opensearchPassword = es.Data[store.Spec.OpensearchSpec.PasswordSecretRef.Key]
+	}
+
+	var fastlyToken []byte
+	if store.Spec.ShopConfiguration.Fastly.TokenRef.Name != "" && store.Spec.ShopConfiguration.Fastly.TokenRef.Key != "" {
+		fastlyTokenSecret := new(corev1.Secret)
+		if err := r.Get(ctx, types.NamespacedName{
+			Namespace: store.Namespace,
+			Name:      store.Spec.ShopConfiguration.Fastly.TokenRef.Name,
+		}, fastlyTokenSecret); err != nil {
+			if k8serrors.IsNotFound(err) {
+				recorder.Event(store, "Warning", "Fastly secret not found",
+					fmt.Sprintf("Missing Fastly secret for Store %s in namespace %s",
+						store.Name,
+						store.Namespace))
+				return nil, fmt.Errorf("can't find Fastly secret: %w", err)
+			}
+			return nil, fmt.Errorf("can't read Fastly secret: %w", err)
+		}
+		fastlyToken = fastlyTokenSecret.Data[store.Spec.ShopConfiguration.Fastly.TokenRef.Key]
+	}
+
+	var fastlyServiceID []byte
+	if store.Spec.ShopConfiguration.Fastly.ServiceRef.Name != "" && store.Spec.ShopConfiguration.Fastly.ServiceRef.Key != "" {
+		fastlyServiceIDSecret := new(corev1.Secret)
+		if err := r.Get(ctx, types.NamespacedName{
+			Namespace: store.Namespace,
+			Name:      store.Spec.ShopConfiguration.Fastly.ServiceRef.Name,
+		}, fastlyServiceIDSecret); err != nil {
+			if k8serrors.IsNotFound(err) {
+				recorder.Event(store, "Warning", "Fastly secret not found",
+					fmt.Sprintf("Missing Fastly secret for Store %s in namespace %s",
+						store.Name,
+						store.Namespace))
+				return nil, fmt.Errorf("can't find Fastly secret: %w", err)
+			}
+			return nil, fmt.Errorf("can't read Fastly secret: %w", err)
+		}
+		fastlyServiceID = fastlyServiceIDSecret.Data[store.Spec.ShopConfiguration.Fastly.ServiceRef.Key]
+	}
+
+	dbSpec, err := util.GetDBSpec(ctx, *store, r)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			recorder.Event(store, "Warning", "DB secret not found",
+				fmt.Sprintf("Missing database secret for Store %s in namespace %s: %s",
+					store.Name,
+					store.Namespace,
+					err.Error()))
+			return nil, fmt.Errorf("can't find database secret: %w", err)
+		}
+		return nil, fmt.Errorf("can't read database secret: %w", err)
+	}
+
+	nn := types.NamespacedName{
+		Namespace: store.Namespace,
+		Name:      store.GetSecretName(),
+	}
+
+	storeSecret := new(corev1.Secret)
+	if err = r.Get(ctx, nn, storeSecret); client.IgnoreNotFound(err) != nil {
+		return nil, fmt.Errorf("get store secret: %w", err)
+	}
+
+	if err = GenerateStoreSecret(ctx, store, storeSecret, dbSpec, opensearchPassword, fastlyServiceID, fastlyToken); err != nil {
+		return nil, fmt.Errorf("fill store secret: %w", err)
+	}
+	storeSecret.Name = store.GetSecretName()
+	storeSecret.Namespace = store.Namespace
+
+	return storeSecret, nil
+}
+
+func GenerateStoreSecret(ctx context.Context, store *v1.Store, secret *corev1.Secret, dbSpec *util.DatabaseSpec, opensearchPassword []byte, fastlyServiceID []byte, fastlyToken []byte) error {
 	if secret.Data == nil {
 		secret.Data = make(map[string][]byte)
 	}
@@ -66,7 +178,15 @@ func GenerateStoreSecret(ctx context.Context, store *v1.Store, secret *corev1.Se
 	secret.Data["database-host"] = []byte(dbSpec.Host)
 
 	secret.Data["database-url"] = util.GenerateDatabaseURLForShopware(dbSpec)
-	secret.Data["opensearch-url"] = util.GenerateOpensearchURLForShopware(&store.Spec.OpensearchSpec, dbSpec.Password)
+
+	if len(opensearchPassword) > 0 {
+		secret.Data["opensearch-url"] = util.GenerateOpensearchURLForShopware(&store.Spec.OpensearchSpec, opensearchPassword)
+	}
+
+	if len(fastlyServiceID) > 0 && len(fastlyToken) > 0 {
+		secret.Data["fastly-token"] = fastlyToken
+		secret.Data["fastly-service-id"] = fastlyServiceID
+	}
 
 	return nil
 }

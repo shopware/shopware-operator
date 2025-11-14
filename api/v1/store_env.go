@@ -296,6 +296,40 @@ func (s *Store) getStorage() []corev1.EnvVar {
 	return envVars
 }
 
+func (s *Store) getFastly() []corev1.EnvVar {
+	envVars := []corev1.EnvVar{}
+	if s.Spec.ShopConfiguration.Fastly.ServiceRef.Name != "" &&
+		s.Spec.ShopConfiguration.Fastly.ServiceRef.Key != "" &&
+		s.Spec.ShopConfiguration.Fastly.TokenRef.Name != "" &&
+		s.Spec.ShopConfiguration.Fastly.TokenRef.Key != "" {
+		envVars = append(envVars,
+			corev1.EnvVar{
+				Name: "FASTLY_SERVICE_ID",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: s.Spec.SecretName,
+						},
+						Key: "fastly-service-id",
+					},
+				},
+			},
+			corev1.EnvVar{
+				Name: "FASTLY_API_TOKEN",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: s.Spec.SecretName,
+						},
+						Key: "fastly-token",
+					},
+				},
+			},
+		)
+	}
+	return envVars
+}
+
 func (s *Store) GetEnv() []corev1.EnvVar {
 	var appUrl string
 	if s.Spec.Network.AppURLHost == "" {
@@ -401,6 +435,7 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 	c = append(c, s.getStorage()...)
 	c = append(c, s.getWorker()...)
 	c = append(c, s.getOpensearch()...)
+	c = append(c, s.getFastly()...)
 	c = append(c, s.Spec.FPM.getFPMConfiguration()...)
 
 	for _, obj2 := range s.Spec.Container.ExtraEnvs {
