@@ -23,8 +23,14 @@ import (
 	v1 "github.com/shopware/shopware-operator/api/v1"
 )
 
+var (
+	_ SnapshotResource = (*v1.StoreSnapshotRestore)(nil)
+	_ SnapshotResource = (*v1.StoreSnapshotCreate)(nil)
+)
+
 // SnapshotResource represents a common interface for snapshot resources
 type SnapshotResource interface {
+	GetRuntimeObject() runtime.Object
 	GetObjectMeta() metav1.Object
 	GetSpec() v1.StoreSnapshotSpec
 	GetStatus() *v1.StoreSnapshotStatus
@@ -219,7 +225,7 @@ func (r *StoreSnapshotBaseReconciler) reconcileSnapshotResource(
 		}()
 
 		obj := createJob(*store, snapshot)
-		if err := r.reconcileSnapshotJob(ctx, store, snapshot.GetObjectMeta(), obj); err != nil {
+		if err := r.reconcileSnapshotJob(ctx, snapshot, snapshot.GetObjectMeta(), obj); err != nil {
 			logger.Errorw(fmt.Sprintf("reconcile snapshot %s job", snapshotType), zap.Error(err))
 			return shortRequeue
 		}
@@ -229,16 +235,16 @@ func (r *StoreSnapshotBaseReconciler) reconcileSnapshotResource(
 	return longRequeue
 }
 
-func (r *StoreSnapshotBaseReconciler) reconcileSnapshotJob(ctx context.Context, store *v1.Store, owner metav1.Object, obj *batchv1.Job) (err error) {
+func (r *StoreSnapshotBaseReconciler) reconcileSnapshotJob(ctx context.Context, snap SnapshotResource, owner metav1.Object, obj *batchv1.Job) (err error) {
 	var changed bool
 	if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
 		return fmt.Errorf("reconcile unready setup job: %w", err)
 	}
 	if changed {
-		r.Recorder.Event(store, "Normal", "Diff snapshot job hash",
+		r.Recorder.Event(snap.GetRuntimeObject(), "Normal", "Diff snapshot job hash",
 			fmt.Sprintf("Update Store %s snapshot job in namespace %s. Diff hash",
-				store.Name,
-				store.Namespace))
+				snap.GetObjectMeta().GetName(),
+				snap.GetObjectMeta().GetNamespace()))
 		if err := k8s.EnsureJob(ctx, r.Client, owner, obj, r.Scheme, true); err != nil {
 			return fmt.Errorf("reconcile unready snapshot job: %w", err)
 		}
