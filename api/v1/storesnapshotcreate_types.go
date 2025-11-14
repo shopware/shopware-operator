@@ -8,6 +8,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
 type S3BucketAuth struct {
@@ -88,6 +89,10 @@ func init() {
 
 // GetObjectMeta implements SnapshotResource interface
 func (s *StoreSnapshotCreate) GetObjectMeta() metav1.Object {
+	return s
+}
+
+func (s *StoreSnapshotCreate) GetRuntimeObject() runtime.Object {
 	return s
 }
 
