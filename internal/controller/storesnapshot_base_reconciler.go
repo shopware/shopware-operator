@@ -232,7 +232,7 @@ func (r *StoreSnapshotBaseReconciler) reconcileSnapshotResource(
 		return shortRequeue
 	}
 
-	return longRequeue
+	return noRequeue
 }
 
 func (r *StoreSnapshotBaseReconciler) reconcileSnapshotJob(ctx context.Context, snap SnapshotResource, owner metav1.Object, obj *batchv1.Job) (err error) {
