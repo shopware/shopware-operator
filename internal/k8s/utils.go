@@ -483,7 +483,9 @@ func EnsureObjectWithHash(
 
 	if hashChanged || objectMetaChanged {
 		if hashChanged {
-			logging.FromContext(ctx).Infow("Object last-config-hash has changed", zap.String("old", oldObject.GetAnnotations()["shopware.com/last-config-hash"]), zap.String("new", hash))
+			logging.FromContext(ctx).Infow("Object last-config-hash has changed",
+				zap.String("old", oldObject.GetAnnotations()["shopware.com/last-config-hash"]),
+				zap.String("new", hash))
 		} else {
 			logging.FromContext(ctx).Infow(
 				"Object meta has changed",
@@ -509,7 +511,7 @@ func EnsureObjectWithHash(
 			patch = client.MergeFrom(oldObj.DeepCopy())
 			obj.(*cm.Certificate).TypeMeta = oldObj.DeepCopy().TypeMeta
 
-			// Jobs are more special, because we can't changed them and they should only run ones.
+			// Jobs are more special, because we can't changed them and they should only run once.
 			// So if we have no succeeded job we will delete the job and recreate them.
 		case *batchv1.Job:
 			if obj.(*batchv1.Job).Status.Succeeded != 0 {
