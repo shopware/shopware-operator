@@ -518,6 +518,7 @@ func EnsureObjectWithHash(
 				return nil
 			}
 
+			time.Sleep(30 * time.Second)
 			if err := cl.Delete(ctx, obj, client.PropagationPolicy("Foreground")); err != nil {
 				return errors.Wrapf(err, "delete job %v", nn.String())
 			}
