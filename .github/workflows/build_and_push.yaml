@@ -60,9 +60,14 @@ jobs:
         run: |
           docker push ghcr.io/shopware/shopware-operator:${{ fromJSON(steps.goreleaser.outputs.metadata).version }}-arm64
           docker push ghcr.io/shopware/shopware-operator:${{ fromJSON(steps.goreleaser.outputs.metadata).version }}-amd64
+          docker push ghcr.io/shopware/shopware-operator-snapshot:${{ fromJSON(steps.goreleaser.outputs.metadata).version }}-arm64
+          docker push ghcr.io/shopware/shopware-operator-snapshot:${{ fromJSON(steps.goreleaser.outputs.metadata).version }}-amd64
 
       - name: Create and push manifest for :snapshot tag
         run: |
           repo='ghcr.io/shopware/shopware-operator:${{ fromJSON(steps.goreleaser.outputs.metadata).version }}'
           docker manifest create $repo ${repo}-arm64 ${repo}-amd64
           docker manifest push $repo
+          repoSnapshot='ghcr.io/shopware/shopware-operator-snapshot:${{ fromJSON(steps.goreleaser.outputs.metadata).version }}'
+          docker manifest create $repoSnapshot ${repoSnapshot}-arm64 ${repoSnapshot}-amd64
+          docker manifest push $repoSnapshot
