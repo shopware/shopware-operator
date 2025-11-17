@@ -17,7 +17,6 @@ import (
 	"github.com/shopware/shopware-operator/internal/pdb"
 	"github.com/shopware/shopware-operator/internal/secret"
 	"github.com/shopware/shopware-operator/internal/service"
-	"github.com/shopware/shopware-operator/internal/util"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -95,9 +94,16 @@ func (r *StoreReconciler) findStoreForReconcile(
 
 	var requests []reconcile.Request
 	for _, store := range stores.Items {
-		if store.Spec.Database.PasswordSecretRef.Name == secret.GetName() {
+		if store.Spec.Database.PasswordSecretRef.Name == secret.GetName() ||
+			store.Spec.OpensearchSpec.PasswordSecretRef.Name == secret.GetName() ||
+			store.Spec.ShopConfiguration.Fastly.TokenRef.Name == secret.GetName() {
 			logging.FromContext(ctx).
-				Infow("Do reconcile on store because db secret has changed", "Store", store.Name)
+				Infow(
+					"Do reconcile on store because db/opensearch/fastly secret has changed",
+					zap.String("store", store.Name),
+					zap.String("secret", secret.GetName()),
+					zap.String("secret-namespace", secret.GetNamespace()),
+				)
 			requests = append(requests, reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Namespace: store.Namespace,
@@ -325,60 +331,10 @@ func (r *StoreReconciler) doReconcile(
 // }
 
 func (r *StoreReconciler) ensureAppSecrets(ctx context.Context, store *v1.Store) (err error) {
-	nn := types.NamespacedName{
-		Namespace: store.Namespace,
-		Name:      store.GetSecretName(),
-	}
-
-	if store.Spec.Database.Host == "" && store.Spec.Database.HostRef.Name == "" {
-		return fmt.Errorf("database host is empty for store %s. Eigther set host or a hostRef", store.Name)
-	}
-
-	if store.Spec.OpensearchSpec.Enabled && (store.Spec.OpensearchSpec.PasswordSecretRef.Name == "" || store.Spec.OpensearchSpec.PasswordSecretRef.Key == "") {
-		return fmt.Errorf("opensearch passwordSecretRef key or name is empty for store %s", store.Name)
-	}
-
-	var esp []byte
-	if store.Spec.OpensearchSpec.Enabled {
-		es := new(corev1.Secret)
-		if err := r.Get(ctx, types.NamespacedName{
-			Namespace: store.Namespace,
-			Name:      store.Spec.OpensearchSpec.PasswordSecretRef.Name,
-		}, es); err != nil {
-			if k8serrors.IsNotFound(err) {
-				r.Recorder.Event(store, "Warning", "Opensearch secret not found",
-					fmt.Sprintf("Missing opensearch secret for Store %s in namespace %s",
-						store.Name,
-						store.Namespace))
-				return nil
-			}
-			return fmt.Errorf("can't read database secret: %w", err)
-		}
-		esp = es.Data[store.Spec.OpensearchSpec.PasswordSecretRef.Key]
-	}
-
-	dbSpec, err := util.GetDBSpec(ctx, *store, r.Client)
+	storeSecret, err := secret.EnsureStoreSecret(ctx, r.Client, r.Recorder, store)
 	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			r.Recorder.Event(store, "Warning", "DB secret not found",
-				fmt.Sprintf("Missing database secret for Store %s in namespace %s: %s",
-					store.Name,
-					store.Namespace,
-					err.Error()))
-			return nil
-		}
-		return fmt.Errorf("can't read database secret: %w", err)
+		return fmt.Errorf("app secrets: %w", err)
 	}
-
-	storeSecret := new(corev1.Secret)
-	if err = r.Get(ctx, nn, storeSecret); client.IgnoreNotFound(err) != nil {
-		return fmt.Errorf("get store secret: %w", err)
-	}
-	if err = secret.GenerateStoreSecret(ctx, store, storeSecret, dbSpec, esp); err != nil {
-		return fmt.Errorf("fill store secret: %w", err)
-	}
-	storeSecret.Name = store.GetSecretName()
-	storeSecret.Namespace = store.Namespace
 
 	if err := k8s.EnsureObjectWithHash(ctx, r.Client, nil, storeSecret, r.Scheme); err != nil {
 		return fmt.Errorf("ensure store secret: %w", err)
