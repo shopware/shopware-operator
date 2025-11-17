@@ -2,6 +2,7 @@ package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
 // +kubebuilder:object:root=true
@@ -37,6 +38,10 @@ func init() {
 
 // GetObjectMeta implements SnapshotResource interface
 func (s *StoreSnapshotRestore) GetObjectMeta() metav1.Object {
+	return s
+}
+
+func (s *StoreSnapshotRestore) GetRuntimeObject() runtime.Object {
 	return s
 }
 

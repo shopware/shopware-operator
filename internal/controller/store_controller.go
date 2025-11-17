@@ -38,6 +38,7 @@ import (
 )
 
 var (
+	noRequeue    = ctrl.Result{}
 	shortRequeue = ctrl.Result{RequeueAfter: 5 * time.Second}
 	longRequeue  = ctrl.Result{RequeueAfter: 2 * time.Minute}
 )
