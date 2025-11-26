@@ -51,16 +51,22 @@ func (h MySQLDump) Dump(
 		input.Host,
 		"-u",
 		input.User,
-		fmt.Sprintf("-p%s", input.Password),
 		input.Name,
 	)
+	cmd.Env = append(cmd.Env, fmt.Sprintf("MYSQL_PWD=%s", input.Password))
 
-	logging.FromContext(ctx).Debugw("mysqlDump command", "cmd", cmd.String())
+	logging.FromContext(ctx).Debugw("mysqldump command", "host", input.Host, "user", input.User, "database", input.Name)
 
 	dump, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, fmt.Errorf("get stdout pipe: %w", err)
 	}
+
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, fmt.Errorf("get stderr pipe: %w", err)
+	}
+
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start command: %w", err)
 	}
@@ -77,9 +83,19 @@ func (h MySQLDump) Dump(
 		return nil, fmt.Errorf("copy to gzip writer: %w", err)
 	}
 
+	// Read stderr to capture any errors
+	stderrOutput, _ := io.ReadAll(stderrPipe)
+
 	err = cmd.Wait()
 	if err != nil {
+		if len(stderrOutput) > 0 {
+			return nil, fmt.Errorf("wait command: %w, stderr: %s", err, string(stderrOutput))
+		}
 		return nil, fmt.Errorf("wait command: %w", err)
+	}
+
+	if len(stderrOutput) > 0 {
+		logging.FromContext(ctx).Warnw("mysqldump stderr", "output", string(stderrOutput))
 	}
 
 	err = gw.Close()
@@ -128,11 +144,11 @@ func (h MySQLDump) Restore(
 		input.Host,
 		"-u",
 		input.User,
-		fmt.Sprintf("-p%s", input.Password),
 		input.Name,
 	)
+	cmd.Env = append(cmd.Env, fmt.Sprintf("MYSQL_PWD=%s", input.Password))
 
-	logging.FromContext(ctx).Debugw("mysql restore command", "cmd", cmd.String())
+	logging.FromContext(ctx).Debugw("mysql restore command", "host", input.Host, "user", input.User, "database", input.Name)
 
 	var err error
 	cmd.Stdin, err = gzip.NewReader(reader)
@@ -140,13 +156,28 @@ func (h MySQLDump) Restore(
 		return fmt.Errorf("create gzip reader: %w", err)
 	}
 
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("get stderr pipe: %w", err)
+	}
+
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start command: %w", err)
 	}
 
+	// Read stderr to capture any errors
+	stderrOutput, _ := io.ReadAll(stderrPipe)
+
 	err = cmd.Wait()
 	if err != nil {
+		if len(stderrOutput) > 0 {
+			return fmt.Errorf("wait command: %w, stderr: %s", err, string(stderrOutput))
+		}
 		return fmt.Errorf("wait command: %w", err)
+	}
+
+	if len(stderrOutput) > 0 {
+		logging.FromContext(ctx).Warnw("mysql restore stderr", "output", string(stderrOutput))
 	}
 
 	err = reader.Close()
