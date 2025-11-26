@@ -164,14 +164,14 @@ func (r *StoreReconciler) Reconcile(
 		return rr, nil
 	}
 
-	log.Info("Reconcile finished, run status update")
+	log.Debug("Reconcile finished, run status update")
 
 	if err := r.reconcileCRStatus(ctx, store, err); err != nil {
 		log.Errorw("failed to update status", zap.Error(err))
 	}
 
 	if store.IsState(v1.StateReady) {
-		log.Info("Schedule long Reconcile")
+		log.Info("Reconcile finished, schedule long Reconcile")
 		return longRequeue, nil
 	}
 
@@ -186,7 +186,7 @@ func (r *StoreReconciler) doReconcile(
 	log := logging.FromContext(ctx)
 	log.Info("Do reconcile on store")
 
-	log.Info("reconcile app secrets")
+	log.Debug("reconcile app secrets")
 	if err := r.ensureAppSecrets(ctx, store); err != nil {
 		return fmt.Errorf("app secrets: %w", err)
 	}
@@ -196,7 +196,7 @@ func (r *StoreReconciler) doReconcile(
 		return nil
 	}
 
-	log.Info("reconcile pdb")
+	log.Debug("reconcile pdb")
 	if err := r.reconcilePDB(ctx, store); err != nil {
 		return fmt.Errorf("pdb: %w", err)
 	}
@@ -226,11 +226,10 @@ func (r *StoreReconciler) doReconcile(
 
 	// State Initializing
 	if store.IsState(v1.StateInitializing) {
-		log.Info("reconcile deployment")
+		log.Info("reconcile deployment for initializing state")
 		if err := r.reconcileDeployment(ctx, store); err != nil {
 			return fmt.Errorf("deployment: %w", err)
 		}
-		log.Info("Wait for deployment to finish")
 		return nil
 	}
 
@@ -261,7 +260,6 @@ func (r *StoreReconciler) doReconcile(
 			if err := r.reconcileMigrationJob(ctx, store); err != nil {
 				return fmt.Errorf("migration: %w", err)
 			}
-			log.Info("wait for migration to finish")
 			return nil
 		}
 	}
@@ -277,22 +275,22 @@ func (r *StoreReconciler) doReconcile(
 		}
 	}
 
-	log.Info("reconcile deployment")
+	log.Debug("reconcile deployment")
 	if err := r.reconcileDeployment(ctx, store); err != nil {
 		return fmt.Errorf("deployment: %w", err)
 	}
 
-	log.Info("reconcile services")
+	log.Debug("reconcile services")
 	if err := r.reconcileServices(ctx, store); err != nil {
 		return fmt.Errorf("service: %w", err)
 	}
 
-	log.Info("reconcile CronJob scheduledTask")
+	log.Debug("reconcile CronJob scheduledTask")
 	if err := r.reconcileScheduledTask(ctx, store); err != nil {
 		return fmt.Errorf("cronjob: %w", err)
 	}
 
-	log.Info("reconcile horizontalPodAutoscaler")
+	log.Debug("reconcile horizontalPodAutoscaler")
 	if err := r.reconcileHoizontalPodAutoscaler(ctx, store); err != nil {
 		return fmt.Errorf("hpa: %w", err)
 	}
