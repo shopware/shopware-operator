@@ -10,6 +10,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/util"
 	appsv1 "k8s.io/api/apps/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -131,4 +132,20 @@ func StoreIngress(store v1.Store) *networkingv1.Ingress {
 
 func GetStoreIngressName(store v1.Store) string {
 	return fmt.Sprintf("store-%s", store.Name)
+}
+
+func DeleteStoreIngress(ctx context.Context, c client.Client, store v1.Store) error {
+	ingress := &networkingv1.Ingress{}
+	err := c.Get(ctx, types.NamespacedName{
+		Namespace: store.GetNamespace(),
+		Name:      GetStoreIngressName(store),
+	}, ingress)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	return c.Delete(ctx, ingress, client.PropagationPolicy("Foreground"))
 }

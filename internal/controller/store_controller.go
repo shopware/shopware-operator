@@ -9,6 +9,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/cronjob"
 	"github.com/shopware/shopware-operator/internal/deployment"
 	"github.com/shopware/shopware-operator/internal/event"
+	"github.com/shopware/shopware-operator/internal/gateway"
 	"github.com/shopware/shopware-operator/internal/hpa"
 	"github.com/shopware/shopware-operator/internal/ingress"
 	"github.com/shopware/shopware-operator/internal/job"
@@ -35,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 var (
@@ -67,6 +69,7 @@ func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager, logger *zap.Sugared
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.Service{}).
 		Owns(&networkingv1.Ingress{}).
+		Owns(&gatewayv1.HTTPRoute{}).
 		Owns(&policy.PodDisruptionBudget{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&batchv1.Job{}).
@@ -125,6 +128,7 @@ func (r *StoreReconciler) findStoreForReconcile(
 //+kubebuilder:rbac:groups="apps",namespace=default,resources=deployments,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="batch",namespace=default,resources=jobs,verbs=get;list;watch;create;delete
 //+kubebuilder:rbac:groups="networking.k8s.io",namespace=default,resources=ingresses,verbs=get;list;watch;create;patch
+//+kubebuilder:rbac:groups="gateway.networking.k8s.io",namespace=default,resources=httproutes,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="policy",namespace=default,resources=poddisruptionbudgets,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="batch",namespace=default,resources=cronjobs,verbs=get;patch;list;watch;create;delete
 
@@ -197,11 +201,14 @@ func (r *StoreReconciler) doReconcile(
 		return fmt.Errorf("pdb: %w", err)
 	}
 
-	if store.Spec.Network.EnabledIngress {
-		log.Info("reconcile ingress")
-		if err := r.reconcileIngress(ctx, store); err != nil {
-			return fmt.Errorf("ingress: %w", err)
-		}
+	log.Debug("reconcile ingress")
+	if err := r.reconcileIngress(ctx, store); err != nil {
+		return fmt.Errorf("ingress: %w", err)
+	}
+
+	log.Debug("reconcile gateway httproute")
+	if err := r.reconcileHTTPRoute(ctx, store); err != nil {
+		return fmt.Errorf("httproute: %w", err)
 	}
 
 	// State Setup
@@ -371,6 +378,13 @@ func (r *StoreReconciler) reconcileServices(ctx context.Context, store *v1.Store
 }
 
 func (r *StoreReconciler) reconcileIngress(ctx context.Context, store *v1.Store) (err error) {
+	if !store.Spec.Network.EnabledIngress {
+		if err := ingress.DeleteStoreIngress(ctx, r.Client, *store); err != nil {
+			return fmt.Errorf("delete ingress: %w", err)
+		}
+		return nil
+	}
+
 	var changed bool
 	obj := ingress.StoreIngress(*store)
 
@@ -385,6 +399,34 @@ func (r *StoreReconciler) reconcileIngress(ctx context.Context, store *v1.Store)
 				store.Namespace))
 		if err := k8s.EnsureIngress(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
 			return fmt.Errorf("reconcile unready ingress: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (r *StoreReconciler) reconcileHTTPRoute(ctx context.Context, store *v1.Store) (err error) {
+	if !store.Spec.Network.EnabledGateway {
+		if err := gateway.DeleteStoreHTTPRoute(ctx, r.Client, *store); err != nil {
+			return fmt.Errorf("delete httproute: %w", err)
+		}
+		return nil
+	}
+
+	var changed bool
+	obj := gateway.StoreHTTPRoute(*store)
+
+	if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
+		return fmt.Errorf("reconcile unready httproute: %w", err)
+	}
+
+	if changed {
+		r.Recorder.Event(store, "Normal", "Diff httproute hash",
+			fmt.Sprintf("Update Store %s httproute in namespace %s. Diff hash",
+				store.Name,
+				store.Namespace))
+		if err := k8s.EnsureHTTPRoute(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
+			return fmt.Errorf("reconcile unready httproute: %w", err)
 		}
 	}
 
