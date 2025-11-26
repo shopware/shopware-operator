@@ -41,6 +41,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/event"
 	"github.com/shopware/shopware-operator/internal/event/nats"
 	"github.com/shopware/shopware-operator/internal/logging"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -55,6 +56,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(shopv1.AddToScheme(scheme))
+	utilruntime.Must(gatewayv1.Install(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 

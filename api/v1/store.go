@@ -190,6 +190,9 @@ type NetworkSpec struct {
 	// +kubebuilder:default=false
 	EnabledIngress bool `json:"enabledIngress"`
 
+	// +kubebuilder:default=false
+	EnabledGateway bool `json:"enabledGateway"`
+
 	// +kubebuilder:validation:deprecatedversion
 	Host string `json:"host,omitempty"`
 
@@ -201,6 +204,8 @@ type NetworkSpec struct {
 	Port int32 `json:"port,omitempty"`
 
 	IngressClassName string            `json:"ingressClassName,omitempty"`
+	GatewayClassName string            `json:"gatewayClassName,omitempty"`
+	GatewayName      string            `json:"gatewayName,omitempty"`
 	Annotations      map[string]string `json:"annotations,omitempty"`
 	Labels           map[string]string `json:"labels,omitempty"`
 
