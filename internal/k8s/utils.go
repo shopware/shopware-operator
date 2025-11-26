@@ -578,6 +578,10 @@ func EnsureObjectWithHash(
 				return errors.Wrapf(err, "create job %v", nn.String())
 			}
 			return nil
+		case *gatewayv1.HTTPRoute:
+			// Gateway API resources use MergeFrom instead of StrategicMergeFrom
+			patch = client.MergeFrom(oldObj.DeepCopy())
+			obj.(*gatewayv1.HTTPRoute).TypeMeta = oldObj.DeepCopy().TypeMeta
 		default:
 			patch = client.StrategicMergeFrom(oldObject)
 		}
