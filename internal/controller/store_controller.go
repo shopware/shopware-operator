@@ -268,12 +268,12 @@ func (r *StoreReconciler) doReconcile(
 	// EDIT: This makes more problems then it will help. So we process the way of terminating to
 	// the user to close all sidecars correctly.
 	// Check if sidecars are active
-	if len(store.Spec.Container.ExtraContainers) > 0 && !store.Spec.DisableJobDeletion {
-		log.Info("Delete setup/migration job if they are finished because sidecars are used")
-		if err := r.completeJobs(ctx, store); err != nil {
-			log.Errorw("Can't cleanup setup and migration jobs", zap.Error(err))
-		}
-	}
+	// if len(store.Spec.Container.ExtraContainers) > 0 && !store.Spec.DisableJobDeletion {
+	// 	log.Info("Delete setup/migration job if they are finished because sidecars are used")
+	// 	if err := r.completeJobs(ctx, store); err != nil {
+	// 		log.Errorw("Can't cleanup setup and migration jobs", zap.Error(err))
+	// 	}
+	// }
 
 	log.Debug("reconcile deployment")
 	if err := r.reconcileDeployment(ctx, store); err != nil {
