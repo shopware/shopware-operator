@@ -151,7 +151,7 @@ func TestRestoreDump(t *testing.T) {
 	ctx := context.Background()
 
 	dbName := fmt.Sprintf("test_restore_%d", time.Now().Unix())
-	existingDumpPath := getEnvOrDefault("MYSQL_DUMP_PATH", "../../test/data/snapshot/database")
+	existingDumpPath := getEnvOrDefault("MYSQL_DUMP_PATH", "")
 
 	db := tc.createDatabase(t, dbName)
 	defer db.Close()
