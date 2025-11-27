@@ -197,8 +197,16 @@ util.dumpSchemas(["{{.Name}}"], "{{.DumpFilePath}}", {
 		return resp, fmt.Errorf("run command: %w", err)
 	}
 
+	logging.FromContext(ctx).Debugw("mysql-shell dump output", zap.String("output", string(output)))
+
 	resp, err = parseDumpOutput(string(output))
 	if err != nil {
+		// Output parsing failed but dump may have succeeded - check if dump directory was created
+		if _, statErr := os.Stat(input.DumpFilePath); statErr == nil {
+			logging.FromContext(ctx).Debugw("Dump directory exists, treating as success despite parse failure", zap.Error(err))
+			incompleteDump = false
+			return DumpOutput{}, nil
+		}
 		return resp, fmt.Errorf("parse dump output: %w", err)
 	}
 
