@@ -71,6 +71,13 @@ func (h MySQLDump) Dump(
 		return nil, fmt.Errorf("start command: %w", err)
 	}
 
+	// Read stderr concurrently to prevent deadlock
+	stderrChan := make(chan []byte, 1)
+	go func() {
+		stderrOutput, _ := io.ReadAll(stderrPipe)
+		stderrChan <- stderrOutput
+	}()
+
 	// Own writer to count the gzipped size
 	counterWriter := &countingWriter{w: writer}
 	gw, err := gzip.NewWriterLevel(counterWriter, gzip.BestSpeed)
@@ -83,10 +90,8 @@ func (h MySQLDump) Dump(
 		return nil, fmt.Errorf("copy to gzip writer: %w", err)
 	}
 
-	// Read stderr to capture any errors
-	stderrOutput, _ := io.ReadAll(stderrPipe)
-
 	err = cmd.Wait()
+	stderrOutput := <-stderrChan
 	if err != nil {
 		if len(stderrOutput) > 0 {
 			return nil, fmt.Errorf("wait command: %w, stderr: %s", err, string(stderrOutput))
@@ -165,10 +170,15 @@ func (h MySQLDump) Restore(
 		return fmt.Errorf("start command: %w", err)
 	}
 
-	// Read stderr to capture any errors
-	stderrOutput, _ := io.ReadAll(stderrPipe)
+	// Read stderr concurrently to prevent deadlock
+	stderrChan := make(chan []byte, 1)
+	go func() {
+		stderrOutput, _ := io.ReadAll(stderrPipe)
+		stderrChan <- stderrOutput
+	}()
 
 	err = cmd.Wait()
+	stderrOutput := <-stderrChan
 	if err != nil {
 		if len(stderrOutput) > 0 {
 			return fmt.Errorf("wait command: %w, stderr: %s", err, string(stderrOutput))
