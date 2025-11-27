@@ -9,6 +9,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/cronjob"
 	"github.com/shopware/shopware-operator/internal/deployment"
 	"github.com/shopware/shopware-operator/internal/event"
+	"github.com/shopware/shopware-operator/internal/gateway"
 	"github.com/shopware/shopware-operator/internal/hpa"
 	"github.com/shopware/shopware-operator/internal/ingress"
 	"github.com/shopware/shopware-operator/internal/job"
@@ -125,6 +126,7 @@ func (r *StoreReconciler) findStoreForReconcile(
 //+kubebuilder:rbac:groups="apps",namespace=default,resources=deployments,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="batch",namespace=default,resources=jobs,verbs=get;list;watch;create;delete
 //+kubebuilder:rbac:groups="networking.k8s.io",namespace=default,resources=ingresses,verbs=get;list;watch;create;patch
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch;create;update;patch
 //+kubebuilder:rbac:groups="policy",namespace=default,resources=poddisruptionbudgets,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="batch",namespace=default,resources=cronjobs,verbs=get;patch;list;watch;create;delete
 
@@ -201,6 +203,13 @@ func (r *StoreReconciler) doReconcile(
 		log.Info("reconcile ingress")
 		if err := r.reconcileIngress(ctx, store); err != nil {
 			return fmt.Errorf("ingress: %w", err)
+		}
+	}
+
+	if store.Spec.Network.EnabledGateway {
+		log.Info("reconcile gateway")
+		if err := r.reconcileGateway(ctx, store); err != nil {
+			return fmt.Errorf("gateway: %w", err)
 		}
 	}
 
@@ -385,6 +394,27 @@ func (r *StoreReconciler) reconcileIngress(ctx context.Context, store *v1.Store)
 				store.Namespace))
 		if err := k8s.EnsureIngress(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
 			return fmt.Errorf("reconcile unready ingress: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (r *StoreReconciler) reconcileGateway(ctx context.Context, store *v1.Store) (err error) {
+	var changed bool
+	obj := gateway.StoreGateway(*store)
+
+	if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
+		return fmt.Errorf("reconcile unready gateway: %w", err)
+	}
+
+	if changed {
+		r.Recorder.Event(store, "Normal", "Diff gateway hash",
+			fmt.Sprintf("Update Store %s gateway in namespace %s. Diff hash",
+				store.Name,
+				store.Namespace))
+		if err := k8s.EnsureGateway(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
+			return fmt.Errorf("reconcile unready gateway: %w", err)
 		}
 	}
 
