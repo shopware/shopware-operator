@@ -37,6 +37,7 @@ snapshot:
 
 dockers_v2:
   - id: operator
+    ids: [manager]
     images:
       - "ghcr.io/shopware/{{.ProjectName}}"
     tags:
@@ -50,6 +51,7 @@ dockers_v2:
     dockerfile: build/Dockerfile
 
   - id: snapshot
+    ids: [snapshot]
     images:
       - "ghcr.io/shopware/{{.ProjectName}}-snapshot"
     tags:
