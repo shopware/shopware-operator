@@ -356,21 +356,41 @@ func (h MySQLShell) run(
 func parseDumpOutput(output string) (DumpOutput, error) {
 	var result DumpOutput
 
-	durationRegexp := regexp.MustCompile(`Dump duration: (\d{2}:\d{2}:\d{2})s`)
+	// Try different duration formats (compatible with MySQL Shell 8.4.6+)
+	// Format 1: "Dump duration: HH:MM:SSs" (8.4.6 and older)
+	// Format 2: "Duration: HH:MM:SS" (9.x)
+	// Format 3: "Duration: Xs" or "Duration: X.XXs" (short durations in any version)
+	// Format 4: "Dump duration: 00:00:00s" (8.4.6 with showProgress: false)
+	durationRegexp := regexp.MustCompile(`(?i)(?:Dump\s+)?duration:\s*(?:(\d{1,2}:\d{2}:\d{2})s?|(\d+(?:\.\d+)?)\s*s(?:ec(?:onds)?)?\.?)`)
 	matches := durationRegexp.FindStringSubmatch(output)
 
-	if len(matches) != 2 {
-		return result, fmt.Errorf("no duration found")
+	if len(matches) >= 2 {
+		var duration time.Duration
+		var err error
+		if matches[1] != "" {
+			// HH:MM:SS format (handle 1 or 2 digit hours)
+			duration, err = parseDuration(matches[1])
+		} else if matches[2] != "" {
+			// Seconds format (e.g., "3.14s")
+			seconds, parseErr := strconv.ParseFloat(matches[2], 64)
+			if parseErr == nil {
+				duration = time.Duration(seconds * float64(time.Second))
+			} else {
+				err = parseErr
+			}
+		}
+
+		if err == nil {
+			result.Duration = duration
+		}
+		// Don't fail if duration parsing fails, just leave it as zero
 	}
 
-	duration, err := parseDuration(matches[1])
-	if err != nil {
-		return result, fmt.Errorf("parse duration: %w", err)
-	}
-	result.Duration = duration
-
+	// Size parsing - compatible with both 8.4.6 and 9.x
+	// Handles: "230 bytes", "1.5 GB", "100MB", "1.23 KB"
+	// Match the exact pattern with word boundaries
 	uncompressedRegexp := regexp.MustCompile(
-		`Uncompressed data size: (\d+\.?\d*\s?([KMGT]B|bytes))`,
+		`Uncompressed data size:\s*(\d+(?:\.\d+)?\s*(?:bytes|[KMGT]i?B))`,
 	)
 	matches = uncompressedRegexp.FindStringSubmatch(output)
 	if len(matches) < 2 {
@@ -383,7 +403,9 @@ func parseDumpOutput(output string) (DumpOutput, error) {
 	}
 	result.UncompressedSize = uncompressed
 
-	compressedRegexp := regexp.MustCompile(`Compressed data size: (\d+\.?\d*\s?([KMGT]B|bytes))`)
+	compressedRegexp := regexp.MustCompile(
+		`Compressed data size:\s*(\d+(?:\.\d+)?\s*(?:bytes|[KMGT]i?B))`,
+	)
 	matches = compressedRegexp.FindStringSubmatch(output)
 	if len(matches) < 2 {
 		return result, fmt.Errorf("no compressed size found")
@@ -403,7 +425,22 @@ func parseDumpOutput(output string) (DumpOutput, error) {
 }
 
 func parseDuration(str string) (time.Duration, error) {
-	return time.ParseDuration(str[0:2] + "h" + str[3:5] + "m" + str[6:8] + "s")
+	// Handle both H:MM:SS and HH:MM:SS formats (MySQL Shell 8.4.6+ compatibility)
+	parts := strings.Split(str, ":")
+	if len(parts) != 3 {
+		return 0, fmt.Errorf("invalid duration format: %s", str)
+	}
+
+	hours := parts[0]
+	minutes := parts[1]
+	seconds := parts[2]
+
+	// Pad hours to 2 digits if needed
+	if len(hours) == 1 {
+		hours = "0" + hours
+	}
+
+	return time.ParseDuration(hours + "h" + minutes + "m" + seconds + "s")
 }
 
 func parseSize(s string) (int64, error) {
