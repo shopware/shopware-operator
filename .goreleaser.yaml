@@ -35,26 +35,28 @@ builds:
 snapshot:
   version_template: '{{ replace .Branch "/" "-" }}'
 
-dockers:
-  - ids: [manager]
-    image_templates:
-      - "ghcr.io/shopware/{{.ProjectName}}:{{.Version}}"
-      - "ghcr.io/shopware/{{.ProjectName}}:latest"
-    build_flag_templates:
-      - "--platform=linux/amd64"
-      - "--platform=linux/arm64"
+dockers_v2:
+  - id: operator
+    images:
+      - "ghcr.io/shopware/{{.ProjectName}}"
+    tags:
+      - "{{.Version}}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
     extra_files:
       - "LICENSE"
       - "third-party-licenses.md"
     dockerfile: build/Dockerfile
 
-  - ids: [snapshot]
-    image_templates:
-      - "ghcr.io/shopware/{{.ProjectName}}-snapshot:{{.Version}}"
-      - "ghcr.io/shopware/{{.ProjectName}}-snapshot:latest"
-    build_flag_templates:
-      - "--platform=linux/amd64"
-      - "--platform=linux/arm64"
+  - id: snapshot
+    images:
+      - "ghcr.io/shopware/{{.ProjectName}}-snapshot"
+    tags:
+      - "{{.Version}}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
     extra_files:
       - "LICENSE"
       - "third-party-licenses.md"
