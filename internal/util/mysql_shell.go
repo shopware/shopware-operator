@@ -185,10 +185,10 @@ util.dumpSchemas(["{{.Name}}"], "{{.DumpFilePath}}", {
 		if !incompleteDump {
 			return
 		}
-		logging.FromContext(ctx).Warn("database dump is incomplete. Deleting dump")
-		err := os.Remove(input.DumpFilePath)
+		logging.FromContext(ctx).Warn("database dump is incomplete. Deleting dump directory")
+		err := os.RemoveAll(input.DumpFilePath)
 		if err != nil {
-			logging.FromContext(ctx).Warnw("Delete dump file failed", zap.Error(err))
+			logging.FromContext(ctx).Warnw("Delete dump directory failed", zap.Error(err))
 		}
 	}()
 
