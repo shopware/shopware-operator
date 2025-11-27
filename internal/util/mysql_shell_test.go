@@ -29,15 +29,17 @@ func TestDump(t *testing.T) {
 		// Use existing database
 		dbName = existingDBName
 		db = tc.createDatabase(t, dbName)
-		defer db.Close()
+		defer func() {
+			require.NoError(t, db.Close())
+		}()
 		t.Logf("Using existing database: %s", dbName)
 	} else {
 		// Create new test database
 		dbName = fmt.Sprintf("test_dump_%d", time.Now().Unix())
 		db = tc.createDatabase(t, dbName)
-		defer db.Close()
 		defer func() {
 			_, _ = db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
+			require.NoError(t, db.Close())
 		}()
 
 		// Create test tables with data
@@ -160,9 +162,9 @@ func TestRestoreDump(t *testing.T) {
 	existingDumpPath := getEnvOrDefault("MYSQL_DUMP_PATH", "")
 
 	db := tc.createDatabase(t, dbName)
-	defer db.Close()
 	defer func() {
 		_, _ = db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
+		require.NoError(t, db.Close())
 	}()
 
 	// Enable local_infile for MySQL Shell's dump loading utility (might be needed only for Percona)
@@ -330,7 +332,6 @@ func (tc testConfig) createDatabase(t *testing.T, dbName string) *sql.DB {
 	}
 	rootDB, err := sql.Open("mysql", rootDSN)
 	require.NoError(t, err)
-	defer rootDB.Close()
 
 	_, err = rootDB.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbName))
 	require.NoError(t, err)
@@ -342,6 +343,8 @@ func (tc testConfig) createDatabase(t *testing.T, dbName string) *sql.DB {
 	}
 	db, err := sql.Open("mysql", dbDSN)
 	require.NoError(t, err)
+
+	require.NoError(t, rootDB.Close())
 
 	return db
 }
