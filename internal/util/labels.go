@@ -3,6 +3,8 @@ package util
 import (
 	"fmt"
 	"maps"
+	"regexp"
+	"strings"
 	"time"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
@@ -77,4 +79,26 @@ func GetWorkerDeploymentMatchLabel() map[string]string {
 	labels := make(map[string]string)
 	labels["shop.shopware.com/store.app"] = "shopware-worker"
 	return labels
+}
+
+// SafeDNSName converts any string (e.g. hostnames) into a valid DNS label.
+func SafeDNSName(s string) string {
+	s = strings.ToLower(s)
+
+	// replace anything not alphanumeric or dash with dash
+	re := regexp.MustCompile(`[^a-z0-9-]`)
+	s = re.ReplaceAllString(s, "-")
+
+	// collapse multiple dashes
+	re2 := regexp.MustCompile(`-+`)
+	s = re2.ReplaceAllString(s, "-")
+
+	// trim leading/trailing dash
+	s = strings.Trim(s, "-")
+
+	if s == "" {
+		return "x"
+	}
+
+	return s
 }

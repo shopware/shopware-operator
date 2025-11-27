@@ -49,6 +49,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 func GetWatchNamespace() (string, error) {
@@ -330,6 +331,29 @@ func EnsureIngress(
 	}
 
 	return EnsureObjectWithHash(ctx, cl, owner, ingress, s)
+}
+
+func EnsureGateway(
+	ctx context.Context,
+	cl client.Client,
+	owner metav1.Object,
+	gw *gwv1.Gateway,
+	s *runtime.Scheme,
+	saveOldMeta bool,
+) error {
+	oldDep := new(appsv1.Deployment)
+	err := cl.Get(ctx, types.NamespacedName{
+		Name:      gw.GetName(),
+		Namespace: gw.GetNamespace(),
+	}, oldDep)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return EnsureObjectWithHash(ctx, cl, owner, gw, s)
+		}
+		return errors.Wrap(err, "get object")
+	}
+
+	return EnsureObjectWithHash(ctx, cl, owner, gw, s)
 }
 
 func EnsureDeployment(

@@ -189,6 +189,7 @@ type OpensearchIndexSpec struct {
 type NetworkSpec struct {
 	// +kubebuilder:default=false
 	EnabledIngress bool `json:"enabledIngress"`
+	EnabledGateway bool `json:"enabledGateway"`
 
 	// +kubebuilder:validation:deprecatedversion
 	Host string `json:"host,omitempty"`

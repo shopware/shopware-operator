@@ -204,6 +204,13 @@ func (r *StoreReconciler) doReconcile(
 		}
 	}
 
+	if store.Spec.Network.EnabledGateway {
+		log.Info("reconcile gateway")
+		if err := r.reconcileGateway(ctx, store); err != nil {
+			return fmt.Errorf("gateway: %w", err)
+		}
+	}
+
 	// State Setup
 	if store.IsState(v1.StateSetup, v1.StateSetupError) {
 		if store.IsState(v1.StateSetupError) {
@@ -385,6 +392,27 @@ func (r *StoreReconciler) reconcileIngress(ctx context.Context, store *v1.Store)
 				store.Namespace))
 		if err := k8s.EnsureIngress(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
 			return fmt.Errorf("reconcile unready ingress: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (r *StoreReconciler) reconcileGateway(ctx context.Context, store *v1.Store) (err error) {
+	var changed bool
+	obj := ingress.StoreGateway(*store)
+
+	if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
+		return fmt.Errorf("reconcile unready gateway: %w", err)
+	}
+
+	if changed {
+		r.Recorder.Event(store, "Normal", "Diff gateway hash",
+			fmt.Sprintf("Update Store %s gateway in namespace %s. Diff hash",
+				store.Name,
+				store.Namespace))
+		if err := k8s.EnsureGateway(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
+			return fmt.Errorf("reconcile unready gateway: %w", err)
 		}
 	}
 
