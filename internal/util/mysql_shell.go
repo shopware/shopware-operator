@@ -165,8 +165,9 @@ func (h MySQLShell) Dump(
 	// 	"s3BucketName": "{{.S3Bucket}}", "s3Region": "` + h.region + `",
 	//      "consistent": {{.Consistent}}, compression: "zstd", "showProgress": "false"});
 	// `)
+
 	tmpl, err := template.New("cmd").Parse(`
-util.dumpSchemas(["{{.Name}}"], "{{.DumpFilePath}}", {
+util.dumpSchemas(["{{.Name}}"], "` + escapeJSString(input.DumpFilePath) + `", {
      "consistent": true, compression: "zstd", "showProgress": false});
 `)
 	if err != nil {
@@ -225,7 +226,7 @@ func (h MySQLShell) RestoreDump(
 	tmpl, err := template.New("cmd").Parse(`
     session.runSql('CREATE DATABASE IF NOT EXISTS ` + "`{{.Name}}`" + `');
     session.runSql('USE ` + "`{{.Name}}`" + `');
-    util.loadDump("{{.DumpFilePath}}", {
+    util.loadDump("` + escapeJSString(input.DumpFilePath) + `", {
         "schema": "{{.Name}}", 
         "showProgress": "false"
     });
@@ -418,4 +419,12 @@ func parseSize(s string) (int64, error) {
 	}
 
 	return int64(sizeInt), nil
+}
+
+// escapeJSString escapes a string for safe use in JavaScript string literals
+func escapeJSString(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "\"", "\\\"")
+	s = strings.ReplaceAll(s, "'", "\\'")
+	return s
 }
