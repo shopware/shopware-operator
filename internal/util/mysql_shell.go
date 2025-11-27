@@ -212,13 +212,12 @@ func (h MySQLShell) RestoreDump(
 	input RestoreInput,
 ) error {
 	tmpl, err := template.New("cmd").Parse(`
-    session.runSql('SET FOREIGN_KEY_CHECKS = 0');
-	tables = session.runSql('SHOW TABLES').fetchAll();
-    for(var index in tables) {
-        session.runSql('DROP TABLE IF EXISTS ' +  mysql.quoteIdentifier(tables[index][0]));
-    }
-    session.runSql('SET FOREIGN_KEY_CHECKS = 1');
-    util.loadDump("{{.DumpFilePath}}");
+    session.runSql('CREATE DATABASE IF NOT EXISTS ` + "`{{.Name}}`" + `');
+    session.runSql('USE ` + "`{{.Name}}`" + `');
+    util.loadDump("{{.DumpFilePath}}", {
+        "schema": "{{.Name}}", 
+        "showProgress": "false"
+    });
 	`)
 	if err != nil {
 		return fmt.Errorf("parse template: %w", err)
@@ -259,14 +258,18 @@ func (h MySQLShell) run(
 		logging.FromContext(ctx).Debugw("use command for mysqlsh binary", zap.String("path", binaryPath))
 	}
 
+	// Build MySQL URI with password
+	// Format: mysql://user:password@host:port/schema
+	port := db.Port
+	if port == 0 {
+		port = 3306
+	}
+	uri := fmt.Sprintf("mysql://%s:%s@%s:%d/%s", db.User, string(db.Password), db.Host, port, db.Name)
+
 	//nolint:gosec
 	cmd := exec.CommandContext(ctx,
 		binaryPath,
-		"--mysql",
-		"--schema", db.Name,
-		"-h"+db.Host,
-		"-u"+db.User,
-		"-p"+string(db.Password),
+		uri,
 		"--js",
 	)
 
@@ -275,6 +278,21 @@ func (h MySQLShell) run(
 		return nil, fmt.Errorf("pipe stdin: %w", err)
 	}
 
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("get stdout pipe: %w", err)
+	}
+
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, fmt.Errorf("get stderr pipe: %w", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("start command: %w", err)
+	}
+
+	// Write JavaScript command to stdin
 	go func() {
 		//nolint:errcheck
 		defer stdin.Close()
@@ -284,17 +302,39 @@ func (h MySQLShell) run(
 		}
 	}()
 
-	output, err := cmd.CombinedOutput()
+	// Read stdout and stderr
+	var stdout bytes.Buffer
+	_, err = stdout.ReadFrom(stdoutPipe)
 	if err != nil {
-		logging.FromContext(ctx).
-			Errorw("mysql-shell", zap.String("output", string(output)), zap.String("cmd", string(jsCmd)))
+		return nil, fmt.Errorf("read stdout: %w", err)
+	}
+
+	var stderr bytes.Buffer
+	_, err = stderr.ReadFrom(stderrPipe)
+	if err != nil {
+		return nil, fmt.Errorf("read stderr: %w", err)
+	}
+
+	err = cmd.Wait()
+	if err != nil {
+		if stderr.Len() > 0 {
+			logging.FromContext(ctx).Errorw("mysql-shell", zap.String("stderr", stderr.String()))
+			return nil, fmt.Errorf("run command: %w, stderr: %s", err, stderr.String())
+		}
 		return nil, fmt.Errorf("run command: %w", err)
 	}
 
-	logging.FromContext(ctx).
-		Infow("mysql-shell", zap.String("output", string(output)), zap.String("cmd", string(jsCmd)))
+	if stderr.Len() > 0 {
+		logging.FromContext(ctx).Warnw("mysql-shell stderr", zap.String("stderr", stderr.String()))
+	}
 
-	return output, nil
+	logging.FromContext(ctx).Debugw("mysql-shell",
+		zap.String("host", db.Host),
+		zap.String("user", db.User),
+		zap.String("schema", db.Name),
+		zap.String("output", stdout.String()))
+
+	return stdout.Bytes(), nil
 }
 
 //	func (h MySQLShell) deleteRecursive(ctx context.Context, bucket string, path string) {
