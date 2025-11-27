@@ -51,9 +51,9 @@ func (h MySQLDump) Dump(
 		input.Host,
 		"-u",
 		input.User,
+		fmt.Sprintf("-p%s", input.Password),
 		input.Name,
 	)
-	cmd.Env = append(cmd.Env, fmt.Sprintf("MYSQL_PWD=%s", input.Password))
 
 	logging.FromContext(ctx).Debugw("mysqldump command", "host", input.Host, "user", input.User, "database", input.Name)
 
@@ -149,9 +149,9 @@ func (h MySQLDump) Restore(
 		input.Host,
 		"-u",
 		input.User,
+		fmt.Sprintf("-p%s", input.Password),
 		input.Name,
 	)
-	cmd.Env = append(cmd.Env, fmt.Sprintf("MYSQL_PWD=%s", input.Password))
 
 	logging.FromContext(ctx).Debugw("mysql restore command", "host", input.Host, "user", input.User, "database", input.Name)
 
