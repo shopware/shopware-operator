@@ -37,73 +37,28 @@ snapshot:
 
 dockers:
   - ids: [manager]
-    use: buildx
     image_templates:
-      - "ghcr.io/shopware/{{.ProjectName}}:{{.Version}}-amd64"
-      - "ghcr.io/shopware/{{.ProjectName}}:{{.Version}}-arm64"
+      - "ghcr.io/shopware/{{.ProjectName}}:{{.Version}}"
+      - "ghcr.io/shopware/{{.ProjectName}}:latest"
     build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
       - "--platform=linux/amd64"
-    extra_files:
-      - "LICENSE"
-      - "third-party-licenses.md"
-    dockerfile: build/Dockerfile
-    goarch: amd64
-
-  - ids: [manager]
-    use: buildx
-    image_templates:
-      - "ghcr.io/shopware/{{.ProjectName}}:{{.Version}}-arm64"
-    build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
       - "--platform=linux/arm64"
     extra_files:
       - "LICENSE"
       - "third-party-licenses.md"
     dockerfile: build/Dockerfile
-    goarch: arm64
 
   - ids: [snapshot]
-    use: buildx
     image_templates:
-      - "ghcr.io/shopware/{{.ProjectName}}-snapshot:{{.Version}}-amd64"
+      - "ghcr.io/shopware/{{.ProjectName}}-snapshot:{{.Version}}"
+      - "ghcr.io/shopware/{{.ProjectName}}-snapshot:latest"
     build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}-snapshot"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
       - "--platform=linux/amd64"
-    extra_files:
-      - "LICENSE"
-      - "third-party-licenses.md"
-    dockerfile: build/snapshot/Dockerfile
-    goarch: amd64
-
-  - ids: [snapshot]
-    use: buildx
-    image_templates:
-      - "ghcr.io/shopware/{{.ProjectName}}-snapshot:{{.Version}}-arm64"
-    build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}-snapshot"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
       - "--platform=linux/arm64"
     extra_files:
       - "LICENSE"
       - "third-party-licenses.md"
     dockerfile: build/snapshot/Dockerfile
-    goarch: arm64
 
 archives:
   - formats: ["tar.gz"]
