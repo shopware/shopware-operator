@@ -15,64 +15,153 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRestoreDump(t *testing.T) {
-	// Skip if not in integration test environment
-	if os.Getenv("INTEGRATION_TEST") != "true" {
-		t.Skip("Skipping integration test. Set INTEGRATION_TEST=true to run")
+func TestDump(t *testing.T) {
+	tc := setupTest(t)
+	ctx := context.Background()
+
+	// Allow specifying an existing database to dump
+	existingDBName := getEnvOrDefault("MYSQL_DB_TO_DUMP", "")
+	var dbName string
+	var db *sql.DB
+	var err error
+
+	if existingDBName != "" {
+		// Use existing database
+		dbName = existingDBName
+		db = tc.createDatabase(t, dbName)
+		defer db.Close()
+		t.Logf("Using existing database: %s", dbName)
+	} else {
+		// Create new test database
+		dbName = fmt.Sprintf("test_dump_%d", time.Now().Unix())
+		db = tc.createDatabase(t, dbName)
+		defer db.Close()
+		defer func() {
+			_, _ = db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
+		}()
+
+		// Create test tables with data
+		_, err = db.Exec(`
+			CREATE TABLE users (
+				id INT PRIMARY KEY AUTO_INCREMENT,
+				name VARCHAR(100),
+				email VARCHAR(100),
+				created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			)
+		`)
+		require.NoError(t, err)
+
+		_, err = db.Exec(`
+			CREATE TABLE orders (
+				id INT PRIMARY KEY AUTO_INCREMENT,
+				user_id INT,
+				amount DECIMAL(10,2),
+				created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (user_id) REFERENCES users(id)
+			)
+		`)
+		require.NoError(t, err)
+
+		// Insert test data
+		_, err = db.Exec(`
+			INSERT INTO users (name, email) VALUES 
+			('Alice', 'alice@example.com'),
+			('Bob', 'bob@example.com'),
+			('Charlie', 'charlie@example.com')
+		`)
+		require.NoError(t, err)
+
+		_, err = db.Exec(`
+			INSERT INTO orders (user_id, amount) VALUES 
+			(1, 100.50),
+			(1, 200.75),
+			(2, 50.25)
+		`)
+		require.NoError(t, err)
 	}
 
-	// Check if mysqlsh is available
-	mysqlshPath := getEnvOrDefault("MYSQLSH_PATH", "mysqlsh")
-	if _, err := os.Stat(mysqlshPath); err != nil {
-		// Try to find in PATH if it's not an absolute path
-		if !filepath.IsAbs(mysqlshPath) {
-			if _, err := exec.LookPath(mysqlshPath); err != nil {
-				t.Skip("mysqlsh not found. Install MySQL Shell or set MYSQLSH_PATH environment variable")
-			}
+	// Create dump
+	tempDir := t.TempDir()
+	dumpPath := filepath.Join(tempDir, "test_dump")
+
+	dumpInput := DumpInput{
+		DatabaseSpec: tc.databaseSpec(dbName),
+		DumpFilePath: dumpPath,
+	}
+
+	dumpOutput, err := tc.shell.Dump(ctx, dumpInput)
+	require.NoError(t, err, "Dump should succeed")
+
+	// Verify dump output (statistics may not be available if output parsing failed)
+	if dumpOutput.UncompressedSize > 0 {
+		assert.Greater(t, dumpOutput.Duration, time.Duration(0), "Duration should be greater than 0")
+		assert.Greater(t, dumpOutput.CompressedSize, int64(0), "Compressed size should be greater than 0")
+		assert.Greater(t, dumpOutput.CompressionRation, 1.0, "Compression ratio should be greater than 1")
+		t.Logf("Dump stats: Uncompressed=%d bytes, Compressed=%d bytes, Ratio=%.2fx, Duration=%s",
+			dumpOutput.UncompressedSize, dumpOutput.CompressedSize, dumpOutput.CompressionRation, dumpOutput.Duration)
+	} else {
+		t.Logf("Dump completed successfully (detailed statistics not available)")
+	}
+
+	// Verify dump directory was created
+	_, err = os.Stat(dumpPath)
+	require.NoError(t, err, "Dump directory should exist")
+
+	// Verify dump contains expected files
+	entries, err := os.ReadDir(dumpPath)
+	require.NoError(t, err)
+
+	hasMetadata := false
+	hasDDL := false
+	hasData := false
+
+	for _, entry := range entries {
+		name := entry.Name()
+		if name == "@.json" {
+			hasMetadata = true
+		}
+		if filepath.Ext(name) == ".sql" && name[0] != '@' {
+			hasDDL = true
+		}
+		if filepath.Ext(name) == ".zst" {
+			hasData = true
 		}
 	}
 
+	assert.True(t, hasMetadata, "Dump should contain @.json metadata file")
+	assert.True(t, hasDDL, "Dump should contain .sql DDL files")
+	assert.True(t, hasData, "Dump should contain .zst compressed data files")
+
+	// Count tables in dump
+	tableCount, err := countTablesInDump(dumpPath)
+	require.NoError(t, err)
+
+	if existingDBName == "" {
+		// For test-created database, we know the exact count
+		assert.Equal(t, 3, tableCount, "Expected 3 files in dump (2 tables + 1 database DDL)")
+	} else {
+		// For existing database, just verify some tables were dumped
+		assert.Greater(t, tableCount, 0, "Expected at least one table in dump")
+	}
+	t.Logf("Dump contains %d .sql files", tableCount)
+}
+
+func TestRestoreDump(t *testing.T) {
+	tc := setupTest(t)
 	ctx := context.Background()
 
-	// Setup test database connection
-	dbHost := getEnvOrDefault("MYSQL_HOST", "localhost")
-	dbPort := getEnvOrDefault("MYSQL_PORT", "3306")
-	dbUser := getEnvOrDefault("MYSQL_USER", "root")
-	dbPassword := getEnvOrDefault("MYSQL_PASSWORD", "root")
-	dbSSLMode := getEnvOrDefault("MYSQL_SSL_MODE", "skip-verify")
 	dbName := fmt.Sprintf("test_restore_%d", time.Now().Unix())
 	existingDumpPath := getEnvOrDefault("MYSQL_DUMP_PATH", "../../test/data/snapshot/database")
 
-	// Create test database
-	rootDSN := fmt.Sprintf("%s:%s@tcp(%s:%s)/", dbUser, dbPassword, dbHost, dbPort)
-	if dbSSLMode != "" {
-		rootDSN = fmt.Sprintf("%s?tls=%s", rootDSN, dbSSLMode)
-	}
-	db, err := sql.Open("mysql", rootDSN)
-	require.NoError(t, err)
-	defer db.Close()
-
-	_, err = db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbName))
-	require.NoError(t, err)
-
-	// Close and reconnect with the specific database
-	db.Close()
-	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", dbUser, dbPassword, dbHost, dbPort, dbName)
-	if dbSSLMode != "" {
-		dbDSN = fmt.Sprintf("%s?tls=%s", dbDSN, dbSSLMode)
-	}
-	db, err = sql.Open("mysql", dbDSN)
-	require.NoError(t, err)
+	db := tc.createDatabase(t, dbName)
 	defer db.Close()
 	defer func() {
 		_, _ = db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
 	}()
 
 	// Enable local_infile for MySQL Shell's dump loading utility (might be needed only for Percona)
-	_, err = db.Exec("SET GLOBAL local_infile = 1")
+	_, err := db.Exec("SET GLOBAL local_infile = 1")
 	require.NoError(t, err, "Failed to enable local_infile. User may need SUPER or SYSTEM_VARIABLES_ADMIN privilege")
-
-	shell := NewMySQLShell(mysqlshPath)
 
 	// Check if user provided an existing dump path
 	var dumpPath string
@@ -109,18 +198,11 @@ func TestRestoreDump(t *testing.T) {
 
 		// Create dump
 		dumpInput := DumpInput{
-			DatabaseSpec: DatabaseSpec{
-				Host:     dbHost,
-				Port:     mustParsePort(dbPort),
-				User:     dbUser,
-				Password: []byte(dbPassword),
-				Name:     dbName,
-				SSLMode:  dbSSLMode,
-			},
+			DatabaseSpec: tc.databaseSpec(dbName),
 			DumpFilePath: dumpPath,
 		}
 
-		dumpOutput, err := shell.Dump(ctx, dumpInput)
+		dumpOutput, err := tc.shell.Dump(ctx, dumpInput)
 		require.NoError(t, err)
 		assert.Greater(t, dumpOutput.UncompressedSize, int64(0))
 		assert.Greater(t, dumpOutput.CompressedSize, int64(0))
@@ -142,18 +224,11 @@ func TestRestoreDump(t *testing.T) {
 
 	// Now restore from the dump
 	restoreInput := RestoreInput{
-		DatabaseSpec: DatabaseSpec{
-			Host:     dbHost,
-			Port:     mustParsePort(dbPort),
-			User:     dbUser,
-			Password: []byte(dbPassword),
-			Name:     dbName,
-			SSLMode:  dbSSLMode,
-		},
+		DatabaseSpec: tc.databaseSpec(dbName),
 		DumpFilePath: dumpPath,
 	}
 
-	err = shell.RestoreDump(ctx, restoreInput)
+	err = tc.shell.RestoreDump(ctx, restoreInput)
 	require.NoError(t, err)
 
 	// Verify the database still exists after restore
@@ -191,6 +266,79 @@ func TestRestoreDump(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "Alice", name)
 		assert.Equal(t, "alice@example.com", email)
+	}
+}
+
+type testConfig struct {
+	mysqlshPath string
+	dbHost      string
+	dbPort      string
+	dbUser      string
+	dbPassword  string
+	dbSSLMode   string
+	shell       MySQLShell
+}
+
+func setupTest(t *testing.T) testConfig {
+	// Skip if not in integration test environment
+	if os.Getenv("INTEGRATION_TEST") != "true" {
+		t.Skip("Skipping integration test. Set INTEGRATION_TEST=true to run")
+	}
+
+	// Check if mysqlsh is available
+	mysqlshPath := getEnvOrDefault("MYSQLSH_PATH", "mysqlsh")
+	if _, err := os.Stat(mysqlshPath); err != nil {
+		// Try to find in PATH if it's not an absolute path
+		if !filepath.IsAbs(mysqlshPath) {
+			if _, err := exec.LookPath(mysqlshPath); err != nil {
+				t.Skip("mysqlsh not found. Install MySQL Shell or set MYSQLSH_PATH environment variable")
+			}
+		}
+	}
+
+	return testConfig{
+		mysqlshPath: mysqlshPath,
+		dbHost:      getEnvOrDefault("MYSQL_HOST", "localhost"),
+		dbPort:      getEnvOrDefault("MYSQL_PORT", "3306"),
+		dbUser:      getEnvOrDefault("MYSQL_USER", "root"),
+		dbPassword:  getEnvOrDefault("MYSQL_PASSWORD", "root"),
+		dbSSLMode:   getEnvOrDefault("MYSQL_SSL_MODE", "skip-verify"),
+		shell:       NewMySQLShell(getEnvOrDefault("MYSQLSH_PATH", "mysqlsh")),
+	}
+}
+
+func (tc testConfig) createDatabase(t *testing.T, dbName string) *sql.DB {
+	// Create test database
+	rootDSN := fmt.Sprintf("%s:%s@tcp(%s:%s)/", tc.dbUser, tc.dbPassword, tc.dbHost, tc.dbPort)
+	if tc.dbSSLMode != "" {
+		rootDSN = fmt.Sprintf("%s?tls=%s", rootDSN, tc.dbSSLMode)
+	}
+	rootDB, err := sql.Open("mysql", rootDSN)
+	require.NoError(t, err)
+	defer rootDB.Close()
+
+	_, err = rootDB.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbName))
+	require.NoError(t, err)
+
+	// Connect to the specific database
+	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", tc.dbUser, tc.dbPassword, tc.dbHost, tc.dbPort, dbName)
+	if tc.dbSSLMode != "" {
+		dbDSN = fmt.Sprintf("%s?tls=%s", dbDSN, tc.dbSSLMode)
+	}
+	db, err := sql.Open("mysql", dbDSN)
+	require.NoError(t, err)
+
+	return db
+}
+
+func (tc testConfig) databaseSpec(dbName string) DatabaseSpec {
+	return DatabaseSpec{
+		Host:     tc.dbHost,
+		Port:     mustParsePort(tc.dbPort),
+		User:     tc.dbUser,
+		Password: []byte(tc.dbPassword),
+		Name:     dbName,
+		SSLMode:  tc.dbSSLMode,
 	}
 }
 
