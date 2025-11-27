@@ -192,7 +192,7 @@ func (h MySQLDump) Restore(
 
 	err = reader.Close()
 	if err != nil {
-		return fmt.Errorf("close gzip writer: %w", err)
+		return fmt.Errorf("close gzip reader: %w", err)
 	}
 
 	return nil
