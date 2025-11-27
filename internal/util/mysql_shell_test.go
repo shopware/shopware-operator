@@ -280,6 +280,7 @@ type testConfig struct {
 }
 
 func setupTest(t *testing.T) testConfig {
+	t.Helper()
 	// Skip if not in integration test environment
 	if os.Getenv("INTEGRATION_TEST") != "true" {
 		t.Skip("Skipping integration test. Set INTEGRATION_TEST=true to run")
@@ -308,6 +309,7 @@ func setupTest(t *testing.T) testConfig {
 }
 
 func (tc testConfig) createDatabase(t *testing.T, dbName string) *sql.DB {
+	t.Helper()
 	// Create test database
 	rootDSN := fmt.Sprintf("%s:%s@tcp(%s:%s)/", tc.dbUser, tc.dbPassword, tc.dbHost, tc.dbPort)
 	if tc.dbSSLMode != "" {
