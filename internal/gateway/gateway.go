@@ -137,11 +137,16 @@ func StoreHTTPRoute(store v1.Store) *gatewayv1.HTTPRoute {
 		},
 	}
 
-	parentRefs := []gatewayv1.ParentReference{
-		{
-			Name: gatewayv1.ObjectName(store.Spec.Network.GatewayName),
-		},
+	parentRef := gatewayv1.ParentReference{
+		Name: gatewayv1.ObjectName(store.Spec.Network.GatewayName),
 	}
+
+	if store.Spec.Network.GatewaySectionName != "" {
+		sectionName := gatewayv1.SectionName(store.Spec.Network.GatewaySectionName)
+		parentRef.SectionName = &sectionName
+	}
+
+	parentRefs := []gatewayv1.ParentReference{parentRef}
 
 	return &gatewayv1.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
