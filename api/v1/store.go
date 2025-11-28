@@ -203,11 +203,12 @@ type NetworkSpec struct {
 	// +kubebuilder:default=8000
 	Port int32 `json:"port,omitempty"`
 
-	IngressClassName string            `json:"ingressClassName,omitempty"`
-	GatewayClassName string            `json:"gatewayClassName,omitempty"`
-	GatewayName      string            `json:"gatewayName,omitempty"`
-	Annotations      map[string]string `json:"annotations,omitempty"`
-	Labels           map[string]string `json:"labels,omitempty"`
+	IngressClassName   string            `json:"ingressClassName,omitempty"`
+	GatewayClassName   string            `json:"gatewayClassName,omitempty"`
+	GatewayName        string            `json:"gatewayName,omitempty"`
+	GatewaySectionName string            `json:"gatewaySectionName,omitempty"`
+	Annotations        map[string]string `json:"annotations,omitempty"`
+	Labels             map[string]string `json:"labels,omitempty"`
 
 	// +kubebuilder:default=store-tls
 	TLSSecretName string `json:"tlsSecretName,omitempty"`
