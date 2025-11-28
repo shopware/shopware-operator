@@ -33,7 +33,7 @@ builds:
       - darwin
 
 snapshot:
-  version_template: '{{ replace .Branch "/" "-" }}'
+  version_template: '{{ if eq .Branch "main" }}{{ .Branch }}{{ else }}{{ replace .Branch "/" "-" }}-{{ .ShortCommit }}{{ end }}'
 
 dockers_v2:
   - id: operator
