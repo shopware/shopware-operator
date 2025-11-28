@@ -12,6 +12,21 @@ import (
 // redis
 func (s *Store) getAppCache() []corev1.EnvVar {
 	if s.Spec.AppCache.Adapter == "redis" {
+		// If DSN is provided, use it directly
+		if s.Spec.AppCache.RedisDsn != "" {
+			return []corev1.EnvVar{
+				{
+					Name:  "K8S_CACHE_TYPE",
+					Value: "redis",
+				},
+				{
+					Name:  "K8S_CACHE_URL",
+					Value: s.Spec.AppCache.RedisDsn,
+				},
+			}
+		}
+
+		// Otherwise build from individual fields
 		return []corev1.EnvVar{
 			// TODO: Will be moved to yaml configuration
 			{
@@ -48,19 +63,28 @@ func (s *Store) getAppCache() []corev1.EnvVar {
 // Handled by PHP itself
 func (s *Store) getSessionCache() []corev1.EnvVar {
 	if s.Spec.SessionCache.Adapter == "redis" {
+		var savePath string
+		// If DSN is provided, use it directly
+		if s.Spec.SessionCache.RedisDsn != "" {
+			savePath = s.Spec.SessionCache.RedisDsn
+		} else {
+			// Otherwise build from individual fields
+			savePath = fmt.Sprintf(
+				"tcp://%s:%d/%d",
+				s.Spec.SessionCache.RedisHost,
+				s.Spec.SessionCache.RedisPort,
+				s.Spec.SessionCache.RedisIndex,
+			)
+		}
+
 		return []corev1.EnvVar{
 			{
 				Name:  "PHP_SESSION_HANDLER",
 				Value: "redis",
 			},
 			{
-				Name: "PHP_SESSION_SAVE_PATH",
-				Value: fmt.Sprintf(
-					"tcp://%s:%d/%d",
-					s.Spec.SessionCache.RedisHost,
-					s.Spec.SessionCache.RedisPort,
-					s.Spec.SessionCache.RedisIndex,
-				),
+				Name:  "PHP_SESSION_SAVE_PATH",
+				Value: savePath,
 			},
 		}
 	}
@@ -121,6 +145,17 @@ func (f *FPMSpec) getFPMConfiguration() []corev1.EnvVar {
 // https://symfony.com/doc/current/messenger.html#transport-configuration
 func (s *Store) getWorker() []corev1.EnvVar {
 	if s.Spec.Worker.Adapter == "redis" {
+		// If DSN is provided, use it directly
+		if s.Spec.Worker.RedisDsn != "" {
+			return []corev1.EnvVar{
+				{
+					Name:  "MESSENGER_TRANSPORT_DSN",
+					Value: s.Spec.Worker.RedisDsn,
+				},
+			}
+		}
+
+		// Otherwise build from individual fields
 		return []corev1.EnvVar{
 			{
 				Name: "MESSENGER_TRANSPORT_DSN",
