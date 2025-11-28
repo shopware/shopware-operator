@@ -325,6 +325,7 @@ type AppCacheSpec struct {
 }
 
 type RedisSpec struct {
+	RedisDSN  string `json:"redisDsn,omitempty"`
 	RedisHost string `json:"redisHost,omitempty"`
 	// +kubebuilder:default=6379
 	RedisPort int `json:"redisPort,omitempty"`
