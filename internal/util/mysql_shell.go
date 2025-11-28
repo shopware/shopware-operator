@@ -226,8 +226,14 @@ func (h MySQLShell) RestoreDump(
 	tmpl, err := template.New("cmd").Parse(`
     session.runSql('CREATE DATABASE IF NOT EXISTS ` + "`{{.Name}}`" + `');
     session.runSql('USE ` + "`{{.Name}}`" + `');
+    session.runSql('SET FOREIGN_KEY_CHECKS = 0');
+    var tables = session.runSql('SHOW TABLES').fetchAll();
+    for(var index in tables) {
+        session.runSql('DROP TABLE IF EXISTS ' + mysql.quoteIdentifier(tables[index][0]));
+    }
+    session.runSql('SET FOREIGN_KEY_CHECKS = 1');
     util.loadDump("` + escapeJSString(input.DumpFilePath) + `", {
-        "schema": "{{.Name}}", 
+        "schema": "{{.Name}}",
         "showProgress": "false"
     });
 	`)
