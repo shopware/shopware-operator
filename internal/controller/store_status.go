@@ -123,7 +123,7 @@ func printWarningForEnvs(ctx context.Context, store *v1.Store) {
 	// TODO: this check doesn't make sense, because the overwriten envs are in there
 	for _, obj2 := range store.Spec.Container.ExtraEnvs {
 		if slices.ContainsFunc(envs, func(c corev1.EnvVar) bool { return c.Name == obj2.Name }) {
-			l.Info("Overwriting env var. If you can, please use the crd to define it", "name", obj2.Name)
+			l.Infof("Overwriting env var. If you can, please use the crd to define it. Name: %s", obj2.Name)
 		}
 	}
 }
