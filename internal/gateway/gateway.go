@@ -141,6 +141,11 @@ func StoreHTTPRoute(store v1.Store) *gatewayv1.HTTPRoute {
 		Name: gatewayv1.ObjectName(store.Spec.Network.GatewayName),
 	}
 
+	if store.Spec.Network.GatewayNamespace != "" {
+		namespace := gatewayv1.Namespace(store.Spec.Network.GatewayNamespace)
+		parentRef.Namespace = &namespace
+	}
+
 	if store.Spec.Network.GatewaySectionName != "" {
 		sectionName := gatewayv1.SectionName(store.Spec.Network.GatewaySectionName)
 		parentRef.SectionName = &sectionName

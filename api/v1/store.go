@@ -206,6 +206,7 @@ type NetworkSpec struct {
 	IngressClassName   string            `json:"ingressClassName,omitempty"`
 	GatewayClassName   string            `json:"gatewayClassName,omitempty"`
 	GatewayName        string            `json:"gatewayName,omitempty"`
+	GatewayNamespace   string            `json:"gatewayNamespace,omitempty"`
 	GatewaySectionName string            `json:"gatewaySectionName,omitempty"`
 	Annotations        map[string]string `json:"annotations,omitempty"`
 	Labels             map[string]string `json:"labels,omitempty"`
