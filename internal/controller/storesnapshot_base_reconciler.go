@@ -168,16 +168,17 @@ func (r *StoreSnapshotBaseReconciler) ReconcileSnapshot(
 	ctx = logging.WithLogger(ctx, logger)
 
 	snapshot, err := getSnapshot(ctx, r.Client, req.NamespacedName)
-	if err == nil {
-		logger.Infof("Processing %s snapshot", snapshotType)
-		return r.reconcileSnapshotResource(ctx, req, snapshot, snapshotType, getJob, createJob, writeStatus), nil
-	} else if !k8serrors.IsNotFound(err) {
-		logger.Errorw(fmt.Sprintf("get %s snapshot", snapshotType), zap.Error(err))
-		return shortRequeue, nil
+	if err != nil {
+		if !k8serrors.IsNotFound(err) {
+			logger.Warnw("snapshot not found, stop execution", zap.Error(err))
+			return noRequeue, nil
+		}
+		logger.Errorw("get snapshot unknown error, stop execution", zap.Error(err))
+		return noRequeue, nil
 	}
 
-	logger.Infof("No %s snapshot resource found", snapshotType)
-	return shortRequeue, nil
+	logger.Info("Processing snapshot")
+	return r.reconcileSnapshotResource(ctx, req, snapshot, snapshotType, getJob, createJob, writeStatus), nil
 }
 
 func (r *StoreSnapshotBaseReconciler) reconcileSnapshotResource(
