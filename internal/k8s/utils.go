@@ -483,11 +483,16 @@ func EnsureObjectWithHash(
 
 	if hashChanged || objectMetaChanged {
 		if hashChanged {
+			diff, err := ObjectDiff(oldObject, obj)
+			if err != nil {
+				diff = fmt.Sprintf("Error generating diff: %v", err)
+			}
 			logging.FromContext(ctx).Infow("Object last-config-hash has changed",
 				zap.String("kind", obj.GetObjectKind().GroupVersionKind().Kind),
 				zap.String("obj-name", obj.GetName()),
 				zap.String("old", oldObject.GetAnnotations()["shopware.com/last-config-hash"]),
-				zap.String("new", hash))
+				zap.String("new", hash),
+				zap.String("diff", diff))
 		} else {
 			logging.FromContext(ctx).Infow(
 				"Object meta has changed",
@@ -566,35 +571,37 @@ func objectMetaEqual(old, new metav1.Object) bool {
 		util.MapEqual(old.GetAnnotations(), new.GetAnnotations())
 }
 
-func ObjectHash(obj runtime.Object) (string, error) {
-	var dataToMarshal interface{}
-
+func extractRelevantData(obj runtime.Object) interface{} {
 	switch object := obj.(type) {
 	case *appsv1.StatefulSet:
-		dataToMarshal = object.Spec
+		return object.Spec
 	case *appsv1.Deployment:
-		dataToMarshal = object.Spec
+		return object.Spec
 	case *corev1.Service:
-		dataToMarshal = object.Spec
+		return object.Spec
 	case *corev1.Secret:
-		dataToMarshal = object.Data
+		return object.Data
 	case *cm.Certificate:
-		dataToMarshal = object.Spec
+		return object.Spec
 	case *cm.Issuer:
-		dataToMarshal = object.Spec
+		return object.Spec
 	case *autoscalingv2.HorizontalPodAutoscaler:
-		dataToMarshal = object.Spec
+		return object.Spec
 	case *batchv1.Job:
-		dataToMarshal = object.Spec
+		return object.Spec
 	case *batchv1.CronJob:
-		dataToMarshal = object.Spec
+		return object.Spec
 	case *policy.PodDisruptionBudget:
-		dataToMarshal = object.Spec
+		return object.Spec
 	case *networkingv1.Ingress:
-		dataToMarshal = object.Spec
+		return object.Spec
 	default:
-		dataToMarshal = obj
+		return obj
 	}
+}
+
+func ObjectHash(obj runtime.Object) (string, error) {
+	dataToMarshal := extractRelevantData(obj)
 
 	data, err := json.Marshal(dataToMarshal)
 	if err != nil {
@@ -603,4 +610,97 @@ func ObjectHash(obj runtime.Object) (string, error) {
 
 	hash := md5.Sum(data)
 	return hex.EncodeToString(hash[:]), nil
+}
+
+func ObjectDiff(oldObj, newObj runtime.Object) (string, error) {
+	oldData := extractRelevantData(oldObj)
+	newData := extractRelevantData(newObj)
+
+	oldJSON, err := json.Marshal(oldData)
+	if err != nil {
+		return "", err
+	}
+
+	newJSON, err := json.Marshal(newData)
+	if err != nil {
+		return "", err
+	}
+
+	var oldMap, newMap map[string]interface{}
+	if err := json.Unmarshal(oldJSON, &oldMap); err != nil {
+		return "", err
+	}
+	if err := json.Unmarshal(newJSON, &newMap); err != nil {
+		return "", err
+	}
+
+	changes := findChanges(oldMap, newMap, "")
+	if len(changes) == 0 {
+		return "No changes detected", nil
+	}
+
+	var result strings.Builder
+	result.WriteString("Changed fields:\n")
+	for _, change := range changes {
+		result.WriteString(change)
+		result.WriteString("\n")
+	}
+
+	return result.String(), nil
+}
+
+func findChanges(old, new map[string]interface{}, prefix string) []string {
+	var changes []string
+
+	for key, newValue := range new {
+		fullKey := key
+		if prefix != "" {
+			fullKey = prefix + "." + key
+		}
+
+		oldValue, exists := old[key]
+		if !exists {
+			changes = append(changes, fmt.Sprintf("  + %s: %v", fullKey, formatValue(newValue)))
+			continue
+		}
+
+		if !reflect.DeepEqual(oldValue, newValue) {
+			oldMap, oldIsMap := oldValue.(map[string]interface{})
+			newMap, newIsMap := newValue.(map[string]interface{})
+
+			if oldIsMap && newIsMap {
+				changes = append(changes, findChanges(oldMap, newMap, fullKey)...)
+			} else {
+				changes = append(changes, fmt.Sprintf("  ~ %s: %v -> %v", fullKey, formatValue(oldValue), formatValue(newValue)))
+			}
+		}
+	}
+
+	for key, oldValue := range old {
+		fullKey := key
+		if prefix != "" {
+			fullKey = prefix + "." + key
+		}
+		if _, exists := new[key]; !exists {
+			changes = append(changes, fmt.Sprintf("  - %s: %v", fullKey, formatValue(oldValue)))
+		}
+	}
+
+	return changes
+}
+
+func formatValue(v interface{}) string {
+	switch val := v.(type) {
+	case string:
+		return fmt.Sprintf("%q", val)
+	case []interface{}:
+		if len(val) > 3 {
+			return fmt.Sprintf("[...%d items...]", len(val))
+		}
+		return fmt.Sprintf("%v", val)
+	case map[string]interface{}:
+		return "{...}"
+	default:
+		return fmt.Sprintf("%v", val)
+	}
 }

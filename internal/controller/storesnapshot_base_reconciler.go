@@ -209,7 +209,7 @@ func (r *StoreSnapshotBaseReconciler) reconcileSnapshotResource(
 		return longRequeue
 	}
 
-	if !snapshot.GetStatus().IsState(v1.SnapshotStateFailed, v1.SnapshotStateSucceeded) {
+	if !snapshot.GetStatus().IsState(v1.SnapshotStateFailed, v1.SnapshotStateSucceeded, v1.SnapshotStateRunning) {
 		defer func() {
 			if err := r.reconcileCRStatus(ctx, *store, snapshot, getJob); err != nil {
 				logger.Errorw(fmt.Sprintf("reconcile snapshot %s status", snapshotType), zap.Error(err))
