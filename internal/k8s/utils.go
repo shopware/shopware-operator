@@ -484,11 +484,15 @@ func EnsureObjectWithHash(
 	if hashChanged || objectMetaChanged {
 		if hashChanged {
 			logging.FromContext(ctx).Infow("Object last-config-hash has changed",
+				zap.String("kind", obj.GetObjectKind().GroupVersionKind().Kind),
+				zap.String("obj-name", obj.GetName()),
 				zap.String("old", oldObject.GetAnnotations()["shopware.com/last-config-hash"]),
 				zap.String("new", hash))
 		} else {
 			logging.FromContext(ctx).Infow(
 				"Object meta has changed",
+				zap.String("kind", obj.GetObjectKind().GroupVersionKind().Kind),
+				zap.String("obj-name", obj.GetName()),
 				zap.Any("oldAnnotations", oldObject.GetAnnotations()),
 				zap.Any("newAnnotations", obj.GetAnnotations()),
 				zap.Any("oldLabels", oldObject.GetLabels()),
