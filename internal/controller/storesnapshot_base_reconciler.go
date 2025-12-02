@@ -169,12 +169,13 @@ func (r *StoreSnapshotBaseReconciler) ReconcileSnapshot(
 
 	snapshot, err := getSnapshot(ctx, r.Client, req.NamespacedName)
 	if err != nil {
-		if !k8serrors.IsNotFound(err) {
-			logger.Warnw("failed to retrieve snapshot, stop execution", zap.Error(err))
+		if k8serrors.IsNotFound(err) {
+			logger.Warnw("snapshot not found, stop execution", zap.Error(err))
+			return noRequeue, nil
+		} else {
+			logger.Errorw("get snapshot unknown error, stop execution", zap.Error(err))
 			return noRequeue, nil
 		}
-		logger.Errorw("get snapshot unknown error, stop execution", zap.Error(err))
-		return noRequeue, nil
 	}
 
 	logger.Info("Processing snapshot")
