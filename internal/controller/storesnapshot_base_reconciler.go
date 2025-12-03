@@ -161,22 +161,25 @@ func (r *StoreSnapshotBaseReconciler) ReconcileSnapshot(
 ) (ctrl.Result, error) {
 	logger := r.Logger.
 		With(zap.String("namespace", req.Namespace)).
+		With(zap.String("service", "shopware-operator-snapshot")).
+		With(zap.String("type", snapshotType)).
 		With(zap.String("name", req.Name))
 
 	ctx = logging.WithLogger(ctx, logger)
-	logger.Infof("Reconciling %s snapshots", snapshotType)
 
 	snapshot, err := getSnapshot(ctx, r.Client, req.NamespacedName)
-	if err == nil {
-		logger.Infof("Processing %s snapshot", snapshotType)
-		return r.reconcileSnapshotResource(ctx, req, snapshot, snapshotType, getJob, createJob, writeStatus), nil
-	} else if !k8serrors.IsNotFound(err) {
-		logger.Errorw(fmt.Sprintf("get %s snapshot", snapshotType), zap.Error(err))
-		return shortRequeue, nil
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			logger.Warnw("snapshot not found, stop execution", zap.Error(err))
+			return noRequeue, nil
+		} else {
+			logger.Errorw("get snapshot unknown error, stop execution", zap.Error(err))
+			return noRequeue, nil
+		}
 	}
 
-	logger.Infof("No %s snapshot resource found", snapshotType)
-	return shortRequeue, nil
+	logger.Info("Processing snapshot")
+	return r.reconcileSnapshotResource(ctx, req, snapshot, snapshotType, getJob, createJob, writeStatus), nil
 }
 
 func (r *StoreSnapshotBaseReconciler) reconcileSnapshotResource(
@@ -189,10 +192,9 @@ func (r *StoreSnapshotBaseReconciler) reconcileSnapshotResource(
 	writeStatus StatusWriter,
 ) ctrl.Result {
 	logger := logging.FromContext(ctx).With(
-		zap.String("snapshot", snapshot.GetObjectMeta().GetName()),
+		zap.String("name", snapshot.GetObjectMeta().GetName()),
 		zap.String("namespace", snapshot.GetObjectMeta().GetNamespace()),
-		zap.String("store", snapshot.GetSpec().StoreNameRef),
-		zap.String("snapshot_type", snapshotType),
+		zap.String("store-ref", snapshot.GetSpec().StoreNameRef),
 	)
 
 	store, err := k8s.GetStore(ctx, r.Client, client.ObjectKey{
@@ -205,10 +207,10 @@ func (r *StoreSnapshotBaseReconciler) reconcileSnapshotResource(
 			return longRequeue
 		}
 		logger.Errorw("get store", zap.Error(err))
-		return shortRequeue
+		return longRequeue
 	}
 
-	if !snapshot.GetStatus().IsState(v1.SnapshotStateFailed, v1.SnapshotStateSucceeded) {
+	if !snapshot.GetStatus().IsState(v1.SnapshotStateFailed, v1.SnapshotStateSucceeded, v1.SnapshotStateRunning) {
 		defer func() {
 			if err := r.reconcileCRStatus(ctx, *store, snapshot, getJob); err != nil {
 				logger.Errorw(fmt.Sprintf("reconcile snapshot %s status", snapshotType), zap.Error(err))
