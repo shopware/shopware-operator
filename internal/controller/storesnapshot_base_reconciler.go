@@ -210,31 +210,37 @@ func (r *StoreSnapshotBaseReconciler) reconcileSnapshotResource(
 		return longRequeue
 	}
 
-	if !snapshot.GetStatus().IsState(v1.SnapshotStateFailed, v1.SnapshotStateSucceeded, v1.SnapshotStateRunning) {
-		defer func() {
-			if err := r.reconcileCRStatus(ctx, *store, snapshot, getJob); err != nil {
-				logger.Errorw(fmt.Sprintf("reconcile snapshot %s status", snapshotType), zap.Error(err))
-			}
+	// Skip reconciliation for terminal states (failed or succeeded)
+	if snapshot.GetStatus().IsState(v1.SnapshotStateFailed, v1.SnapshotStateSucceeded) {
+		return noRequeue
+	}
 
-			r.sendEvent(ctx, snapshot)
-			err = writeStatus(ctx, r.Client, types.NamespacedName{
-				Namespace: snapshot.GetObjectMeta().GetNamespace(),
-				Name:      snapshot.GetObjectMeta().GetName(),
-			}, *snapshot.GetStatus())
-			if err != nil {
-				logger.Errorw("write snapshot status", zap.Error(err))
-			}
-		}()
+	// Always check status for running or pending snapshots
+	defer func() {
+		if err := r.reconcileCRStatus(ctx, *store, snapshot, getJob); err != nil {
+			logger.Errorw(fmt.Sprintf("reconcile snapshot %s status", snapshotType), zap.Error(err))
+		}
 
+		r.sendEvent(ctx, snapshot)
+		err = writeStatus(ctx, r.Client, types.NamespacedName{
+			Namespace: snapshot.GetObjectMeta().GetNamespace(),
+			Name:      snapshot.GetObjectMeta().GetName(),
+		}, *snapshot.GetStatus())
+		if err != nil {
+			logger.Errorw("write snapshot status", zap.Error(err))
+		}
+	}()
+
+	// Only create/update job if not in running state
+	if !snapshot.GetStatus().IsState(v1.SnapshotStateRunning) {
 		obj := createJob(*store, snapshot)
 		if err := r.reconcileSnapshotJob(ctx, snapshot, snapshot.GetObjectMeta(), obj); err != nil {
 			logger.Errorw(fmt.Sprintf("reconcile snapshot %s job", snapshotType), zap.Error(err))
 			return shortRequeue
 		}
-		return shortRequeue
 	}
 
-	return noRequeue
+	return longRequeue
 }
 
 func (r *StoreSnapshotBaseReconciler) reconcileSnapshotJob(ctx context.Context, snap SnapshotResource, owner metav1.Object, obj *batchv1.Job) (err error) {
