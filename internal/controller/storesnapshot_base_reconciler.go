@@ -95,7 +95,7 @@ func (r *StoreSnapshotBaseReconciler) reconcileCRStatus(
 		status.State = v1.SnapshotStatePending
 		status.Message = "Error in getting snapshot job"
 		con.Status = Error
-		con.Reason = fmt.Errorf("InternalError: Error in getting snapshot job: %w", err).Error()
+		con.Reason = fmt.Sprintf("InternalError: Error in getting snapshot job: %s", err)
 		return nil
 	}
 
@@ -114,7 +114,7 @@ func (r *StoreSnapshotBaseReconciler) reconcileCRStatus(
 		status.Message = "Error in getting snapshot state job"
 		status.CompletedAt = metav1.Now()
 		con.Status = Error
-		con.Reason = fmt.Errorf("InternalError: Error in getting snapshot state job: %w", err).Error()
+		con.Reason = fmt.Sprintf("InternalError: Error in getting snapshot state job: %s", err)
 		return fmt.Errorf("get snapshot job state: %w", err)
 	}
 
@@ -124,7 +124,7 @@ func (r *StoreSnapshotBaseReconciler) reconcileCRStatus(
 		status.CompletedAt = metav1.Now()
 		con.Status = Error
 		//nolint:staticcheck
-		con.Reason = fmt.Errorf("Error in Snapshot, exit code: %d", jobState.ExitCode).Error()
+		con.Reason = fmt.Sprintf("error in Snapshot, exit code: %d", jobState.ExitCode)
 		return nil
 	}
 
