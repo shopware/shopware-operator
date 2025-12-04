@@ -114,10 +114,10 @@ func (h MySQLDump) Dump(
 	}
 
 	return &DumpOutput{
-		Duration:          time.Since(duration),
-		UncompressedSize:  uncompressedCount,
-		CompressedSize:    counterWriter.count,
-		CompressionRation: float64(counterWriter.count) / float64(uncompressedCount),
+		Duration:         time.Since(duration),
+		UncompressedSize: uncompressedCount,
+		CompressedSize:   counterWriter.count,
+		CompressionRatio: float64(counterWriter.count) / float64(uncompressedCount),
 	}, nil
 }
 

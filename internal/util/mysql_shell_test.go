@@ -98,14 +98,14 @@ func TestDump(t *testing.T) {
 	if dumpOutput.UncompressedSize > 0 {
 		assert.Greater(t, dumpOutput.CompressedSize, int64(0), "Compressed size should be greater than 0")
 		// For very small datasets, compression may not help (ratio could be 1.0 or less)
-		assert.GreaterOrEqual(t, dumpOutput.CompressionRation, 0.1, "Compression ratio should be valid")
+		assert.GreaterOrEqual(t, dumpOutput.CompressionRatio, 0.1, "Compression ratio should be valid")
 
 		if dumpOutput.Duration > 0 {
 			t.Logf("Dump stats: Uncompressed=%d bytes, Compressed=%d bytes, Ratio=%.2fx, Duration=%s",
-				dumpOutput.UncompressedSize, dumpOutput.CompressedSize, dumpOutput.CompressionRation, dumpOutput.Duration)
+				dumpOutput.UncompressedSize, dumpOutput.CompressedSize, dumpOutput.CompressionRatio, dumpOutput.Duration)
 		} else {
 			t.Logf("Dump stats: Uncompressed=%d bytes, Compressed=%d bytes, Ratio=%.2fx (duration not captured)",
-				dumpOutput.UncompressedSize, dumpOutput.CompressedSize, dumpOutput.CompressionRation)
+				dumpOutput.UncompressedSize, dumpOutput.CompressedSize, dumpOutput.CompressionRatio)
 		}
 	} else {
 		t.Logf("Dump completed successfully (detailed statistics not available)")

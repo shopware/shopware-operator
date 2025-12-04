@@ -140,10 +140,10 @@ type DumpInput struct {
 }
 
 type DumpOutput struct {
-	Duration          time.Duration
-	UncompressedSize  int64
-	CompressedSize    int64
-	CompressionRation float64
+	Duration         time.Duration
+	UncompressedSize int64
+	CompressedSize   int64
+	CompressionRatio float64
 }
 
 type RestoreInput struct {
@@ -424,7 +424,7 @@ func parseDumpOutput(output string) (DumpOutput, error) {
 	result.CompressedSize = compressed
 
 	if uncompressed != 0 && compressed != 0 {
-		result.CompressionRation = float64(uncompressed) / float64(compressed)
+		result.CompressionRatio = float64(uncompressed) / float64(compressed)
 	}
 
 	return result, nil
