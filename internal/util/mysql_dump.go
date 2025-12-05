@@ -55,7 +55,7 @@ func (h MySQLDump) Dump(
 		input.Name,
 	)
 
-	logging.FromContext(ctx).Debugw("mysqldump command", "host", input.Host, "user", input.User, "database", input.Name)
+	logging.FromContext(ctx).Debugw("mysqlDump command", "cmd", cmd.String())
 
 	dump, err := cmd.StdoutPipe()
 	if err != nil {
@@ -153,7 +153,7 @@ func (h MySQLDump) Restore(
 		input.Name,
 	)
 
-	logging.FromContext(ctx).Debugw("mysql restore command", "host", input.Host, "user", input.User, "database", input.Name)
+	logging.FromContext(ctx).Debugw("mysql restore command", "cmd", cmd.String())
 
 	var err error
 	cmd.Stdin, err = gzip.NewReader(reader)
