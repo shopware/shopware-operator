@@ -2,6 +2,7 @@ package util
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -103,13 +104,13 @@ func CopyToFilesystem(ctx context.Context, cred *credentials.Credentials, direct
 	wg.Wait()
 	close(errChan)
 
-	var errors error
+	// nolint: prealloc
+	var errs []error
 	for err := range errChan {
-		logger.Errorw("Error downloading bucket", zap.Error(err))
-		errors = fmt.Errorf("%w; %s", errors, err.Error())
+		logger.Errorw("error downloading bucket", zap.Error(err))
+		errs = append(errs, err)
 	}
-
-	return errors
+	return errors.Join(errs...)
 }
 
 func RestoreFromFilesystem(ctx context.Context, cred *credentials.Credentials, directory string, s v1.S3Storage, emptyBeforeRestore bool) error {
@@ -148,13 +149,13 @@ func RestoreFromFilesystem(ctx context.Context, cred *credentials.Credentials, d
 	wg.Wait()
 	close(errChan)
 
-	var errors error
+	// nolint: prealloc
+	var errs []error
 	for err := range errChan {
-		logger.Errorw("Error uploading bucket", zap.Error(err))
-		errors = fmt.Errorf("%w; %s", errors, err.Error())
+		logger.Errorw("error uploading bucket", zap.Error(err))
+		errs = append(errs, err)
 	}
-
-	return errors
+	return errors.Join(errs...)
 }
 
 func emptyBucketAsync(ctx context.Context, s3Client *minio.Client, bucketName string) error {

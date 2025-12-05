@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -230,8 +231,14 @@ func (s *SnapshotService) createAssetBackup(
 	wg.Wait()
 	close(errChan)
 
-	if err, ok := <-errChan; ok {
-		return fmt.Errorf("snapshot creation failed errChan: %w", err)
+	// nolint: prealloc
+	var errs []error
+	for err := range errChan {
+		logger.Errorw("snapshot creation failed", zap.Error(err))
+		errs = append(errs, err)
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("snapshot creation failed: %w", errors.Join(errs...))
 	}
 
 	return nil

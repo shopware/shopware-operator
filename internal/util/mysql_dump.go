@@ -61,9 +61,22 @@ func (h MySQLDump) Dump(
 	if err != nil {
 		return nil, fmt.Errorf("get stdout pipe: %w", err)
 	}
+
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, fmt.Errorf("get stderr pipe: %w", err)
+	}
+
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start command: %w", err)
 	}
+
+	// Read stderr concurrently to prevent deadlock
+	stderrChan := make(chan []byte, 1)
+	go func() {
+		stderrOutput, _ := io.ReadAll(stderrPipe)
+		stderrChan <- stderrOutput
+	}()
 
 	// Own writer to count the gzipped size
 	counterWriter := &countingWriter{w: writer}
@@ -78,8 +91,16 @@ func (h MySQLDump) Dump(
 	}
 
 	err = cmd.Wait()
+	stderrOutput := <-stderrChan
 	if err != nil {
+		if len(stderrOutput) > 0 {
+			return nil, fmt.Errorf("wait command: %w, stderr: %s", err, string(stderrOutput))
+		}
 		return nil, fmt.Errorf("wait command: %w", err)
+	}
+
+	if len(stderrOutput) > 0 {
+		logging.FromContext(ctx).Warnw("mysqldump stderr", "output", string(stderrOutput))
 	}
 
 	err = gw.Close()
@@ -93,10 +114,10 @@ func (h MySQLDump) Dump(
 	}
 
 	return &DumpOutput{
-		Duration:          time.Since(duration),
-		UncompressedSize:  uncompressedCount,
-		CompressedSize:    counterWriter.count,
-		CompressionRation: float64(counterWriter.count) / float64(uncompressedCount),
+		Duration:         time.Since(duration),
+		UncompressedSize: uncompressedCount,
+		CompressedSize:   counterWriter.count,
+		CompressionRatio: float64(counterWriter.count) / float64(uncompressedCount),
 	}, nil
 }
 
@@ -140,18 +161,38 @@ func (h MySQLDump) Restore(
 		return fmt.Errorf("create gzip reader: %w", err)
 	}
 
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("get stderr pipe: %w", err)
+	}
+
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start command: %w", err)
 	}
 
+	// Read stderr concurrently to prevent deadlock
+	stderrChan := make(chan []byte, 1)
+	go func() {
+		stderrOutput, _ := io.ReadAll(stderrPipe)
+		stderrChan <- stderrOutput
+	}()
+
 	err = cmd.Wait()
+	stderrOutput := <-stderrChan
 	if err != nil {
+		if len(stderrOutput) > 0 {
+			return fmt.Errorf("wait command: %w, stderr: %s", err, string(stderrOutput))
+		}
 		return fmt.Errorf("wait command: %w", err)
+	}
+
+	if len(stderrOutput) > 0 {
+		logging.FromContext(ctx).Warnw("mysql restore stderr", "output", string(stderrOutput))
 	}
 
 	err = reader.Close()
 	if err != nil {
-		return fmt.Errorf("close gzip writer: %w", err)
+		return fmt.Errorf("close gzip reader: %w", err)
 	}
 
 	return nil

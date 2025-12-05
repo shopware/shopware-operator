@@ -95,7 +95,7 @@ func (r *StoreSnapshotBaseReconciler) reconcileCRStatus(
 		status.State = v1.SnapshotStatePending
 		status.Message = "Error in getting snapshot job"
 		con.Status = Error
-		con.Reason = fmt.Errorf("InternalError: Error in getting snapshot job: %w", err).Error()
+		con.Reason = fmt.Sprintf("InternalError: Error in getting snapshot job: %s", err)
 		return nil
 	}
 
@@ -114,7 +114,7 @@ func (r *StoreSnapshotBaseReconciler) reconcileCRStatus(
 		status.Message = "Error in getting snapshot state job"
 		status.CompletedAt = metav1.Now()
 		con.Status = Error
-		con.Reason = fmt.Errorf("InternalError: Error in getting snapshot state job: %w", err).Error()
+		con.Reason = fmt.Sprintf("InternalError: Error in getting snapshot state job: %s", err)
 		return fmt.Errorf("get snapshot job state: %w", err)
 	}
 
@@ -124,7 +124,7 @@ func (r *StoreSnapshotBaseReconciler) reconcileCRStatus(
 		status.CompletedAt = metav1.Now()
 		con.Status = Error
 		//nolint:staticcheck
-		con.Reason = fmt.Errorf("Error in Snapshot, exit code: %d", jobState.ExitCode).Error()
+		con.Reason = fmt.Sprintf("error in Snapshot, exit code: %d", jobState.ExitCode)
 		return nil
 	}
 
@@ -210,31 +210,37 @@ func (r *StoreSnapshotBaseReconciler) reconcileSnapshotResource(
 		return longRequeue
 	}
 
-	if !snapshot.GetStatus().IsState(v1.SnapshotStateFailed, v1.SnapshotStateSucceeded, v1.SnapshotStateRunning) {
-		defer func() {
-			if err := r.reconcileCRStatus(ctx, *store, snapshot, getJob); err != nil {
-				logger.Errorw(fmt.Sprintf("reconcile snapshot %s status", snapshotType), zap.Error(err))
-			}
+	// Skip reconciliation for terminal states (failed or succeeded)
+	if snapshot.GetStatus().IsState(v1.SnapshotStateFailed, v1.SnapshotStateSucceeded) {
+		return noRequeue
+	}
 
-			r.sendEvent(ctx, snapshot)
-			err = writeStatus(ctx, r.Client, types.NamespacedName{
-				Namespace: snapshot.GetObjectMeta().GetNamespace(),
-				Name:      snapshot.GetObjectMeta().GetName(),
-			}, *snapshot.GetStatus())
-			if err != nil {
-				logger.Errorw("write snapshot status", zap.Error(err))
-			}
-		}()
+	// Always check status for running or pending snapshots
+	defer func() {
+		if err := r.reconcileCRStatus(ctx, *store, snapshot, getJob); err != nil {
+			logger.Errorw(fmt.Sprintf("reconcile snapshot %s status", snapshotType), zap.Error(err))
+		}
 
+		r.sendEvent(ctx, snapshot)
+		err = writeStatus(ctx, r.Client, types.NamespacedName{
+			Namespace: snapshot.GetObjectMeta().GetNamespace(),
+			Name:      snapshot.GetObjectMeta().GetName(),
+		}, *snapshot.GetStatus())
+		if err != nil {
+			logger.Errorw("write snapshot status", zap.Error(err))
+		}
+	}()
+
+	// Only create/update job if not in running state
+	if !snapshot.GetStatus().IsState(v1.SnapshotStateRunning) {
 		obj := createJob(*store, snapshot)
 		if err := r.reconcileSnapshotJob(ctx, snapshot, snapshot.GetObjectMeta(), obj); err != nil {
 			logger.Errorw(fmt.Sprintf("reconcile snapshot %s job", snapshotType), zap.Error(err))
 			return shortRequeue
 		}
-		return shortRequeue
 	}
 
-	return noRequeue
+	return longRequeue
 }
 
 func (r *StoreSnapshotBaseReconciler) reconcileSnapshotJob(ctx context.Context, snap SnapshotResource, owner metav1.Object, obj *batchv1.Job) (err error) {
