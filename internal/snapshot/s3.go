@@ -79,9 +79,10 @@ func (s *SnapshotService) CreateBackup(
 	logger := logging.FromContext(ctx)
 	logger.Infow("Creating snapshot", zap.Any("snapshot", snapshotCtx))
 	cancelCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	var wg sync.WaitGroup
-	errChan := make(chan error)
+	errChan := make(chan error, 2)
 
 	if snapshotCtx.IncludeDB {
 		wg.Add(1)
@@ -91,7 +92,7 @@ func (s *SnapshotService) CreateBackup(
 			err := s.createDatabaseBackup(cancelCtx, cfg, snapshotCtx)
 			if err != nil {
 				cancel()
-				logger.Errorw("Failed to create database backup", zap.Error(err))
+				logger.Errorw("failed to create database backup", zap.Error(err))
 				errChan <- fmt.Errorf("failed to create database backup: %w", err)
 			}
 		}()
@@ -105,17 +106,22 @@ func (s *SnapshotService) CreateBackup(
 			err := s.createAssetBackup(cancelCtx, cfg, snapshotCtx)
 			if err != nil {
 				cancel()
-				logger.Errorw("Failed to create asset backup", zap.Error(err))
+				logger.Errorw("failed to create asset backup", zap.Error(err))
 				errChan <- fmt.Errorf("failed to create asset backup: %w", err)
 			}
 		}()
 	}
 
 	wg.Wait()
-	cancel()
 	close(errChan)
-	if err := <-errChan; err != nil {
-		return fmt.Errorf("snapshot creation failed: %w", err)
+
+	// nolint: prealloc
+	var errs []error
+	for err := range errChan {
+		errs = append(errs, err)
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("snapshot creation failed: %w", errors.Join(errs...))
 	}
 
 	err := s.CreateArchive(ctx, cfg, snapshotCtx)
