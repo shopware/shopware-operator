@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
+	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/event"
 	"github.com/shopware/shopware-operator/internal/job"
 	"github.com/shopware/shopware-operator/internal/k8s"
@@ -19,8 +20,6 @@ import (
 	k8sretry "k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	v1 "github.com/shopware/shopware-operator/api/v1"
 )
 
 var (

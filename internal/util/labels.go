@@ -42,6 +42,9 @@ func GetDefaultStoreSnapshotLabels(store v1.Store, meta metav1.ObjectMeta) map[s
 	if store.Spec.Container.Labels != nil {
 		maps.Copy(labels, store.Spec.Container.Labels)
 	}
+	if meta.Labels != nil {
+		maps.Copy(labels, meta.Labels)
+	}
 	labels["shop.shopware.com/store.name"] = store.Name
 	labels["shop.shopware.com/storesnapshot.name"] = meta.Name
 	return labels
