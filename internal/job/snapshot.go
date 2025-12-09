@@ -89,8 +89,7 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 		},
 	})
 
-	labels := util.GetDefaultStoreSnapshotLabels(store, meta)
-	labels["shop.shopware.com/storesnapshot.type"] = subCommand
+	labels := util.GetDefaultStoreSnapshotLabels(store, meta.Labels, meta.Name, subCommand)
 	annotations := util.GetDefaultContainerSnapshotAnnotations(CONTAINER_NAME_SNAPSHOT, snapshot)
 
 	job := &batchv1.Job{
