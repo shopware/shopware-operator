@@ -50,8 +50,7 @@ func GetCommandCronJob(
 }
 
 func CommandCronJob(store v1.Store, ex v1.StoreExec) *batchv1.CronJob {
-	labels := util.GetDefaultStoreExecLabels(store, ex)
-	labels["shop.shopware.com/storeexec.type"] = "command"
+	labels := util.GetDefaultStoreExecLabels(store, ex.Labels, ex.Name, "command")
 	annotations := util.GetDefaultContainerExecAnnotations(CONTAINER_NAME_COMMAND, ex)
 
 	job := &batchv1.CronJob{
@@ -87,8 +86,7 @@ func CommandJob(store v1.Store, ex v1.StoreExec) *batchv1.Job {
 	// Copy container spec from store to exec
 	store.Spec.Container.DeepCopyInto(&ex.Spec.Container)
 
-	labels := util.GetDefaultStoreExecLabels(store, ex)
-	labels["shop.shopware.com/storeexec.type"] = "cron_command"
+	labels := util.GetDefaultStoreExecLabels(store, ex.Labels, ex.Name, "command")
 	annotations := util.GetDefaultContainerExecAnnotations(CONTAINER_NAME_COMMAND, ex)
 
 	job := &batchv1.Job{

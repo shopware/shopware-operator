@@ -26,7 +26,7 @@ func StorefrontService(store v1.Store) *corev1.Service {
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{
-				"shop.shopware.com/store.app": appName,
+				util.ShopwareKey("store.app"): appName,
 			},
 			Type:      corev1.ServiceTypeClusterIP,
 			ClusterIP: "None",

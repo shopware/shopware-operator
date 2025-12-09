@@ -46,7 +46,7 @@ func ScheduledTaskJob(store v1.Store) *batchv1.CronJob {
 	}
 
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.SetupJobContainer.Labels)
-	labels["shop.shopware.com/store.type"] = "scheduled-task"
+	labels[util.ShopwareKey("store.type")] = "scheduled-task"
 
 	annotations := util.GetDefaultContainerAnnotations(CONTAINER_NAME_SCHEDULED_JOB, store, store.Spec.SetupJobContainer.Annotations)
 

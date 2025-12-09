@@ -36,7 +36,7 @@ func SetupJob(store v1.Store) *batchv1.Job {
 	backoffLimit := int32(3)
 
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.MigrationJobContainer.Labels)
-	labels["shop.shopware.com/store.type"] = "setup"
+	labels[util.ShopwareKey("store.type")] = "setup"
 
 	// Use util function for annotations
 	annotations := util.GetDefaultContainerAnnotations(CONTAINER_NAME_SETUP_JOB, store, store.Spec.SetupJobContainer.Annotations)

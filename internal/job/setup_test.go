@@ -54,8 +54,8 @@ func TestSetupJob(t *testing.T) {
 				Name:      "test-store-setup",
 				Namespace: "test",
 				Labels: map[string]string{
-					"shop.shopware.com/store.name": "test-store",
-					"shop.shopware.com/store.type": "setup",
+					util.ShopwareKey("store.name"): "test-store",
+					util.ShopwareKey("store.type"): "setup",
 				},
 				Annotations: map[string]string{
 					"shared.key":     "setup-value",     // Should be overwritten by setup
