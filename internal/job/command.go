@@ -50,7 +50,7 @@ func GetCommandCronJob(
 }
 
 func CommandCronJob(store v1.Store, ex v1.StoreExec) *batchv1.CronJob {
-	labels := util.GetDefaultStoreExecLabels(store, ex.Labels, ex.Name, "command")
+	labels := util.GetDefaultStoreExecLabels(store, ex.Labels, ex.Name, "cron_command")
 	annotations := util.GetDefaultContainerExecAnnotations(CONTAINER_NAME_COMMAND, ex)
 
 	job := &batchv1.CronJob{
