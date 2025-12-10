@@ -578,27 +578,3 @@ func (r *StoreReconciler) reconcileScheduledTask(ctx context.Context, store *v1.
 
 	return nil
 }
-
-func (r *StoreReconciler) completeJobs(ctx context.Context, store *v1.Store) error {
-	done, err := job.IsSetupJobCompleted(ctx, r.Client, *store)
-	if err != nil {
-		return err
-	}
-	// The job is not completed because active containers are running
-	if done {
-		if err = job.DeleteSetupJob(ctx, r.Client, *store); err != nil {
-			return err
-		}
-	}
-	done, err = job.IsMigrationJobCompleted(ctx, r.Client, *store)
-	if err != nil {
-		return err
-	}
-	// The job is not completed because active containers are running
-	if done {
-		if err = job.DeleteAllMigrationJobs(ctx, r.Client, store); err != nil {
-			return err
-		}
-	}
-	return nil
-}
