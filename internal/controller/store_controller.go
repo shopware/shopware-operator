@@ -9,8 +9,8 @@ import (
 	"github.com/shopware/shopware-operator/internal/cronjob"
 	"github.com/shopware/shopware-operator/internal/deployment"
 	"github.com/shopware/shopware-operator/internal/event"
-	"github.com/shopware/shopware-operator/internal/gateway"
 	"github.com/shopware/shopware-operator/internal/hpa"
+	"github.com/shopware/shopware-operator/internal/httproute"
 	"github.com/shopware/shopware-operator/internal/ingress"
 	"github.com/shopware/shopware-operator/internal/job"
 	"github.com/shopware/shopware-operator/internal/k8s"
@@ -405,14 +405,14 @@ func (r *StoreReconciler) reconcileIngress(ctx context.Context, store *v1.Store)
 
 func (r *StoreReconciler) reconcileHTTPRoute(ctx context.Context, store *v1.Store) (err error) {
 	if !store.Spec.Network.EnabledGateway {
-		if err := gateway.DeleteStoreHTTPRoute(ctx, r.Client, *store); err != nil {
+		if err := httproute.DeleteStoreHTTPRoute(ctx, r.Client, *store); err != nil {
 			return fmt.Errorf("delete httproute: %w", err)
 		}
 		return nil
 	}
 
 	var changed bool
-	obj := gateway.StoreHTTPRoute(*store)
+	obj := httproute.StoreHTTPRoute(*store)
 
 	if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
 		return fmt.Errorf("reconcile unready httproute: %w", err)
