@@ -10,6 +10,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/deployment"
 	"github.com/shopware/shopware-operator/internal/event"
 	"github.com/shopware/shopware-operator/internal/hpa"
+	"github.com/shopware/shopware-operator/internal/httproute"
 	"github.com/shopware/shopware-operator/internal/ingress"
 	"github.com/shopware/shopware-operator/internal/job"
 	"github.com/shopware/shopware-operator/internal/k8s"
@@ -35,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 var (
@@ -67,6 +69,7 @@ func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager, logger *zap.Sugared
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.Service{}).
 		Owns(&networkingv1.Ingress{}).
+		Owns(&gatewayv1.HTTPRoute{}).
 		Owns(&policy.PodDisruptionBudget{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&batchv1.Job{}).
@@ -125,6 +128,7 @@ func (r *StoreReconciler) findStoreForReconcile(
 //+kubebuilder:rbac:groups="apps",namespace=default,resources=deployments,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="batch",namespace=default,resources=jobs,verbs=get;list;watch;create;delete
 //+kubebuilder:rbac:groups="networking.k8s.io",namespace=default,resources=ingresses,verbs=get;list;watch;create;patch
+//+kubebuilder:rbac:groups="gateway.networking.k8s.io",namespace=default,resources=httproutes,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="policy",namespace=default,resources=poddisruptionbudgets,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="batch",namespace=default,resources=cronjobs,verbs=get;patch;list;watch;create;delete
 
@@ -160,14 +164,14 @@ func (r *StoreReconciler) Reconcile(
 		return rr, nil
 	}
 
-	log.Info("Reconcile finished, run status update")
+	log.Debug("Reconcile finished, run status update")
 
 	if err := r.reconcileCRStatus(ctx, store, err); err != nil {
 		log.Errorw("failed to update status", zap.Error(err))
 	}
 
 	if store.IsState(v1.StateReady) {
-		log.Info("Schedule long Reconcile")
+		log.Info("Reconcile finished, schedule long Reconcile")
 		return longRequeue, nil
 	}
 
@@ -182,7 +186,7 @@ func (r *StoreReconciler) doReconcile(
 	log := logging.FromContext(ctx)
 	log.Info("Do reconcile on store")
 
-	log.Info("reconcile app secrets")
+	log.Debug("reconcile app secrets")
 	if err := r.ensureAppSecrets(ctx, store); err != nil {
 		return fmt.Errorf("app secrets: %w", err)
 	}
@@ -192,16 +196,19 @@ func (r *StoreReconciler) doReconcile(
 		return nil
 	}
 
-	log.Info("reconcile pdb")
+	log.Debug("reconcile pdb")
 	if err := r.reconcilePDB(ctx, store); err != nil {
 		return fmt.Errorf("pdb: %w", err)
 	}
 
-	if store.Spec.Network.EnabledIngress {
-		log.Info("reconcile ingress")
-		if err := r.reconcileIngress(ctx, store); err != nil {
-			return fmt.Errorf("ingress: %w", err)
-		}
+	log.Debug("reconcile ingress")
+	if err := r.reconcileIngress(ctx, store); err != nil {
+		return fmt.Errorf("ingress: %w", err)
+	}
+
+	log.Debug("reconcile gateway httproute")
+	if err := r.reconcileHTTPRoute(ctx, store); err != nil {
+		return fmt.Errorf("httproute: %w", err)
 	}
 
 	// State Setup
@@ -219,11 +226,10 @@ func (r *StoreReconciler) doReconcile(
 
 	// State Initializing
 	if store.IsState(v1.StateInitializing) {
-		log.Info("reconcile deployment")
+		log.Info("reconcile deployment for initializing state")
 		if err := r.reconcileDeployment(ctx, store); err != nil {
 			return fmt.Errorf("deployment: %w", err)
 		}
-		log.Info("Wait for deployment to finish")
 		return nil
 	}
 
@@ -254,7 +260,6 @@ func (r *StoreReconciler) doReconcile(
 			if err := r.reconcileMigrationJob(ctx, store); err != nil {
 				return fmt.Errorf("migration: %w", err)
 			}
-			log.Info("wait for migration to finish")
 			return nil
 		}
 	}
@@ -263,29 +268,29 @@ func (r *StoreReconciler) doReconcile(
 	// EDIT: This makes more problems then it will help. So we process the way of terminating to
 	// the user to close all sidecars correctly.
 	// Check if sidecars are active
-	if len(store.Spec.Container.ExtraContainers) > 0 && !store.Spec.DisableJobDeletion {
-		log.Info("Delete setup/migration job if they are finished because sidecars are used")
-		if err := r.completeJobs(ctx, store); err != nil {
-			log.Errorw("Can't cleanup setup and migration jobs", zap.Error(err))
-		}
-	}
+	// if len(store.Spec.Container.ExtraContainers) > 0 && !store.Spec.DisableJobDeletion {
+	// 	log.Info("Delete setup/migration job if they are finished because sidecars are used")
+	// 	if err := r.completeJobs(ctx, store); err != nil {
+	// 		log.Errorw("Can't cleanup setup and migration jobs", zap.Error(err))
+	// 	}
+	// }
 
-	log.Info("reconcile deployment")
+	log.Debug("reconcile deployment")
 	if err := r.reconcileDeployment(ctx, store); err != nil {
 		return fmt.Errorf("deployment: %w", err)
 	}
 
-	log.Info("reconcile services")
+	log.Debug("reconcile services")
 	if err := r.reconcileServices(ctx, store); err != nil {
 		return fmt.Errorf("service: %w", err)
 	}
 
-	log.Info("reconcile CronJob scheduledTask")
+	log.Debug("reconcile CronJob scheduledTask")
 	if err := r.reconcileScheduledTask(ctx, store); err != nil {
 		return fmt.Errorf("cronjob: %w", err)
 	}
 
-	log.Info("reconcile horizontalPodAutoscaler")
+	log.Debug("reconcile horizontalPodAutoscaler")
 	if err := r.reconcileHoizontalPodAutoscaler(ctx, store); err != nil {
 		return fmt.Errorf("hpa: %w", err)
 	}
@@ -371,6 +376,13 @@ func (r *StoreReconciler) reconcileServices(ctx context.Context, store *v1.Store
 }
 
 func (r *StoreReconciler) reconcileIngress(ctx context.Context, store *v1.Store) (err error) {
+	if !store.Spec.Network.EnabledIngress {
+		if err := ingress.DeleteStoreIngress(ctx, r.Client, *store); err != nil {
+			return fmt.Errorf("delete ingress: %w", err)
+		}
+		return nil
+	}
+
 	var changed bool
 	obj := ingress.StoreIngress(*store)
 
@@ -385,6 +397,34 @@ func (r *StoreReconciler) reconcileIngress(ctx context.Context, store *v1.Store)
 				store.Namespace))
 		if err := k8s.EnsureIngress(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
 			return fmt.Errorf("reconcile unready ingress: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (r *StoreReconciler) reconcileHTTPRoute(ctx context.Context, store *v1.Store) (err error) {
+	if !store.Spec.Network.EnabledGateway {
+		if err := httproute.DeleteStoreHTTPRoute(ctx, r.Client, *store); err != nil {
+			return fmt.Errorf("delete httproute: %w", err)
+		}
+		return nil
+	}
+
+	var changed bool
+	obj := httproute.StoreHTTPRoute(*store)
+
+	if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
+		return fmt.Errorf("reconcile unready httproute: %w", err)
+	}
+
+	if changed {
+		r.Recorder.Event(store, "Normal", "Diff httproute hash",
+			fmt.Sprintf("Update Store %s httproute in namespace %s. Diff hash",
+				store.Name,
+				store.Namespace))
+		if err := k8s.EnsureHTTPRoute(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
+			return fmt.Errorf("reconcile unready httproute: %w", err)
 		}
 	}
 
@@ -536,29 +576,5 @@ func (r *StoreReconciler) reconcileScheduledTask(ctx context.Context, store *v1.
 		}
 	}
 
-	return nil
-}
-
-func (r *StoreReconciler) completeJobs(ctx context.Context, store *v1.Store) error {
-	done, err := job.IsSetupJobCompleted(ctx, r.Client, *store)
-	if err != nil {
-		return err
-	}
-	// The job is not completed because active containers are running
-	if done {
-		if err = job.DeleteSetupJob(ctx, r.Client, *store); err != nil {
-			return err
-		}
-	}
-	done, err = job.IsMigrationJobCompleted(ctx, r.Client, *store)
-	if err != nil {
-		return err
-	}
-	// The job is not completed because active containers are running
-	if done {
-		if err = job.DeleteAllMigrationJobs(ctx, r.Client, store); err != nil {
-			return err
-		}
-	}
 	return nil
 }

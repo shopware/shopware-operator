@@ -10,6 +10,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/util"
 	appsv1 "k8s.io/api/apps/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -35,7 +36,9 @@ func StoreIngress(store v1.Store) *networkingv1.Ingress {
 	pathType := networkingv1.PathTypePrefix
 
 	labels := util.GetDefaultContainerStoreLabels(store, map[string]string{})
+	// TODO: Deprecated use IngressLabels
 	maps.Copy(labels, store.Spec.Network.Labels)
+	maps.Copy(labels, store.Spec.Network.IngressLabels)
 
 	hosts := make([]string, len(store.Spec.Network.Hosts))
 	_ = copy(hosts, store.Spec.Network.Hosts)
@@ -113,12 +116,17 @@ func StoreIngress(store v1.Store) *networkingv1.Ingress {
 		})
 	}
 
+	annotations := make(map[string]string)
+	// TODO: Deprecated use IngressAnnotations for it
+	maps.Copy(annotations, store.Spec.Network.Annotations)
+	maps.Copy(annotations, store.Spec.Network.IngressAnnotations)
+
 	return &networkingv1.Ingress{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        GetStoreIngressName(store),
 			Namespace:   store.GetNamespace(),
-			Annotations: store.Spec.Network.Annotations,
+			Annotations: annotations,
 			Labels:      labels,
 		},
 		Spec: networkingv1.IngressSpec{
@@ -131,4 +139,20 @@ func StoreIngress(store v1.Store) *networkingv1.Ingress {
 
 func GetStoreIngressName(store v1.Store) string {
 	return fmt.Sprintf("store-%s", store.Name)
+}
+
+func DeleteStoreIngress(ctx context.Context, c client.Client, store v1.Store) error {
+	ingress := &networkingv1.Ingress{}
+	err := c.Get(ctx, types.NamespacedName{
+		Namespace: store.GetNamespace(),
+		Name:      GetStoreIngressName(store),
+	}, ingress)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	return c.Delete(ctx, ingress, client.PropagationPolicy("Foreground"))
 }

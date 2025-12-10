@@ -49,6 +49,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 func GetWatchNamespace() (string, error) {
@@ -332,6 +333,29 @@ func EnsureIngress(
 	return EnsureObjectWithHash(ctx, cl, owner, ingress, s)
 }
 
+func EnsureHTTPRoute(
+	ctx context.Context,
+	cl client.Client,
+	owner metav1.Object,
+	httpRoute *gatewayv1.HTTPRoute,
+	s *runtime.Scheme,
+	saveOldMeta bool,
+) error {
+	oldRoute := new(gatewayv1.HTTPRoute)
+	err := cl.Get(ctx, types.NamespacedName{
+		Name:      httpRoute.GetName(),
+		Namespace: httpRoute.GetNamespace(),
+	}, oldRoute)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return EnsureObjectWithHash(ctx, cl, owner, httpRoute, s)
+		}
+		return errors.Wrap(err, "get object")
+	}
+
+	return EnsureObjectWithHash(ctx, cl, owner, httpRoute, s)
+}
+
 func EnsureDeployment(
 	ctx context.Context,
 	cl client.Client,
@@ -554,6 +578,10 @@ func EnsureObjectWithHash(
 				return errors.Wrapf(err, "create job %v", nn.String())
 			}
 			return nil
+		case *gatewayv1.HTTPRoute:
+			// Gateway API resources use MergeFrom instead of StrategicMergeFrom
+			patch = client.MergeFrom(oldObj.DeepCopy())
+			obj.(*gatewayv1.HTTPRoute).TypeMeta = oldObj.DeepCopy().TypeMeta
 		default:
 			patch = client.StrategicMergeFrom(oldObject)
 		}
@@ -594,6 +622,8 @@ func extractRelevantData(obj runtime.Object) interface{} {
 	case *policy.PodDisruptionBudget:
 		return object.Spec
 	case *networkingv1.Ingress:
+		return object.Spec
+	case *gatewayv1.HTTPRoute:
 		return object.Spec
 	default:
 		return obj

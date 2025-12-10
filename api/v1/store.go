@@ -190,6 +190,9 @@ type NetworkSpec struct {
 	// +kubebuilder:default=false
 	EnabledIngress bool `json:"enabledIngress"`
 
+	// +kubebuilder:default=false
+	EnabledGateway bool `json:"enabledGateway"`
+
 	// +kubebuilder:validation:deprecatedversion
 	Host string `json:"host,omitempty"`
 
@@ -200,9 +203,22 @@ type NetworkSpec struct {
 	// +kubebuilder:default=8000
 	Port int32 `json:"port,omitempty"`
 
-	IngressClassName string            `json:"ingressClassName,omitempty"`
-	Annotations      map[string]string `json:"annotations,omitempty"`
-	Labels           map[string]string `json:"labels,omitempty"`
+	// +kubebuilder:description="Only for Ingress, but use ingressAnnotations to set annotations"
+	// +kubebuilder:validation:deprecatedversion
+	Annotations map[string]string `json:"annotations,omitempty"`
+	// +kubebuilder:description="Only for Ingress, but use ingressLabels to set labels"
+	// +kubebuilder:validation:deprecatedversion
+	Labels map[string]string `json:"labels,omitempty"`
+
+	IngressClassName   string            `json:"ingressClassName,omitempty"`
+	IngressAnnotations map[string]string `json:"ingressAnnotations,omitempty"`
+	IngressLabels      map[string]string `json:"ingressLabels,omitempty"`
+
+	GatewayName        string            `json:"gatewayName,omitempty"`
+	GatewayNamespace   string            `json:"gatewayNamespace,omitempty"`
+	GatewaySectionName string            `json:"gatewaySectionName,omitempty"`
+	GatewayAnnotations map[string]string `json:"gatewayAnnotations,omitempty"`
+	GatewayLabels      map[string]string `json:"gatewayLabels,omitempty"`
 
 	// +kubebuilder:default=store-tls
 	TLSSecretName string `json:"tlsSecretName,omitempty"`

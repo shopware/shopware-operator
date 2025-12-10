@@ -175,8 +175,22 @@ jobs:
           kubectl get storesnapshotrestore --namespace test
 
           # Check logs for any errors
-          echo "Checking operator logs..."
-          kubectl logs --namespace test deployment/test-shopware-operator --tail=50
+          echo "Checking operator logs for permission errors and unhandled errors..."
+          kubectl logs --namespace test deployment/test-shopware-operator --tail=100 > operator-logs.txt
+          cat operator-logs.txt
+
+          # Check for permission errors (forbidden) and Unhandled Errors
+          if grep -i "forbidden" operator-logs.txt; then
+            echo "ERROR: Found permission errors (forbidden) in operator logs"
+            exit 1
+          fi
+
+          if grep -i "Unhandled Error" operator-logs.txt; then
+            echo "ERROR: Found unhandled errors in operator logs"
+            exit 1
+          fi
+
+          echo "No permission or unhandled errors found in operator logs"
 
           # Cleanup test resources
           echo "Cleaning up test resources..."
