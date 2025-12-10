@@ -36,7 +36,9 @@ func StoreIngress(store v1.Store) *networkingv1.Ingress {
 	pathType := networkingv1.PathTypePrefix
 
 	labels := util.GetDefaultContainerStoreLabels(store, map[string]string{})
+	// TODO: Deprecated use IngressLabels
 	maps.Copy(labels, store.Spec.Network.Labels)
+	maps.Copy(labels, store.Spec.Network.IngressLabels)
 
 	hosts := make([]string, len(store.Spec.Network.Hosts))
 	_ = copy(hosts, store.Spec.Network.Hosts)
@@ -114,12 +116,17 @@ func StoreIngress(store v1.Store) *networkingv1.Ingress {
 		})
 	}
 
+	annotations := make(map[string]string)
+	// TODO: Deprecated use IngressAnnotations for it
+	maps.Copy(annotations, store.Spec.Network.Annotations)
+	maps.Copy(annotations, store.Spec.Network.IngressAnnotations)
+
 	return &networkingv1.Ingress{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        GetStoreIngressName(store),
 			Namespace:   store.GetNamespace(),
-			Annotations: store.Spec.Network.Annotations,
+			Annotations: annotations,
 			Labels:      labels,
 		},
 		Spec: networkingv1.IngressSpec{

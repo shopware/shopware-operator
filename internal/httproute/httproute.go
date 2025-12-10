@@ -35,7 +35,7 @@ func StoreHTTPRoute(store v1.Store) *gatewayv1.HTTPRoute {
 	pathMatchPrefix := gatewayv1.PathMatchPathPrefix
 
 	labels := util.GetDefaultContainerStoreLabels(store, map[string]string{})
-	maps.Copy(labels, store.Spec.Network.Labels)
+	maps.Copy(labels, store.Spec.Network.GatewayLabels)
 
 	hosts := make([]string, len(store.Spec.Network.Hosts))
 	_ = copy(hosts, store.Spec.Network.Hosts)
@@ -161,7 +161,7 @@ func StoreHTTPRoute(store v1.Store) *gatewayv1.HTTPRoute {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        GetStoreHTTPRouteName(store),
 			Namespace:   store.GetNamespace(),
-			Annotations: store.Spec.Network.Annotations,
+			Annotations: store.Spec.Network.GatewayAnnotations,
 			Labels:      labels,
 		},
 		Spec: gatewayv1.HTTPRouteSpec{
