@@ -15,6 +15,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/job"
 	"github.com/shopware/shopware-operator/internal/k8s"
 	"github.com/shopware/shopware-operator/internal/logging"
+	"github.com/shopware/shopware-operator/internal/opensearch"
 	"github.com/shopware/shopware-operator/internal/pdb"
 	"github.com/shopware/shopware-operator/internal/secret"
 	"github.com/shopware/shopware-operator/internal/service"
@@ -33,6 +34,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -40,9 +42,10 @@ import (
 )
 
 var (
-	noRequeue    = ctrl.Result{}
-	shortRequeue = ctrl.Result{RequeueAfter: 5 * time.Second}
-	longRequeue  = ctrl.Result{RequeueAfter: 2 * time.Minute}
+	noRequeue      = ctrl.Result{}
+	shortRequeue   = ctrl.Result{RequeueAfter: 5 * time.Second}
+	longRequeue    = ctrl.Result{RequeueAfter: 2 * time.Minute}
+	storeFinalizer = "shop.shopware.com/opensearch-cleanup"
 )
 
 // StoreReconciler reconciles a Store object
@@ -154,10 +157,50 @@ func (r *StoreReconciler) Reconcile(
 		return rr, nil
 	}
 
-	// We don't need yet finalizers
-	// if store.ObjectMeta.DeletionTimestamp != nil {
-	// 	return rr, r.applyFinalizers(ctx, store)
-	// }
+	// Handle deletion with finalizers
+	if store.ObjectMeta.DeletionTimestamp != nil {
+		if controllerutil.ContainsFinalizer(store, storeFinalizer) {
+			// Perform opensearch cleanup
+			log.Info("Store is being deleted, running opensearch cleanup finalizer")
+			if err := opensearch.CleanupResources(ctx, r.Client, store); err != nil {
+				log.Errorw("Failed to cleanup opensearch resources", zap.Error(err))
+				return ctrl.Result{RequeueAfter: 30 * time.Second}, err
+			}
+
+			// Remove finalizer once cleanup is complete
+			log.Info("Opensearch cleanup completed, removing finalizer")
+			controllerutil.RemoveFinalizer(store, storeFinalizer)
+			if err := r.Update(ctx, store); err != nil {
+				log.Errorw("Failed to remove finalizer", zap.Error(err))
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Add finalizer if opensearch cleanup is enabled and finalizer is not present
+	if store.Spec.OpensearchSpec.Enabled && store.Spec.OpensearchSpec.CleanupOnDeletion {
+		if !controllerutil.ContainsFinalizer(store, storeFinalizer) {
+			log.Info("Adding opensearch cleanup finalizer to store")
+			controllerutil.AddFinalizer(store, storeFinalizer)
+			if err := r.Update(ctx, store); err != nil {
+				log.Errorw("Failed to add finalizer", zap.Error(err))
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{Requeue: true}, nil
+		}
+	} else {
+		// Remove finalizer if opensearch cleanup is disabled but finalizer is present
+		if controllerutil.ContainsFinalizer(store, storeFinalizer) {
+			log.Info("Opensearch cleanup is disabled, removing finalizer from store")
+			controllerutil.RemoveFinalizer(store, storeFinalizer)
+			if err := r.Update(ctx, store); err != nil {
+				log.Errorw("Failed to remove finalizer", zap.Error(err))
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{Requeue: true}, nil
+		}
+	}
 
 	if err := r.doReconcile(ctx, store); err != nil {
 		log.Errorw("reconcile", zap.Error(err))
@@ -297,43 +340,6 @@ func (r *StoreReconciler) doReconcile(
 
 	return nil
 }
-
-// func (r *StoreReconciler) applyFinalizers(ctx context.Context, store *v1.Store) error {
-// 	log := logging.FromContext(ctx).WithName(store.Name)
-// 	log.Info("Applying finalizers")
-//
-// 	var err error
-//
-// 	// finalizers := []string{}
-// 	// for _, f := range store.GetFinalizers() {
-// 	// 	switch f {
-// 	// 	case "delete-mysql-pods-in-order":
-// 	// 		err = r.deleteMySQLPods(ctx, store)
-// 	// 	case "delete-ssl":
-// 	// 		err = r.deleteCerts(ctx, store)
-// 	// 	}
-// 	//
-// 	// 	if err != nil {
-// 	// 		switch err {
-// 	// 		case psrestore.ErrWaitingTermination:
-// 	// 			log.Info("waiting for pods to be deleted", "finalizer", f)
-// 	// 		default:
-// 	// 			log.Errorw("failed to run finalizer", "finalizer", f)
-// 	// 		}
-// 	// 		finalizers = append(finalizers, f)
-// 	// 	}
-// 	// }
-//
-// 	//store.SetFinalizers(finalizers)
-//
-// 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
-// 		err = r.Client.Update(ctx, store)
-// 		if err != nil {
-// 			log.Errorw("Client.Update failed")
-// 		}
-// 		return err
-// 	})
-// }
 
 func (r *StoreReconciler) ensureAppSecrets(ctx context.Context, store *v1.Store) (err error) {
 	storeSecret, err := secret.EnsureStoreSecret(ctx, r.Client, r.Recorder, store)
