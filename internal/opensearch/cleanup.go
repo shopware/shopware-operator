@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -72,15 +73,8 @@ func CleanupResources(ctx context.Context, k8sClient client.Client, store *v1.St
 	// Track deletion errors
 	var deletionErrors []error
 
-	// Delete each index
-	for _, index := range indices {
-		if err := deleteIndex(ctx, httpClient, baseURL, credentials, index); err != nil {
-			log.Errorw("Failed to delete index", zap.String("index", index), zap.Error(err))
-			deletionErrors = append(deletionErrors, fmt.Errorf("failed to delete index %s: %w", index, err))
-		} else {
-			log.Infow("Successfully deleted index", zap.String("index", index))
-		}
-	}
+	// Delete regular indices
+	deletionErrors = append(deletionErrors, deleteIndicesBatch(ctx, httpClient, baseURL, credentials, indices, "index")...)
 
 	// Also delete aliases with the prefix (admin index)
 	adminPrefix := fmt.Sprintf("%s-admin", prefix)
@@ -89,23 +83,33 @@ func CleanupResources(ctx context.Context, k8sClient client.Client, store *v1.St
 		log.Warnw("Failed to list admin indices", zap.Error(err))
 	} else {
 		log.Infow("Found admin indices to delete", zap.Int("count", len(adminIndices)))
-		for _, index := range adminIndices {
-			if err := deleteIndex(ctx, httpClient, baseURL, credentials, index); err != nil {
-				log.Errorw("Failed to delete admin index", zap.String("index", index), zap.Error(err))
-				deletionErrors = append(deletionErrors, fmt.Errorf("failed to delete admin index %s: %w", index, err))
-			} else {
-				log.Infow("Successfully deleted admin index", zap.String("index", index))
-			}
-		}
+		deletionErrors = append(deletionErrors, deleteIndicesBatch(ctx, httpClient, baseURL, credentials, adminIndices, "admin index")...)
 	}
 
 	// Return error if any deletions failed
 	if len(deletionErrors) > 0 {
-		return fmt.Errorf("failed to delete %d indices: %v", len(deletionErrors), deletionErrors)
+		return fmt.Errorf("failed to delete %d indices: %w", len(deletionErrors), errors.Join(deletionErrors...))
 	}
 
 	log.Info("Opensearch cleanup completed")
 	return nil
+}
+
+// deleteIndicesBatch deletes a batch of indices and returns any errors encountered
+func deleteIndicesBatch(ctx context.Context, httpClient *http.Client, baseURL string, credentials *opensearchCredentials, indices []string, indexType string) []error {
+	log := logging.FromContext(ctx)
+	var deletionErrors []error
+
+	for _, index := range indices {
+		if err := deleteIndex(ctx, httpClient, baseURL, credentials, index); err != nil {
+			log.Errorw("Failed to delete "+indexType, zap.String("index", index), zap.Error(err))
+			deletionErrors = append(deletionErrors, fmt.Errorf("failed to delete %s %s: %w", indexType, index, err))
+		} else {
+			log.Infow("Successfully deleted "+indexType, zap.String("index", index))
+		}
+	}
+
+	return deletionErrors
 }
 
 type opensearchCredentials struct {
