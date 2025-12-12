@@ -151,6 +151,17 @@ func (s *Store) getOpensearch() []corev1.EnvVar {
 				},
 			},
 			{
+				Name: "ADMIN_OPENSEARCH_URL",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: s.Spec.SecretName,
+						},
+						Key: "opensearch-url",
+					},
+				},
+			},
+			{
 				Name:  "SHOPWARE_ES_ENABLED",
 				Value: "1",
 			},
