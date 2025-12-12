@@ -220,6 +220,9 @@ func processDownloadObject(acrhiveDirPath string, logger *zap.SugaredLogger) fun
 			return fmt.Errorf("failed to create directory: %w", err)
 		}
 
+		if strings.HasSuffix(i.Key, "/") && i.Size == 0 {
+			return nil
+		}
 
 		f, err := os.Create(file)
 		if err != nil {
