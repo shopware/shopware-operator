@@ -355,10 +355,6 @@ func NewS3Downloader(client *minio.Client, bucket string) *S3Downloader {
 }
 
 func (s *S3Downloader) DownloadBucket(ctx context.Context, batchCount int, f func(minio.ObjectInfo, *minio.Object) error) error {
-	objects := s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
-		Recursive: true,
-	})
-
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -366,11 +362,15 @@ func (s *S3Downloader) DownloadBucket(ctx context.Context, batchCount int, f fun
 	errCh := make(chan error, 1)
 	sem := make(chan struct{}, batchCount)
 
+	objects := s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
+		Recursive: true,
+	})
 	for object := range objects {
 		if object.Err != nil {
 			return fmt.Errorf("error listing objects: %w", object.Err)
 		}
 
+		// Check if we've already failed
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

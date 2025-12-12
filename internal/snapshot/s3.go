@@ -170,7 +170,7 @@ func (s *SnapshotService) createAssetBackup(
 			))
 		if err != nil {
 			logger.Errorw("bucket backup failed", zap.Error(err))
-			errChan <- fmt.Errorf("bucket backup: %w", err)
+			errChan <- fmt.Errorf("private bucket backup: %w", err)
 		}
 
 		logger.Info("Done S3 bucket read")
@@ -191,7 +191,7 @@ func (s *SnapshotService) createAssetBackup(
 			))
 		if err != nil {
 			logger.Errorw("bucket backup failed", zap.Error(err))
-			errChan <- fmt.Errorf("bucket backup: %w", err)
+			errChan <- fmt.Errorf("public bucket backup: %w", err)
 		}
 
 		logger.Info("Done S3 bucket read")
@@ -213,9 +213,12 @@ func (s *SnapshotService) createAssetBackup(
 	return nil
 }
 
-func processDownloadObject(acrhiveDirPath string, logger *zap.SugaredLogger) func(i minio.ObjectInfo, o *minio.Object) error {
+func processDownloadObject(archiveDirPath string, logger *zap.SugaredLogger) func(i minio.ObjectInfo, o *minio.Object) error {
 	return func(i minio.ObjectInfo, o *minio.Object) error {
-		file := filepath.Join(acrhiveDirPath, i.Key)
+		//nolint: errcheck
+		defer o.Close()
+
+		file := filepath.Join(archiveDirPath, i.Key)
 		if err := os.MkdirAll(filepath.Dir(file), 0755); err != nil {
 			return fmt.Errorf("failed to create directory: %w", err)
 		}
@@ -239,7 +242,7 @@ func processDownloadObject(acrhiveDirPath string, logger *zap.SugaredLogger) fun
 			return fmt.Errorf("failed to copy object to file: %w", err)
 		}
 
-		return o.Close()
+		return nil
 	}
 }
 
