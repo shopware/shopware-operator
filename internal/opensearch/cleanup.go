@@ -40,7 +40,9 @@ func CleanupResources(ctx context.Context, k8sClient client.Client, store *v1.St
 	}
 
 	// Create HTTP client with proper TLS configuration
-	// Note: For production use, InsecureSkipVerify should be false and proper CA certificates should be configured
+	// TLS certificate verification is enabled by default for security.
+	// For production environments with self-signed certificates, configure the system CA pool
+	// or mount custom CA certificates into the operator pod at /etc/ssl/certs/
 	httpClient := &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
