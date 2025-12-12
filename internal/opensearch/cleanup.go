@@ -38,12 +38,13 @@ func CleanupResources(ctx context.Context, k8sClient client.Client, store *v1.St
 		return fmt.Errorf("failed to get opensearch credentials: %w", err)
 	}
 
-	// Create HTTP client
+	// Create HTTP client with proper TLS configuration
+	// Note: For production use, InsecureSkipVerify should be false and proper CA certificates should be configured
 	httpClient := &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: store.Spec.OpensearchSpec.Schema == "https", // For self-signed certificates
+				InsecureSkipVerify: false, // Always verify certificates for security
 			},
 		},
 	}
@@ -68,11 +69,14 @@ func CleanupResources(ctx context.Context, k8sClient client.Client, store *v1.St
 
 	log.Infow("Found indices to delete", zap.Int("count", len(indices)))
 
+	// Track deletion errors
+	var deletionErrors []error
+
 	// Delete each index
 	for _, index := range indices {
 		if err := deleteIndex(ctx, httpClient, baseURL, credentials, index); err != nil {
 			log.Errorw("Failed to delete index", zap.String("index", index), zap.Error(err))
-			// Continue with other indices even if one fails
+			deletionErrors = append(deletionErrors, fmt.Errorf("failed to delete index %s: %w", index, err))
 		} else {
 			log.Infow("Successfully deleted index", zap.String("index", index))
 		}
@@ -88,10 +92,16 @@ func CleanupResources(ctx context.Context, k8sClient client.Client, store *v1.St
 		for _, index := range adminIndices {
 			if err := deleteIndex(ctx, httpClient, baseURL, credentials, index); err != nil {
 				log.Errorw("Failed to delete admin index", zap.String("index", index), zap.Error(err))
+				deletionErrors = append(deletionErrors, fmt.Errorf("failed to delete admin index %s: %w", index, err))
 			} else {
 				log.Infow("Successfully deleted admin index", zap.String("index", index))
 			}
 		}
+	}
+
+	// Return error if any deletions failed
+	if len(deletionErrors) > 0 {
+		return fmt.Errorf("failed to delete %d indices: %v", len(deletionErrors), deletionErrors)
 	}
 
 	log.Info("Opensearch cleanup completed")
