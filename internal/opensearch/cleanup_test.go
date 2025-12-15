@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"testing"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
@@ -249,4 +251,200 @@ func TestGetOpensearchCredentials_SecretNotFound(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get opensearch password secret")
+}
+
+func TestCleanupResources_FullFlow(t *testing.T) {
+	// Mock opensearch server with index listing and deletion
+	deletedIndices := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check basic auth
+		username, password, ok := r.BasicAuth()
+		if !ok || username != "admin" || password != "testpassword" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		switch r.Method {
+		case "GET":
+			// List indices
+			if r.URL.Path == "/_cat/indices/testprefix*" {
+				indices := []map[string]interface{}{
+					{"index": "testprefix-product"},
+					{"index": "testprefix-category"},
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(indices)
+			} else if r.URL.Path == "/_cat/indices/testprefix-admin*" {
+				indices := []map[string]interface{}{
+					{"index": "testprefix-admin-user"},
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(indices)
+			} else {
+				w.WriteHeader(http.StatusNotFound)
+			}
+		case "DELETE":
+			// Delete index
+			indexName := r.URL.Path[1:] // Remove leading /
+			deletedIndices = append(deletedIndices, indexName)
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"acknowledged": true,
+			})
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}))
+	defer server.Close()
+
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = v1.AddToScheme(scheme)
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "opensearch-secret",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"password": []byte("testpassword"),
+		},
+	}
+
+	// Parse server URL to get host and port
+	serverURL, err := url.Parse(server.URL)
+	require.NoError(t, err)
+	
+	portInt, err := strconv.Atoi(serverURL.Port())
+	require.NoError(t, err)
+
+	store := &v1.Store{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-store",
+			Namespace: "default",
+		},
+		Spec: v1.StoreSpec{
+			OpensearchSpec: v1.OpensearchSpec{
+				Enabled:           true,
+				CleanupOnDeletion: true,
+				Host:              serverURL.Hostname(),
+				Port:              int32(portInt),
+				Schema:            serverURL.Scheme,
+				Username:          "admin",
+				PasswordSecretRef: v1.SecretRef{
+					Name: "opensearch-secret",
+					Key:  "password",
+				},
+				Index: v1.OpensearchIndexSpec{
+					Prefix: "testprefix",
+				},
+			},
+		},
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(secret).
+		Build()
+
+	cleanupErr := CleanupResources(ctx, client, store)
+
+	require.NoError(t, cleanupErr)
+	// Verify all indices were deleted (2 regular + 1 admin)
+	assert.Len(t, deletedIndices, 3)
+	assert.Contains(t, deletedIndices, "testprefix-product")
+	assert.Contains(t, deletedIndices, "testprefix-category")
+	assert.Contains(t, deletedIndices, "testprefix-admin-user")
+}
+
+func TestCleanupResources_PartialFailure(t *testing.T) {
+	// Mock opensearch server that fails to delete one index
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		username, password, ok := r.BasicAuth()
+		if !ok || username != "admin" || password != "testpassword" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		switch r.Method {
+		case "GET":
+			// List indices
+			indices := []map[string]interface{}{
+				{"index": "testprefix-product"},
+				{"index": "testprefix-category"},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(indices)
+		case "DELETE":
+			// Fail to delete testprefix-category
+			if r.URL.Path == "/testprefix-category" {
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"error": "Internal server error",
+				})
+			} else {
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"acknowledged": true,
+				})
+			}
+		}
+	}))
+	defer server.Close()
+
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = v1.AddToScheme(scheme)
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "opensearch-secret",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"password": []byte("testpassword"),
+		},
+	}
+
+	serverURL, err := url.Parse(server.URL)
+	require.NoError(t, err)
+	
+	portInt, err := strconv.Atoi(serverURL.Port())
+	require.NoError(t, err)
+
+	store := &v1.Store{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-store",
+			Namespace: "default",
+		},
+		Spec: v1.StoreSpec{
+			OpensearchSpec: v1.OpensearchSpec{
+				Enabled:           true,
+				CleanupOnDeletion: true,
+				Host:              serverURL.Hostname(),
+				Port:              int32(portInt),
+				Schema:            serverURL.Scheme,
+				Username:          "admin",
+				PasswordSecretRef: v1.SecretRef{
+					Name: "opensearch-secret",
+					Key:  "password",
+				},
+				Index: v1.OpensearchIndexSpec{
+					Prefix: "testprefix",
+				},
+			},
+		},
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(secret).
+		Build()
+
+	cleanupErr := CleanupResources(ctx, client, store)
+
+	require.Error(t, cleanupErr)
+	assert.Contains(t, cleanupErr.Error(), "failed to delete")
 }
