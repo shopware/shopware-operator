@@ -355,10 +355,6 @@ func NewS3Downloader(client *minio.Client, bucket string) *S3Downloader {
 }
 
 func (s *S3Downloader) DownloadBucket(ctx context.Context, batchCount int, f func(minio.ObjectInfo, *minio.Object) error) error {
-	objects := s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
-		Recursive: true,
-	})
-
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -366,11 +362,15 @@ func (s *S3Downloader) DownloadBucket(ctx context.Context, batchCount int, f fun
 	errCh := make(chan error, 1)
 	sem := make(chan struct{}, batchCount)
 
+	objects := s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
+		Recursive: true,
+	})
 	for object := range objects {
 		if object.Err != nil {
 			return fmt.Errorf("error listing objects: %w", object.Err)
 		}
 
+		// Check if we've already failed
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -381,6 +381,7 @@ func (s *S3Downloader) DownloadBucket(ctx context.Context, batchCount int, f fun
 		go func(obj minio.ObjectInfo) {
 			defer wg.Done()
 
+			// Acquire semaphore
 			select {
 			case <-ctx.Done():
 				return
@@ -392,7 +393,7 @@ func (s *S3Downloader) DownloadBucket(ctx context.Context, batchCount int, f fun
 			if err != nil {
 				select {
 				case errCh <- fmt.Errorf("error downloading %s: %w", obj.Key, err):
-					cancel()
+					cancel() // Stop other downloads
 				default:
 				}
 				return
@@ -402,7 +403,7 @@ func (s *S3Downloader) DownloadBucket(ctx context.Context, batchCount int, f fun
 			if err != nil {
 				select {
 				case errCh <- fmt.Errorf("error processing in func %s: %w", obj.Key, err):
-					cancel()
+					cancel() // Stop other downloads
 				default:
 				}
 				return
@@ -410,19 +411,15 @@ func (s *S3Downloader) DownloadBucket(ctx context.Context, batchCount int, f fun
 		}(object)
 	}
 
+	// Wait for all goroutines and close error channel
 	go func() {
 		wg.Wait()
 		close(errCh)
 	}()
 
-	select {
-	case err := <-errCh:
-		if err != nil {
-			cancel()
-			return err
-		}
-	case <-ctx.Done():
-		return ctx.Err()
+	// Return first error encountered
+	for err := range errCh {
+		return err
 	}
 
 	return nil
