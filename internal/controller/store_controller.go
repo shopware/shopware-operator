@@ -159,6 +159,10 @@ func (r *StoreReconciler) Reconcile(
 	// 	return rr, r.applyFinalizers(ctx, store)
 	// }
 
+	if !store.DeletionTimestamp.IsZero() {
+		return shortRequeue, nil
+	}
+
 	if err := r.doReconcile(ctx, store); err != nil {
 		log.Errorw("reconcile", zap.Error(err))
 		return rr, nil
