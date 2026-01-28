@@ -59,10 +59,6 @@ type StoreReconciler struct {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager, logger *zap.SugaredLogger) error {
-	skipStatusUpdates, err := NewSkipStatusUpdates(logger, &appsv1.Deployment{})
-	if err != nil {
-		return err
-	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1.Store{}).
 		// We get triggerd by every update on the created resources, this leeads to high reconciles at the start.
@@ -74,8 +70,7 @@ func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager, logger *zap.Sugared
 		Owns(&appsv1.Deployment{}).
 		Owns(&batchv1.Job{}).
 		Owns(&batchv1.CronJob{}).
-		// Skip status updates of all resources
-		WithEventFilter(skipStatusUpdates).
+		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		// This will watch the db secret and run a reconcile if the db secret will change.
 		Watches(
 			&corev1.Secret{},
