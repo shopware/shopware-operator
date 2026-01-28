@@ -75,10 +75,6 @@ func (r *StoreReconciler) stateManager() *manager.StoreStateManager {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager, logger *zap.SugaredLogger) error {
-	skipStatusUpdates, err := NewSkipStatusUpdates(logger, &appsv1.Deployment{})
-	if err != nil {
-		return err
-	}
 	controllerBuilder := ctrl.NewControllerManagedBy(mgr).
 		For(&v1.Store{}).
 		// We get triggered by every update on the created resources, this leads to high reconciles at the start.
@@ -86,7 +82,7 @@ func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager, logger *zap.Sugared
 		Owns(&corev1.Service{}).
 		Owns(&networkingv1.Ingress{})
 
-	_, err = mgr.GetRESTMapper().RESTMapping(
+	_, err := mgr.GetRESTMapper().RESTMapping(
 		gatewayv1.SchemeGroupVersion.WithKind("HTTPRoute").GroupKind(),
 		gatewayv1.SchemeGroupVersion.Version,
 	)
@@ -109,13 +105,19 @@ func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager, logger *zap.Sugared
 	}
 
 	return controllerBuilder.
-		Owns(&policy.PodDisruptionBudget{}).
-		Owns(&appsv1.Deployment{}).
-		Owns(&batchv1.Job{}).
-		Owns(&batchv1.CronJob{}).
-		// Skip status updates of all resources
-		WithEventFilter(skipStatusUpdates).
-		// This will watch the db secret and run a reconcile if the db secret will change.
+		Owns(&policy.PodDisruptionBudget{},
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		).
+		Owns(&appsv1.Deployment{},
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		).
+		Owns(&batchv1.Job{},
+
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		).
+		Owns(&batchv1.CronJob{},
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		).
 		Watches(
 			&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.findStoreForReconcile),
