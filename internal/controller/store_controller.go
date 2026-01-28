@@ -7,13 +7,16 @@ import (
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	v1 "github.com/shopware/shopware-operator/api/v1"
+	"github.com/shopware/shopware-operator/internal/deployment"
 	"github.com/shopware/shopware-operator/internal/event"
 	"github.com/shopware/shopware-operator/internal/k8s"
 	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/manager"
 	"github.com/shopware/shopware-operator/internal/manager/base"
 	"github.com/shopware/shopware-operator/internal/metrics"
+	"github.com/shopware/shopware-operator/internal/secret"
 	"github.com/shopware/shopware-operator/internal/tracing"
+	"github.com/shopware/shopware-operator/internal/util"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -22,6 +25,7 @@ import (
 	policy "k8s.io/api/policy/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -55,6 +59,7 @@ type StoreReconciler struct {
 	EventHandlers        []event.EventHandler
 	Logger               *zap.SugaredLogger
 	StateManager         *manager.StoreStateManager
+	reasons              reconcileReasons
 }
 
 func (r *StoreReconciler) stateManager() *manager.StoreStateManager {
@@ -76,23 +81,27 @@ func (r *StoreReconciler) stateManager() *manager.StoreStateManager {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager, logger *zap.SugaredLogger) error {
-	skipStatusUpdates, err := NewSkipStatusUpdates(logger, &appsv1.Deployment{})
-	if err != nil {
-		return err
-	}
-	controllerBuilder := ctrl.NewControllerManagedBy(mgr).
-		For(&v1.Store{}).
-		// We get triggered by every update on the created resources, this leads to high reconciles at the start.
-		Owns(&corev1.Secret{}).
-		Owns(&corev1.Service{}).
-		Owns(&networkingv1.Ingress{})
+	ownedPredicate := builder.WithPredicates(predicate.Or(
+		r.reasons.wrap("hash annotation changed", util.HashAnnotationChangedPredicate()),
+		r.reasons.wrap("metadata changed", util.MetadataChangedPredicate()),
+	))
 
-	_, err = mgr.GetRESTMapper().RESTMapping(
+	controllerBuilder := ctrl.NewControllerManagedBy(mgr).
+		For(&v1.Store{}, builder.WithPredicates(
+			predicate.Or(
+				r.reasons.wrap("store spec changed", predicate.GenerationChangedPredicate{}),
+				r.reasons.wrap("store labels changed", predicate.LabelChangedPredicate{}),
+				r.reasons.wrap("store annotations changed", predicate.AnnotationChangedPredicate{}),
+				r.reasons.wrap("store deleting", util.DeletingPredicate()),
+			)),
+		)
+
+	_, err := mgr.GetRESTMapper().RESTMapping(
 		gatewayv1.SchemeGroupVersion.WithKind("HTTPRoute").GroupKind(),
 		gatewayv1.SchemeGroupVersion.Version,
 	)
 	if err == nil {
-		controllerBuilder = controllerBuilder.Owns(&gatewayv1.HTTPRoute{})
+		controllerBuilder = controllerBuilder.Owns(&gatewayv1.HTTPRoute{}, ownedPredicate)
 	} else if !meta.IsNoMatchError(err) {
 		return fmt.Errorf("resolve HTTPRoute REST mapping: %w", err)
 	}
@@ -103,21 +112,22 @@ func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager, logger *zap.Sugared
 			kedav1alpha1.SchemeGroupVersion.Version,
 		)
 		if err == nil {
-			controllerBuilder = controllerBuilder.Owns(&kedav1alpha1.ScaledObject{})
+			controllerBuilder = controllerBuilder.Owns(&kedav1alpha1.ScaledObject{}, ownedPredicate)
 		} else if !meta.IsNoMatchError(err) {
 			return fmt.Errorf("resolve ScaledObject REST mapping: %w", err)
 		}
 	}
 
 	return controllerBuilder.
-		Owns(&policy.PodDisruptionBudget{}).
-		Owns(&appsv1.Deployment{}).
-		Owns(&batchv1.Job{}).
-		Owns(&batchv1.CronJob{}).
-		// Skip status updates of all resources
-		WithEventFilter(skipStatusUpdates).
-		// This will watch the db secret and run a reconcile if the db secret will change.
+		Owns(&policy.PodDisruptionBudget{}, ownedPredicate).
+		Owns(&appsv1.Deployment{}, ownedPredicate).
+		Owns(&batchv1.Job{}, ownedPredicate).
+		Owns(&batchv1.CronJob{}, ownedPredicate).
+		Owns(&corev1.Service{}, ownedPredicate).
+		Owns(&networkingv1.Ingress{}, ownedPredicate).
 		Watches(
+			// Doesn't have a ownerReference, because this would then be deleted and breaks shops
+			// if the store gets deleted
 			&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.findStoreForReconcile),
 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
@@ -127,39 +137,33 @@ func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager, logger *zap.Sugared
 
 func (r *StoreReconciler) findStoreForReconcile(
 	ctx context.Context,
-	secret client.Object,
+	obj client.Object,
 ) []reconcile.Request {
 	stores := &v1.StoreList{}
-	err := r.List(ctx, stores)
-	if err != nil {
+	if err := r.List(ctx, stores, client.InNamespace(obj.GetNamespace())); err != nil {
 		return []reconcile.Request{}
 	}
 
 	var requests []reconcile.Request
 	for _, store := range stores.Items {
-		if store.Namespace != secret.GetNamespace() {
+		if !secret.ReferencesSecret(&store, obj.GetName()) {
 			continue
 		}
-		if store.Spec.Database.PasswordSecretRef.Name == secret.GetName() ||
-			store.Spec.Database.TLS.SecretName == secret.GetName() ||
-			store.Spec.OpensearchSpec.PasswordSecretRef.Name == secret.GetName() ||
-			store.Spec.ShopConfiguration.Fastly.TokenRef.Name == secret.GetName() ||
-			store.Spec.AdminCredentials.UsernameSecretRef.Name == secret.GetName() ||
-			store.Spec.AdminCredentials.PasswordSecretRef.Name == secret.GetName() {
-			r.Logger.
-				Infow(
-					"Do reconcile on store because db/opensearch/fastly secret has changed",
-					zap.String("store", store.Name),
-					zap.String("secret", secret.GetName()),
-					zap.String("secret-namespace", secret.GetNamespace()),
-				)
-			requests = append(requests, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Namespace: store.Namespace,
-					Name:      store.Name,
-				},
-			})
-		}
+		r.reasons.add(
+			types.NamespacedName{Namespace: store.Namespace, Name: store.Name},
+			fmt.Sprintf("secret changed: Secret/%s", obj.GetName()),
+		)
+		r.Logger.Infow("Do reconcile on store because referenced secret has changed",
+			zap.String("store", store.Name),
+			zap.String("secret", obj.GetName()),
+			zap.String("secret-namespace", obj.GetNamespace()),
+		)
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Namespace: store.Namespace,
+				Name:      store.Name,
+			},
+		})
 	}
 
 	return requests
@@ -184,8 +188,11 @@ func (r *StoreReconciler) Reconcile(
 	ctx context.Context,
 	req ctrl.Request,
 ) (rr ctrl.Result, err error) {
+	reasons := r.reasons.pop(req.NamespacedName)
+
 	ctx, span := tracing.StartReconcile(ctx, "Store", req)
 	defer func() { tracing.EndReconcile(span, rr, &err) }()
+	span.SetAttributes(tracing.AttrReconcileReasons.StringSlice(reasons))
 
 	log := r.Logger.
 		With(zap.String("namespace", req.Namespace)).
@@ -194,17 +201,18 @@ func (r *StoreReconciler) Reconcile(
 	// Put logger in context for this reconcile
 	ctx = logging.WithLogger(ctx, log)
 	log = logging.FromContext(ctx)
-	log.Info("Reconciling store")
+	log.Infow("Reconciling store", zap.Strings("reasons", reasons))
 
 	store, err := k8s.GetStore(ctx, r.Client, req.NamespacedName)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			log.Info("Don't reconcile anymore, because resource was not found")
+			metrics.RemoveStoreMetrics(&v1.Store{ObjectMeta: metav1.ObjectMeta{Namespace: req.Namespace, Name: req.Name}})
 			return ctrl.Result{}, nil
 		}
 		log.Errorw("get CR", zap.Error(err))
 		tracing.RecordError(span, err)
-		return rr, nil
+		return shortRequeue, nil
 	}
 	span.SetAttributes(tracing.AttrState.String(string(store.Status.State)))
 
@@ -216,7 +224,7 @@ func (r *StoreReconciler) Reconcile(
 	if err := r.stateManager().ReconcileResources(ctx, store); err != nil {
 		log.Errorw("reconcile", zap.Error(err))
 		tracing.RecordError(span, err)
-		return rr, nil
+		return shortRequeue, nil
 	}
 
 	log.Debug("Reconcile finished, run status update")
@@ -240,6 +248,17 @@ func (r *StoreReconciler) Reconcile(
 	if store.Status.WorkerState.State == v1.DeploymentStateNotFound {
 		log.Infow("Schedule short Reconcile, because worker deployments are not created yet",
 			zap.String("worker-message", store.Status.WorkerState.Message))
+		return shortRequeue, nil
+	}
+
+	rollingOut, err := deployment.RolloutInProgress(ctx, r.Client, store)
+	if err != nil {
+		log.Errorw("check deployment rollout", zap.Error(err))
+		tracing.RecordError(span, err)
+		return shortRequeue, nil
+	}
+	if rollingOut {
+		log.Info("Schedule short Reconcile, because deployments are rolling out")
 		return shortRequeue, nil
 	}
 

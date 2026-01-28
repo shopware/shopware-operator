@@ -128,7 +128,7 @@ func (r *StoreSnapshotBaseReconciler) reconcileCRStatus(
 		return fmt.Errorf("get snapshot job state: %w", err)
 	}
 
-	if jobState.IsDone() && jobState.HasErrors() {
+	if jobState.IsDone() && jobState.HasErrors() && (jobState.PodActive || job.IsJobFailed(snapshotJob)) {
 		status.State = v1.SnapshotStateFailed
 		status.Message = fmt.Sprintf("Snapshot is Done but has Errors. Check logs for more details. Exit code: %d", jobState.ExitCode)
 		status.CompletedAt = metav1.Now()

@@ -14,6 +14,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/manager"
 	"github.com/shopware/shopware-operator/internal/manager/base"
 	"github.com/shopware/shopware-operator/internal/pdb"
+	"github.com/shopware/shopware-operator/internal/secret"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
@@ -1275,4 +1276,48 @@ func TestReconcileStatusNoEnvWarningWithoutOverrides(t *testing.T) {
 	require.NoError(t, m.ReconcileStatus(ctx, store, nil))
 
 	assert.Empty(t, logs.FilterMessageSnippet("ExtraEnvs overwrites env var managed by the operator").All())
+}
+
+func deploymentChecksums(t *testing.T, c client.Client) map[string]string {
+	t.Helper()
+	deployments := &appsv1.DeploymentList{}
+	require.NoError(t, c.List(context.Background(), deployments, client.InNamespace("test")))
+	checksums := make(map[string]string, len(deployments.Items))
+	for _, d := range deployments.Items {
+		checksums[d.Name] = d.Spec.Template.Annotations[secret.ChecksumAnnotation]
+	}
+	return checksums
+}
+
+func TestReconcileResourcesSecretRotationRollsOutDeployments(t *testing.T) {
+	ctx := context.Background()
+	store := testStore()
+	store.Status.State = v1.StateInitializing
+	store.Status.QueueState.Transports = []v1.QueueTransportStats{{Name: "async", Count: 1}}
+	m, c := newTestManager(t, dbSecret())
+
+	require.NoError(t, m.ReconcileResources(ctx, store))
+	initial := deploymentChecksums(t, c)
+	require.Len(t, initial, 3)
+	for name, checksum := range initial {
+		require.NotEmpty(t, checksum, name)
+	}
+
+	require.NoError(t, m.ReconcileResources(ctx, store))
+	require.Equal(t, initial, deploymentChecksums(t, c), "unchanged secret must not change the pod template")
+
+	rotated := &corev1.Secret{}
+	require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: "test", Name: "db-secret"}, rotated))
+	rotated.Data["password"] = []byte("rotated")
+	require.NoError(t, c.Update(ctx, rotated))
+
+	require.NoError(t, m.ReconcileResources(ctx, store))
+	afterRotation := deploymentChecksums(t, c)
+	require.Len(t, afterRotation, 3)
+	for name, checksum := range afterRotation {
+		require.NotEqual(t, initial[name], checksum, "%s must roll out after secret rotation", name)
+	}
+
+	require.NoError(t, m.ReconcileResources(ctx, store))
+	require.Equal(t, afterRotation, deploymentChecksums(t, c), "reconcile after rotation must be stable")
 }

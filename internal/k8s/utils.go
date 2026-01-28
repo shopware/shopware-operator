@@ -26,6 +26,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"reflect"
 	"slices"
@@ -421,7 +422,7 @@ func DetectObjectChange(
 	}
 
 	objAnnotations := obj.GetAnnotations()
-	delete(objAnnotations, "shopware.com/last-config-hash")
+	delete(objAnnotations, util.LastConfigHashAnnotation)
 	obj.SetAnnotations(objAnnotations)
 
 	hash, err := ObjectHash(obj)
@@ -454,7 +455,7 @@ func DetectObjectChange(
 		return ObjectChange{Reason: ChangeReasonHashChanged}, nil
 	}
 
-	ignoreAnnotations := []string{"shopware.com/last-config-hash"}
+	ignoreAnnotations := []string{util.LastConfigHashAnnotation}
 	switch obj.(type) {
 	case *appsv1.Deployment:
 		ignoreAnnotations = append(ignoreAnnotations, "deployment.kubernetes.io/revision")
@@ -523,7 +524,7 @@ func EnsureObjectWithHash(
 	}
 
 	objAnnotations := obj.GetAnnotations()
-	delete(objAnnotations, "shopware.com/last-config-hash")
+	delete(objAnnotations, util.LastConfigHashAnnotation)
 	obj.SetAnnotations(objAnnotations)
 
 	hash, err := ObjectHash(obj)
@@ -532,7 +533,7 @@ func EnsureObjectWithHash(
 	}
 
 	objAnnotations = obj.GetAnnotations()
-	objAnnotations["shopware.com/last-config-hash"] = hash
+	objAnnotations[util.LastConfigHashAnnotation] = hash
 	obj.SetAnnotations(objAnnotations)
 
 	val := reflect.ValueOf(obj)
@@ -560,8 +561,7 @@ func EnsureObjectWithHash(
 	switch obj.(type) {
 	case *appsv1.Deployment:
 		annotations := obj.GetAnnotations()
-		ignoreAnnotations := []string{"deployment.kubernetes.io/revision"}
-		for _, key := range ignoreAnnotations {
+		for _, key := range util.ControllerManagedAnnotations {
 			v, ok := oldObject.GetAnnotations()[key]
 			if ok {
 				annotations[key] = v
@@ -570,7 +570,7 @@ func EnsureObjectWithHash(
 		obj.SetAnnotations(annotations)
 	}
 
-	hashChanged := oldObject.GetAnnotations()["shopware.com/last-config-hash"] != hash
+	hashChanged := oldObject.GetAnnotations()[util.LastConfigHashAnnotation] != hash
 	objectMetaChanged := !objectMetaEqual(obj, oldObject)
 
 	if hashChanged || objectMetaChanged {
@@ -582,7 +582,7 @@ func EnsureObjectWithHash(
 			logging.FromContext(ctx).Infow("Object last-config-hash has changed",
 				zap.String("kind", obj.GetObjectKind().GroupVersionKind().Kind),
 				zap.String("obj-name", obj.GetName()),
-				zap.String("old", oldObject.GetAnnotations()["shopware.com/last-config-hash"]),
+				zap.String("old", oldObject.GetAnnotations()[util.LastConfigHashAnnotation]),
 				zap.String("new", hash),
 				zap.String("diff", diff))
 		} else {
@@ -667,8 +667,8 @@ func EnsureObjectWithHash(
 }
 
 func objectMetaEqual(old, new metav1.Object) bool {
-	return util.MapEqual(old.GetLabels(), new.GetLabels()) &&
-		util.MapEqual(old.GetAnnotations(), new.GetAnnotations())
+	return maps.Equal(old.GetLabels(), new.GetLabels()) &&
+		maps.Equal(old.GetAnnotations(), new.GetAnnotations())
 }
 
 type secretHashData struct {
@@ -734,9 +734,13 @@ func ObjectHash(obj runtime.Object) (string, error) {
 	return hex.EncodeToString(hash[:]), nil
 }
 
+const (
+	redactedValue        = "<redacted>"
+	redactedChangedValue = "<redacted, changed>"
+)
+
 func ObjectDiff(oldObj, newObj runtime.Object) (string, error) {
-	oldData := extractRelevantData(oldObj)
-	newData := extractRelevantData(newObj)
+	oldData, newData := diffData(oldObj, newObj)
 
 	oldJSON, err := json.Marshal(oldData)
 	if err != nil {
@@ -769,6 +773,48 @@ func ObjectDiff(oldObj, newObj runtime.Object) (string, error) {
 	}
 
 	return result.String(), nil
+}
+
+func diffData(oldObj, newObj runtime.Object) (any, any) {
+	oldSecret, oldIsSecret := oldObj.(*corev1.Secret)
+	newSecret, newIsSecret := newObj.(*corev1.Secret)
+	if oldIsSecret && newIsSecret {
+		return redactSecrets(oldSecret, newSecret)
+	}
+	return extractRelevantData(oldObj), extractRelevantData(newObj)
+}
+
+func redactSecrets(oldSecret, newSecret *corev1.Secret) (map[string]string, map[string]string) {
+	oldValues := secretValues(oldSecret)
+	newValues := secretValues(newSecret)
+
+	oldRedacted := make(map[string]string, len(oldValues))
+	for key := range oldValues {
+		oldRedacted[key] = redactedValue
+	}
+
+	newRedacted := make(map[string]string, len(newValues))
+	for key, value := range newValues {
+		newRedacted[key] = redactedValue
+		if oldValue, ok := oldValues[key]; ok && oldValue != value {
+			newRedacted[key] = redactedChangedValue
+		}
+	}
+	return oldRedacted, newRedacted
+}
+
+func secretValues(s *corev1.Secret) map[string]string {
+	values := make(map[string]string)
+	if s == nil {
+		return values
+	}
+	for key, value := range s.Data {
+		values["data/"+key] = string(value)
+	}
+	for key, value := range s.StringData {
+		values["stringData/"+key] = value
+	}
+	return values
 }
 
 func findChanges(old, new map[string]interface{}, prefix string) []string {

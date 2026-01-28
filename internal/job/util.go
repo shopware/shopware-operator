@@ -16,8 +16,9 @@ import (
 var ttlSecondsAfterFinished int32 = 86400 // Hardcoded to 1 day for now
 
 type JobState struct {
-	ExitCode int
-	Running  bool
+	ExitCode  int
+	Running   bool
+	PodActive bool
 }
 
 func (s JobState) HasErrors() bool {
@@ -26,6 +27,15 @@ func (s JobState) HasErrors() bool {
 
 func (s JobState) IsDone() bool {
 	return !s.Running
+}
+
+func IsJobFailed(j *batchv1.Job) bool {
+	for _, condition := range j.Status.Conditions {
+		if condition.Type == batchv1.JobFailed && condition.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
 }
 
 // This is used when sidecars are able to run. We should always use this method for checking
@@ -86,8 +96,9 @@ func IsJobContainerDone(
 							logger.With(zap.Int32("exitcode", c.State.Terminated.ExitCode)).
 								Info("Job has not 0 as exit code, check job")
 							errorStates = append(errorStates, JobState{
-								ExitCode: int(c.State.Terminated.ExitCode),
-								Running:  false,
+								ExitCode:  int(c.State.Terminated.ExitCode),
+								Running:   false,
+								PodActive: pod.Status.Phase == corev1.PodRunning,
 							})
 						}
 						if c.State.Terminated.Reason == "Completed" {

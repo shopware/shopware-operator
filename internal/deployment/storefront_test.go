@@ -286,3 +286,29 @@ func TestStorefrontDeployment(t *testing.T) {
 		assert.Equal(t, int32(3), container.LivenessProbe.FailureThreshold)
 	})
 }
+
+func TestDeploymentsDoNotShareAnnotationMaps(t *testing.T) {
+	store := v1.Store{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-store", Namespace: "test"},
+		Spec: v1.StoreSpec{
+			Container: v1.ContainerSpec{
+				Image:       "shopware:latest",
+				Annotations: map[string]string{"custom": "value"},
+			},
+			SecretName: "store-secret",
+		},
+	}
+
+	storefront := deployment.StorefrontDeployment(store)
+	admin := deployment.AdminDeployment(store)
+	storefront.Annotations[util.LastConfigHashAnnotation] = "storefront-hash"
+
+	assert.Equal(t, map[string]string{"custom": "value"}, store.Spec.Container.Annotations)
+	assert.NotContains(t, admin.Annotations, util.LastConfigHashAnnotation)
+	assert.NotContains(t, admin.Spec.Template.Annotations, util.LastConfigHashAnnotation)
+	assert.Equal(t, "shopware-storefront", storefront.Spec.Template.Annotations["kubectl.kubernetes.io/default-container"])
+	assert.NotEqual(t,
+		storefront.Spec.Template.Annotations["kubectl.kubernetes.io/default-container"],
+		admin.Spec.Template.Annotations["kubectl.kubernetes.io/default-container"],
+	)
+}
