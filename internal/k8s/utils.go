@@ -421,7 +421,7 @@ func DetectObjectChange(
 	}
 
 	objAnnotations := obj.GetAnnotations()
-	delete(objAnnotations, "shopware.com/last-config-hash")
+	delete(objAnnotations, util.LastConfigHashAnnotation)
 	obj.SetAnnotations(objAnnotations)
 
 	hash, err := ObjectHash(obj)
@@ -454,7 +454,7 @@ func DetectObjectChange(
 		return ObjectChange{Reason: ChangeReasonHashChanged}, nil
 	}
 
-	ignoreAnnotations := []string{"shopware.com/last-config-hash"}
+	ignoreAnnotations := []string{util.LastConfigHashAnnotation}
 	switch obj.(type) {
 	case *appsv1.Deployment:
 		ignoreAnnotations = append(ignoreAnnotations, "deployment.kubernetes.io/revision")
@@ -523,7 +523,7 @@ func EnsureObjectWithHash(
 	}
 
 	objAnnotations := obj.GetAnnotations()
-	delete(objAnnotations, "shopware.com/last-config-hash")
+	delete(objAnnotations, util.LastConfigHashAnnotation)
 	obj.SetAnnotations(objAnnotations)
 
 	hash, err := ObjectHash(obj)
@@ -532,7 +532,7 @@ func EnsureObjectWithHash(
 	}
 
 	objAnnotations = obj.GetAnnotations()
-	objAnnotations["shopware.com/last-config-hash"] = hash
+	objAnnotations[util.LastConfigHashAnnotation] = hash
 	obj.SetAnnotations(objAnnotations)
 
 	val := reflect.ValueOf(obj)
@@ -570,7 +570,7 @@ func EnsureObjectWithHash(
 		obj.SetAnnotations(annotations)
 	}
 
-	hashChanged := oldObject.GetAnnotations()["shopware.com/last-config-hash"] != hash
+	hashChanged := oldObject.GetAnnotations()[util.LastConfigHashAnnotation] != hash
 	objectMetaChanged := !objectMetaEqual(obj, oldObject)
 
 	if hashChanged || objectMetaChanged {
@@ -582,7 +582,7 @@ func EnsureObjectWithHash(
 			logging.FromContext(ctx).Infow("Object last-config-hash has changed",
 				zap.String("kind", obj.GetObjectKind().GroupVersionKind().Kind),
 				zap.String("obj-name", obj.GetName()),
-				zap.String("old", oldObject.GetAnnotations()["shopware.com/last-config-hash"]),
+				zap.String("old", oldObject.GetAnnotations()[util.LastConfigHashAnnotation]),
 				zap.String("new", hash),
 				zap.String("diff", diff))
 		} else {

@@ -25,18 +25,19 @@ const (
 	tracerName         = "github.com/shopware/shopware-operator"
 	defaultServiceName = "shopware-operator"
 
-	AttrNamespace     = attribute.Key("k8s.namespace.name")
-	AttrName          = attribute.Key("shopware.resource.name")
-	AttrKind          = attribute.Key("shopware.resource.kind")
-	AttrState         = attribute.Key("shopware.state")
-	AttrStateFrom     = attribute.Key("shopware.state.from")
-	AttrStateTo       = attribute.Key("shopware.state.to")
-	AttrMessage       = attribute.Key("shopware.status.message")
-	AttrRequeueAfter  = attribute.Key("reconcile.requeue_after")
-	AttrRedacted      = attribute.Key("shopware.error.redacted")
-	RedactedMessage   = "error message redacted because it could reveal secrets"
-	EventStateChanged = "state changed"
-	EventStatusUpdate = "status updated"
+	AttrNamespace        = attribute.Key("k8s.namespace.name")
+	AttrName             = attribute.Key("shopware.resource.name")
+	AttrKind             = attribute.Key("shopware.resource.kind")
+	AttrState            = attribute.Key("shopware.state")
+	AttrStateFrom        = attribute.Key("shopware.state.from")
+	AttrStateTo          = attribute.Key("shopware.state.to")
+	AttrMessage          = attribute.Key("shopware.status.message")
+	AttrRequeueAfter     = attribute.Key("reconcile.requeue_after")
+	AttrReconcileReasons = attribute.Key("reconcile.reasons")
+	AttrRedacted         = attribute.Key("shopware.error.redacted")
+	RedactedMessage      = "error message redacted because it could reveal secrets"
+	EventStateChanged    = "state changed"
+	EventStatusUpdate    = "status updated"
 
 	AttrObjectKind      = attribute.Key("k8s.object.kind")
 	AttrObjectName      = attribute.Key("k8s.object.name")

@@ -51,8 +51,8 @@ func SetupJob(store v1.Store) *batchv1.Job {
 		adminUsername.Value = ""
 		adminUsername.ValueFrom = &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: store.Spec.AdminCredentials.UsernameSecretRef.Name},
-				Key:                  store.Spec.AdminCredentials.UsernameSecretRef.Key,
+				LocalObjectReference: corev1.LocalObjectReference{Name: store.GetSecretName()},
+				Key:                  v1.StoreSecretAdminUsernameKey,
 			},
 		}
 	}

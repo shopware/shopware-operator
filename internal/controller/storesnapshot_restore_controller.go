@@ -21,10 +21,13 @@ import (
 
 	"github.com/shopware/shopware-operator/internal/job"
 	"github.com/shopware/shopware-operator/internal/k8s"
+	"github.com/shopware/shopware-operator/internal/util"
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 )
@@ -36,14 +39,9 @@ type StoreSnapshotRestoreReconciler struct {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *StoreSnapshotRestoreReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	skipStatusUpdates, err := NewSkipStatusUpdates(r.Logger)
-	if err != nil {
-		return err
-	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1.StoreSnapshotRestore{}).
-		Owns(&batchv1.Job{}).
-		WithEventFilter(skipStatusUpdates).
+		For(&v1.StoreSnapshotRestore{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Owns(&batchv1.Job{}, builder.WithPredicates(util.HashAnnotationChangedPredicate())).
 		Complete(r)
 }
 

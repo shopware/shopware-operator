@@ -133,6 +133,9 @@ func EnsureStoreSecret(ctx context.Context, r client.Client, recorder EventRecor
 	if err = GenerateStoreSecret(ctx, store, storeSecret, dbSpec, opensearchPassword, fastlyServiceID, fastlyToken, adminPassword); err != nil {
 		return nil, fmt.Errorf("fill store secret: %w", err)
 	}
+	if err = copyReferencedValues(ctx, r, store, storeSecret); err != nil {
+		return nil, fmt.Errorf("copy referenced values into store secret: %w", err)
+	}
 	storeSecret.Name = store.GetSecretName()
 	storeSecret.Namespace = store.Namespace
 
@@ -231,6 +234,39 @@ func GenerateStoreSecret(ctx context.Context, store *v1.Store, secret *corev1.Se
 	if len(fastlyServiceID) > 0 && len(fastlyToken) > 0 {
 		secret.Data["fastly-token"] = fastlyToken
 		secret.Data["fastly-service-id"] = fastlyServiceID
+	}
+
+	return nil
+}
+
+type copiedSecretRef struct {
+	key         string
+	ref         v1.SecretRef
+	description string
+}
+
+func copyReferencedValues(ctx context.Context, r client.Client, store *v1.Store, secret *corev1.Secret) error {
+	refs := []copiedSecretRef{
+		{v1.StoreSecretAdminUsernameKey, store.Spec.AdminCredentials.UsernameSecretRef, "Admin username"},
+		{v1.StoreSecretAWSAccessKeyIDKey, store.Spec.S3Storage.AccessKeyRef, "S3 access key"},
+		{v1.StoreSecretAWSSecretAccessKeyKey, store.Spec.S3Storage.SecretAccessKeyRef, "S3 secret access key"},
+	}
+	if store.Spec.Tideways.Enabled {
+		refs = append(refs, copiedSecretRef{v1.StoreSecretTidewaysAPIKeyKey, store.Spec.Tideways.APIKeyRef, "Tideways api key"})
+	} else {
+		delete(secret.Data, v1.StoreSecretTidewaysAPIKeyKey)
+	}
+
+	for _, entry := range refs {
+		if !secretRefComplete(entry.ref) {
+			delete(secret.Data, entry.key)
+			continue
+		}
+		value, err := getSecretValue(ctx, r, store, entry.ref, entry.description)
+		if err != nil {
+			return err
+		}
+		secret.Data[entry.key] = value
 	}
 
 	return nil

@@ -14,6 +14,11 @@ const (
 	DatabaseTLSCAFile     = DatabaseTLSMountPath + "/ca.crt"
 	DatabaseTLSCertFile   = DatabaseTLSMountPath + "/tls.crt"
 	DatabaseTLSKeyFile    = DatabaseTLSMountPath + "/tls.key"
+
+	StoreSecretAdminUsernameKey      = "admin-username"
+	StoreSecretTidewaysAPIKeyKey     = "tideways-api-key"
+	StoreSecretAWSAccessKeyIDKey     = "aws-access-key-id"
+	StoreSecretAWSSecretAccessKeyKey = "aws-secret-access-key"
 )
 
 // Set by the cmd main
@@ -449,9 +454,9 @@ func (s *Store) getTideways() []corev1.EnvVar {
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: s.Spec.Tideways.APIKeyRef.Name,
+						Name: s.Spec.SecretName,
 					},
-					Key: s.Spec.Tideways.APIKeyRef.Key,
+					Key: StoreSecretTidewaysAPIKeyKey,
 				},
 			},
 		})
@@ -488,29 +493,29 @@ func (s *Store) getStorage() []corev1.EnvVar {
 		},
 	}
 
-	if s.Spec.S3Storage.AccessKeyRef.Name != "" {
+	if s.Spec.S3Storage.AccessKeyRef.Name != "" && s.Spec.S3Storage.AccessKeyRef.Key != "" {
 		envVars = append(envVars, corev1.EnvVar{
 			Name: "AWS_ACCESS_KEY_ID",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: s.Spec.S3Storage.AccessKeyRef.Name,
+						Name: s.Spec.SecretName,
 					},
-					Key: s.Spec.S3Storage.AccessKeyRef.Key,
+					Key: StoreSecretAWSAccessKeyIDKey,
 				},
 			},
 		})
 	}
 
-	if s.Spec.S3Storage.SecretAccessKeyRef.Key != "" {
+	if s.Spec.S3Storage.SecretAccessKeyRef.Name != "" && s.Spec.S3Storage.SecretAccessKeyRef.Key != "" {
 		envVars = append(envVars, corev1.EnvVar{
 			Name: "AWS_SECRET_ACCESS_KEY",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: s.Spec.S3Storage.SecretAccessKeyRef.Name,
+						Name: s.Spec.SecretName,
 					},
-					Key: s.Spec.S3Storage.SecretAccessKeyRef.Key,
+					Key: StoreSecretAWSSecretAccessKeyKey,
 				},
 			},
 		})
