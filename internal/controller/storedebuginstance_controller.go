@@ -95,13 +95,13 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	if storeDebugInstance.IsState(shopv1.StoreDebugInstanceStateDone) {
 		pod := pod.DebugPod(*store, *storeDebugInstance)
-		if err := r.Delete(ctx, pod); err != nil {
+		if err := r.Delete(ctx, pod); err != nil && !k8serrors.IsNotFound(err) {
 			log.Errorw("failed to delete pod", zap.Error(err))
 			return rr, nil
 		}
 
 		svc := service.DebugService(*store, *storeDebugInstance)
-		if err := r.Delete(ctx, svc); err != nil {
+		if err := r.Delete(ctx, svc); err != nil && !k8serrors.IsNotFound(err) {
 			log.Errorw("failed to delete service", zap.Error(err))
 			return rr, nil
 		}
