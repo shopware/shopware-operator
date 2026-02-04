@@ -12,6 +12,21 @@ import (
 // redis
 func (s *Store) getAppCache() []corev1.EnvVar {
 	if s.Spec.AppCache.Adapter == "redis" {
+		// If DSN is provided, use it directly
+		if s.Spec.AppCache.RedisDSN != "" {
+			return []corev1.EnvVar{
+				{
+					Name:  "K8S_CACHE_TYPE",
+					Value: "redis",
+				},
+				{
+					Name:  "K8S_REDIS_APP_DSN",
+					Value: s.Spec.AppCache.RedisDSN,
+				},
+			}
+		}
+
+		// Otherwise build from individual fields
 		return []corev1.EnvVar{
 			// TODO: Will be moved to yaml configuration
 			{
@@ -46,21 +61,63 @@ func (s *Store) getAppCache() []corev1.EnvVar {
 }
 
 // Handled by PHP itself
-func (s *Store) getSessionCache() []corev1.EnvVar {
+// DEPRECATED: (6.7) Use symfony cache instead
+func (s *Store) getOldSessionCache() []corev1.EnvVar {
 	if s.Spec.SessionCache.Adapter == "redis" {
+		var savePath string
+		// If DSN is provided, use it directly
+		if s.Spec.SessionCache.RedisDSN != "" {
+			savePath = s.Spec.SessionCache.RedisDSN
+		} else {
+			// Otherwise build from individual fields
+			savePath = fmt.Sprintf(
+				"tcp://%s:%d/%d",
+				s.Spec.SessionCache.RedisHost,
+				s.Spec.SessionCache.RedisPort,
+				s.Spec.SessionCache.RedisIndex,
+			)
+		}
+
 		return []corev1.EnvVar{
 			{
 				Name:  "PHP_SESSION_HANDLER",
 				Value: "redis",
 			},
 			{
-				Name: "PHP_SESSION_SAVE_PATH",
-				Value: fmt.Sprintf(
-					"tcp://%s:%d/%d",
-					s.Spec.SessionCache.RedisHost,
-					s.Spec.SessionCache.RedisPort,
-					s.Spec.SessionCache.RedisIndex,
-				),
+				Name:  "PHP_SESSION_SAVE_PATH",
+				Value: savePath,
+			},
+		}
+	}
+	return []corev1.EnvVar{
+		{
+			Name:  "PHP_SESSION_HANDLER",
+			Value: "files",
+		},
+	}
+}
+
+// Added in 6.7
+func (s *Store) getSessionCache() []corev1.EnvVar {
+	if s.Spec.SessionCache.Adapter == "redis" {
+		var dsn string
+		// If DSN is provided, use it directly
+		if s.Spec.SessionCache.RedisDSN != "" {
+			dsn = s.Spec.SessionCache.RedisDSN
+		} else {
+			// Otherwise build from individual fields
+			dsn = fmt.Sprintf(
+				"redis://%s:%d/%d",
+				s.Spec.SessionCache.RedisHost,
+				s.Spec.SessionCache.RedisPort,
+				s.Spec.SessionCache.RedisIndex,
+			)
+		}
+
+		return []corev1.EnvVar{
+			{
+				Name:  "K8S_REDIS_SESSION_DSN",
+				Value: dsn,
 			},
 		}
 	}
@@ -121,6 +178,17 @@ func (f *FPMSpec) getFPMConfiguration() []corev1.EnvVar {
 // https://symfony.com/doc/current/messenger.html#transport-configuration
 func (s *Store) getWorker() []corev1.EnvVar {
 	if s.Spec.Worker.Adapter == "redis" {
+		// If DSN is provided, use it directly
+		if s.Spec.Worker.RedisDSN != "" {
+			return []corev1.EnvVar{
+				{
+					Name:  "MESSENGER_TRANSPORT_DSN",
+					Value: s.Spec.Worker.RedisDSN,
+				},
+			}
+		}
+
+		// Otherwise build from individual fields
 		return []corev1.EnvVar{
 			{
 				Name: "MESSENGER_TRANSPORT_DSN",
@@ -439,6 +507,7 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 		})
 	}
 
+	c = append(c, s.getOldSessionCache()...)
 	c = append(c, s.getSessionCache()...)
 	c = append(c, s.getAppCache()...)
 	c = append(c, s.getOtel()...)
