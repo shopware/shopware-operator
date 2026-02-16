@@ -162,12 +162,19 @@ func (s *SnapshotService) createAssetBackup(
 		defer wg.Done()
 		logger := logger.With(zap.String("bucket", "private"))
 		logger.Info("Starting S3 bucket read")
+
+		// make sure to create the directory for the public bucket backup, even if the bucket is empty
+		routeFilePath := filepath.Join(snapshotCtx.TempArchiveDir, "private")
+		if err := os.MkdirAll(routeFilePath, 0755); err != nil {
+			logger.Errorw("failed to create directory for bucket backup", zap.String("path", routeFilePath), zap.Error(err))
+			errChan <- fmt.Errorf("failed to create directory for private bucket backup: %w", err)
+			return
+		}
+
 		downloader := util.NewS3Downloader(minioClient, cfg.S3.PrivateBucket)
-		err := downloader.DownloadBucket(ctx, parallelDownloads,
-			processDownloadObject(
-				filepath.Join(snapshotCtx.TempArchiveDir, "private"),
-				logger,
-			))
+		err := downloader.DownloadBucket(ctx,
+			parallelDownloads,
+			processDownloadObject(routeFilePath, logger))
 		if err != nil {
 			logger.Errorw("bucket backup failed", zap.Error(err))
 			errChan <- fmt.Errorf("private bucket backup: %w", err)
@@ -183,12 +190,19 @@ func (s *SnapshotService) createAssetBackup(
 
 		logger := logger.With(zap.String("bucket", "public"))
 		logger.Info("Starting S3 bucket read")
+
+		// make sure to create the directory for the public bucket backup, even if the bucket is empty
+		routeFilePath := filepath.Join(snapshotCtx.TempArchiveDir, "public")
+		if err := os.MkdirAll(routeFilePath, 0755); err != nil {
+			logger.Errorw("failed to create directory for bucket backup", zap.String("path", routeFilePath), zap.Error(err))
+			errChan <- fmt.Errorf("failed to create directory for public bucket backup: %w", err)
+			return
+		}
+
 		downloader := util.NewS3Downloader(minioClient, cfg.S3.PublicBucket)
-		err := downloader.DownloadBucket(ctx, parallelDownloads,
-			processDownloadObject(
-				filepath.Join(snapshotCtx.TempArchiveDir, "public"),
-				logger,
-			))
+		err := downloader.DownloadBucket(ctx,
+			parallelDownloads,
+			processDownloadObject(routeFilePath, logger))
 		if err != nil {
 			logger.Errorw("bucket backup failed", zap.Error(err))
 			errChan <- fmt.Errorf("public bucket backup: %w", err)
