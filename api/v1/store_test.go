@@ -337,3 +337,237 @@ func TestEnvMerge(t *testing.T) {
 		}
 	}
 }
+
+func TestAppCacheRedisDsnOverwrite(t *testing.T) {
+	t.Run("AppCache with DSN", func(t *testing.T) {
+		store := &v1.Store{
+			Spec: v1.StoreSpec{
+				AppCache: v1.AppCacheSpec{
+					Adapter: "redis",
+					RedisSpec: v1.RedisSpec{
+						RedisDSN: "redis://custom-redis:6380/5?password=secret",
+					},
+				},
+			},
+		}
+
+		env := store.GetEnv()
+		var foundCacheType, foundRedisDSN bool
+		for _, envVar := range env {
+			if envVar.Name == "K8S_CACHE_TYPE" {
+				foundCacheType = true
+				assert.Equal(t, "redis", envVar.Value)
+			}
+			if envVar.Name == "K8S_REDIS_APP_DSN" {
+				foundRedisDSN = true
+				assert.Equal(t, "redis://custom-redis:6380/5?password=secret", envVar.Value)
+			}
+			// Ensure individual fields are NOT set when DSN is provided
+			if envVar.Name == "K8S_CACHE_HOST" || envVar.Name == "K8S_CACHE_PORT" || envVar.Name == "K8S_CACHE_INDEX" || envVar.Name == "K8S_CACHE_URL" {
+				t.Errorf("Individual cache field %s should not be set when DSN is provided", envVar.Name)
+			}
+		}
+		assert.True(t, foundCacheType, "K8S_CACHE_TYPE should be set")
+		assert.True(t, foundRedisDSN, "K8S_REDIS_APP_DSN should be set with DSN value")
+	})
+
+	t.Run("AppCache without DSN", func(t *testing.T) {
+		store := &v1.Store{
+			Spec: v1.StoreSpec{
+				AppCache: v1.AppCacheSpec{
+					Adapter: "redis",
+					RedisSpec: v1.RedisSpec{
+						RedisHost:  "redis-host",
+						RedisPort:  6379,
+						RedisIndex: 2,
+					},
+				},
+			},
+		}
+
+		env := store.GetEnv()
+		var foundHost, foundPort, foundIndex, foundURL bool
+		for _, envVar := range env {
+			if envVar.Name == "K8S_CACHE_HOST" {
+				foundHost = true
+				assert.Equal(t, "redis-host", envVar.Value)
+			}
+			if envVar.Name == "K8S_CACHE_PORT" {
+				foundPort = true
+				assert.Equal(t, "6379", envVar.Value)
+			}
+			if envVar.Name == "K8S_CACHE_INDEX" {
+				foundIndex = true
+				assert.Equal(t, "2", envVar.Value)
+			}
+			if envVar.Name == "K8S_CACHE_URL" {
+				foundURL = true
+				assert.Equal(t, "redis://redis-host:6379/2", envVar.Value)
+			}
+		}
+		assert.True(t, foundHost, "K8S_CACHE_HOST should be set")
+		assert.True(t, foundPort, "K8S_CACHE_PORT should be set")
+		assert.True(t, foundIndex, "K8S_CACHE_INDEX should be set")
+		assert.True(t, foundURL, "K8S_CACHE_URL should be built from individual fields")
+	})
+}
+
+func TestSessionCacheRedisDsnOverwrite(t *testing.T) {
+	t.Run("SessionCache with DSN", func(t *testing.T) {
+		store := &v1.Store{
+			Spec: v1.StoreSpec{
+				SessionCache: v1.SessionCacheSpec{
+					Adapter: "redis",
+					RedisSpec: v1.RedisSpec{
+						RedisDSN: "tcp://session-redis:6380/3?auth=secret",
+					},
+				},
+			},
+		}
+
+		env := store.GetEnv()
+		var foundHandler, foundSavePath bool
+		for _, envVar := range env {
+			if envVar.Name == "PHP_SESSION_HANDLER" {
+				foundHandler = true
+				assert.Equal(t, "redis", envVar.Value)
+			}
+			if envVar.Name == "PHP_SESSION_SAVE_PATH" {
+				foundSavePath = true
+				assert.Equal(t, "tcp://session-redis:6380/3?auth=secret", envVar.Value)
+			}
+		}
+		assert.True(t, foundHandler, "PHP_SESSION_HANDLER should be set")
+		assert.True(t, foundSavePath, "PHP_SESSION_SAVE_PATH should be set with DSN value")
+	})
+
+	t.Run("SessionCache without DSN", func(t *testing.T) {
+		store := &v1.Store{
+			Spec: v1.StoreSpec{
+				SessionCache: v1.SessionCacheSpec{
+					Adapter: "redis",
+					RedisSpec: v1.RedisSpec{
+						RedisHost:  "session-host",
+						RedisPort:  6379,
+						RedisIndex: 1,
+					},
+				},
+			},
+		}
+
+		env := store.GetEnv()
+		var foundHandler, foundSavePath bool
+		for _, envVar := range env {
+			if envVar.Name == "PHP_SESSION_HANDLER" {
+				foundHandler = true
+				assert.Equal(t, "redis", envVar.Value)
+			}
+			if envVar.Name == "PHP_SESSION_SAVE_PATH" {
+				foundSavePath = true
+				assert.Equal(t, "tcp://session-host:6379/1", envVar.Value)
+			}
+		}
+		assert.True(t, foundHandler, "PHP_SESSION_HANDLER should be set")
+		assert.True(t, foundSavePath, "PHP_SESSION_SAVE_PATH should be built from individual fields")
+	})
+}
+
+func TestNewSessionCacheRedisDsnOverwrite(t *testing.T) {
+	t.Run("New SessionCache with DSN", func(t *testing.T) {
+		store := &v1.Store{
+			Spec: v1.StoreSpec{
+				SessionCache: v1.SessionCacheSpec{
+					Adapter: "redis",
+					RedisSpec: v1.RedisSpec{
+						RedisDSN: "redis://session-redis:6380/3?password=secret",
+					},
+				},
+			},
+		}
+
+		env := store.GetEnv()
+		var foundRedisDSN bool
+		for _, envVar := range env {
+			if envVar.Name == "K8S_REDIS_SESSION_DSN" {
+				foundRedisDSN = true
+				assert.Equal(t, "redis://session-redis:6380/3?password=secret", envVar.Value)
+			}
+		}
+		assert.True(t, foundRedisDSN, "K8S_REDIS_SESSION_DSN should be set with DSN value")
+	})
+
+	t.Run("New SessionCache without DSN", func(t *testing.T) {
+		store := &v1.Store{
+			Spec: v1.StoreSpec{
+				SessionCache: v1.SessionCacheSpec{
+					Adapter: "redis",
+					RedisSpec: v1.RedisSpec{
+						RedisHost:  "session-host",
+						RedisPort:  6379,
+						RedisIndex: 1,
+					},
+				},
+			},
+		}
+
+		env := store.GetEnv()
+		var foundRedisDSN bool
+		for _, envVar := range env {
+			if envVar.Name == "K8S_REDIS_SESSION_DSN" {
+				foundRedisDSN = true
+				assert.Equal(t, "redis://session-host:6379/1", envVar.Value)
+			}
+		}
+		assert.True(t, foundRedisDSN, "K8S_REDIS_SESSION_DSN should be built from individual fields")
+	})
+}
+
+func TestWorkerRedisDsnOverwrite(t *testing.T) {
+	t.Run("Worker with DSN", func(t *testing.T) {
+		store := &v1.Store{
+			Spec: v1.StoreSpec{
+				Worker: v1.WorkerSpec{
+					Adapter: "redis",
+					RedisSpec: v1.RedisSpec{
+						RedisDSN: "redis://worker-redis:6380/messages?password=secret&group=custom",
+					},
+				},
+			},
+		}
+
+		env := store.GetEnv()
+		var foundDSN bool
+		for _, envVar := range env {
+			if envVar.Name == "MESSENGER_TRANSPORT_DSN" {
+				foundDSN = true
+				assert.Equal(t, "redis://worker-redis:6380/messages?password=secret&group=custom", envVar.Value)
+			}
+		}
+		assert.True(t, foundDSN, "MESSENGER_TRANSPORT_DSN should be set with DSN value")
+	})
+
+	t.Run("Worker without DSN", func(t *testing.T) {
+		store := &v1.Store{
+			Spec: v1.StoreSpec{
+				Worker: v1.WorkerSpec{
+					Adapter: "redis",
+					RedisSpec: v1.RedisSpec{
+						RedisHost:  "worker-host",
+						RedisPort:  6379,
+						RedisIndex: 3,
+					},
+				},
+			},
+		}
+
+		env := store.GetEnv()
+		var foundDSN bool
+		for _, envVar := range env {
+			if envVar.Name == "MESSENGER_TRANSPORT_DSN" {
+				foundDSN = true
+				assert.Equal(t, "redis://worker-host:6379/messages/symfony/consumer?auto_setup=true&serializer=1&stream_max_entries=0&dbindex=3", envVar.Value)
+			}
+		}
+		assert.True(t, foundDSN, "MESSENGER_TRANSPORT_DSN should be built from individual fields")
+	})
+}
