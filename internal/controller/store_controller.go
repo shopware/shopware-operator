@@ -190,21 +190,6 @@ func (r *StoreReconciler) doReconcile(
 	log := logging.FromContext(ctx)
 	log.Info("Do reconcile on store")
 
-	log.Debug("reconcile app secrets")
-	if err := r.ensureAppSecrets(ctx, store); err != nil {
-		return fmt.Errorf("app secrets: %w", err)
-	}
-
-	if store.IsState(v1.StateEmpty, v1.StateWait) {
-		log.Info("skip reconcile because s3/db not ready or state is empty")
-		return nil
-	}
-
-	log.Debug("reconcile pdb")
-	if err := r.reconcilePDB(ctx, store); err != nil {
-		return fmt.Errorf("pdb: %w", err)
-	}
-
 	log.Debug("reconcile ingress")
 	if err := r.reconcileIngress(ctx, store); err != nil {
 		return fmt.Errorf("ingress: %w", err)
@@ -213,6 +198,21 @@ func (r *StoreReconciler) doReconcile(
 	log.Debug("reconcile gateway httproute")
 	if err := r.reconcileHTTPRoute(ctx, store); err != nil {
 		return fmt.Errorf("httproute: %w", err)
+	}
+
+	log.Debug("reconcile pdb")
+	if err := r.reconcilePDB(ctx, store); err != nil {
+		return fmt.Errorf("pdb: %w", err)
+	}
+
+	if store.IsState(v1.StateEmpty, v1.StateWait) {
+		log.Info("skip some resources because s3/db/fastly/opensearch not ready or state is empty")
+		return nil
+	}
+
+	log.Debug("reconcile app secrets")
+	if err := r.ensureAppSecrets(ctx, store); err != nil {
+		return fmt.Errorf("app secrets: %w", err)
 	}
 
 	// State Setup
