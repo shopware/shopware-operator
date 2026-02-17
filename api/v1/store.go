@@ -71,6 +71,10 @@ type StoreSpec struct {
 	// +kubebuilder:default=false
 	DisableS3Check bool `json:"disableS3Check,omitempty"`
 	// +kubebuilder:default=false
+	DisableFastlyCheck bool `json:"disableFastlyCheck,omitempty"`
+	// +kubebuilder:default=false
+	DisableOpensearchCheck bool `json:"disableOpensearchCheck,omitempty"`
+	// +kubebuilder:default=false
 	DisableDatabaseCheck bool `json:"disableDatabaseCheck,omitempty"`
 	DisableJobDeletion   bool `json:"disableJobDeletion,omitempty"`
 

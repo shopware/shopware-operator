@@ -66,6 +66,14 @@ func (r *StoreReconciler) reconcileCRStatus(
 		if !store.Spec.DisableS3Check && store.Spec.S3Storage.AccessKeyRef.Key != "" {
 			store.Status.State = r.checkS3Services(ctx, store)
 		}
+
+		if !store.Spec.DisableFastlyCheck && store.Spec.ShopConfiguration.Fastly.ServiceRef.Name != "" && store.Spec.ShopConfiguration.Fastly.ServiceRef.Key != "" {
+			store.Status.State = r.checkFastlyRef(ctx, store)
+		}
+
+		if !store.Spec.DisableOpensearchCheck && store.Spec.OpensearchSpec.Enabled {
+			store.Status.State = r.checkOpensearch(ctx, store)
+		}
 	}
 
 	if store.IsState(v1.StateSetup, v1.StateSetupError) {
@@ -164,6 +172,125 @@ func (r *StoreReconciler) checkDatabaseServices(
 	return v1.StateSetup
 }
 
+func (r *StoreReconciler) checkFastlyRef(
+	ctx context.Context,
+	store *v1.Store,
+) v1.StatefulAppState {
+	con := v1.StoreCondition{
+		Type:               string(v1.StateWait),
+		LastTransitionTime: metav1.Time{},
+		LastUpdateTime:     metav1.Now(),
+		Message:            "Waiting for fastly secret",
+		Reason:             "",
+		Status:             "",
+	}
+	defer func() {
+		store.Status.AddCondition(con)
+	}()
+
+	fastlyServiceIDSecret := new(corev1.Secret)
+	if err := r.Get(ctx, types.NamespacedName{
+		Namespace: store.Namespace,
+		Name:      store.Spec.ShopConfiguration.Fastly.ServiceRef.Name,
+	}, fastlyServiceIDSecret); err != nil {
+		if k8serrors.IsNotFound(err) {
+			con.Status = Error
+			con.Reason = "Fastly serviceRef secret does not exist"
+			return v1.StateWait
+		}
+		con.Reason = err.Error()
+		con.Status = Error
+		return v1.StateWait
+	}
+
+	if _, ok := fastlyServiceIDSecret.Data[store.Spec.ShopConfiguration.Fastly.ServiceRef.Key]; !ok {
+		con.Reason = fmt.Sprintf(
+			"The ServiceKeyRef doesn't contain the specified key '%s' in the secret '%s'",
+			store.Spec.ShopConfiguration.Fastly.ServiceRef.Key,
+			store.Spec.ShopConfiguration.Fastly.ServiceRef.Name,
+		)
+		con.Status = Error
+		return v1.StateWait
+	}
+
+	fastlyTokenSecret := new(corev1.Secret)
+	if err := r.Get(ctx, types.NamespacedName{
+		Namespace: store.Namespace,
+		Name:      store.Spec.ShopConfiguration.Fastly.TokenRef.Name,
+	}, fastlyTokenSecret); err != nil {
+		if k8serrors.IsNotFound(err) {
+			con.Status = Error
+			con.Reason = "Fastly tokenRef secret does not exist"
+			return v1.StateWait
+		}
+		con.Reason = err.Error()
+		con.Status = Error
+		return v1.StateWait
+	}
+
+	if _, ok := fastlyTokenSecret.Data[store.Spec.ShopConfiguration.Fastly.TokenRef.Key]; !ok {
+		con.Reason = fmt.Sprintf(
+			"The TokenKeyRef doesn't contain the specified key '%s' in the secret '%s'",
+			store.Spec.ShopConfiguration.Fastly.TokenRef.Key,
+			store.Spec.ShopConfiguration.Fastly.TokenRef.Name,
+		)
+		con.Status = Error
+		return v1.StateWait
+	}
+
+	con.LastTransitionTime = metav1.Now()
+	con.Status = Ready
+	con.Reason = "Fastly ServiceRef/TokenRef present"
+	return v1.StateSetup
+}
+
+func (r *StoreReconciler) checkOpensearch(
+	ctx context.Context,
+	store *v1.Store,
+) v1.StatefulAppState {
+	con := v1.StoreCondition{
+		Type:               string(v1.StateWait),
+		LastTransitionTime: metav1.Time{},
+		LastUpdateTime:     metav1.Now(),
+		Message:            "Waiting for Opensearch ref",
+		Reason:             "",
+		Status:             "",
+	}
+	defer func() {
+		store.Status.AddCondition(con)
+	}()
+
+	es := new(corev1.Secret)
+	if err := r.Get(ctx, types.NamespacedName{
+		Namespace: store.Namespace,
+		Name:      store.Spec.OpensearchSpec.PasswordSecretRef.Name,
+	}, es); err != nil {
+		if k8serrors.IsNotFound(err) {
+			con.Status = Error
+			con.Reason = "OpensearchRef secret does not exist"
+			return v1.StateWait
+		}
+		con.Reason = err.Error()
+		con.Status = Error
+		return v1.StateWait
+	}
+
+	if _, ok := es.Data[store.Spec.OpensearchSpec.PasswordSecretRef.Key]; !ok {
+		con.Reason = fmt.Sprintf(
+			"The SecretKeyRef doesn't contain the specified key '%s' in the secret '%s'",
+			store.Spec.OpensearchSpec.PasswordSecretRef.Key,
+			store.Spec.OpensearchSpec.PasswordSecretRef.Name,
+		)
+		con.Status = Error
+		return v1.StateWait
+	}
+
+	con.LastTransitionTime = metav1.Now()
+	con.Status = Ready
+	con.Reason = "OpensearchRef is present"
+	return v1.StateSetup
+}
+
 func (r *StoreReconciler) checkS3Services(
 	ctx context.Context,
 	store *v1.Store,
@@ -194,7 +321,7 @@ func (r *StoreReconciler) checkS3Services(
 	var secretAccessKey []byte
 	if secretAccessKey, ok = secret.Data[store.Spec.S3Storage.SecretAccessKeyRef.Key]; !ok {
 		con.Reason = fmt.Sprintf(
-			"The SecretAccessKeyRef dosn't contain the specified key '%s' in the secret '%s'",
+			"The SecretAccessKeyRef doesn't contain the specified key '%s' in the secret '%s'",
 			store.Spec.S3Storage.SecretAccessKeyRef.Key,
 			store.Spec.S3Storage.SecretAccessKeyRef.Name,
 		)
