@@ -251,10 +251,14 @@ func uploadBucket(ctx context.Context, s3Client *minio.Client, bucketName, sourc
 	}
 
 	logger.Info("Scanning source directory for files")
-	if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
-		logger.Warnw("Source path does not exist", zap.String("source_path", sourcePath))
-		logger.Info("No files to upload, operation complete")
-		return nil
+	if _, err := os.Stat(sourcePath); err != nil {
+		if os.IsNotExist(err) {
+			logger.Warnw("Source path does not exist", zap.String("source_path", sourcePath))
+			logger.Info("No files to upload, operation complete")
+			return nil
+		}
+		logger.Errorw("Failed to stat source path", zap.String("source_path", sourcePath), zap.Error(err))
+		return fmt.Errorf("failed to stat source path: %w", err)
 	}
 
 	var files []string
