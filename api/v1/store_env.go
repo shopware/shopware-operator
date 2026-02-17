@@ -67,7 +67,16 @@ func (s *Store) getOldSessionCache() []corev1.EnvVar {
 		var savePath string
 		// If DSN is provided, use it directly
 		if s.Spec.SessionCache.RedisDSN != "" {
-			savePath = s.Spec.SessionCache.RedisDSN
+			return []corev1.EnvVar{
+				{
+					Name:  "REDIS_SESSION_DSN",
+					Value: s.Spec.SessionCache.RedisDSN,
+				},
+				{
+					Name:  "PHP_SESSION_HANDLER",
+					Value: "redis",
+				},
+			}
 		} else {
 			// Otherwise build from individual fields
 			savePath = fmt.Sprintf(
