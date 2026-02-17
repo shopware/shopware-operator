@@ -206,7 +206,7 @@ func (r *StoreReconciler) doReconcile(
 	}
 
 	if store.IsState(v1.StateEmpty, v1.StateWait) {
-		log.Info("skip some resources because s3/db/fastly not ready or state is empty")
+		log.Info("skip some resources because s3/db/fastly/opensearch not ready or state is empty")
 		return nil
 	}
 
