@@ -426,19 +426,23 @@ func TestSessionCacheRedisDsnOverwrite(t *testing.T) {
 		}
 
 		env := store.GetEnv()
-		var foundHandler, foundSavePath bool
+		var foundHandler, foundRedisDSN bool
 		for _, envVar := range env {
 			if envVar.Name == "PHP_SESSION_HANDLER" {
 				foundHandler = true
 				assert.Equal(t, "redis", envVar.Value)
 			}
-			if envVar.Name == "PHP_SESSION_SAVE_PATH" {
-				foundSavePath = true
+			if envVar.Name == "REDIS_SESSION_DSN" {
+				foundRedisDSN = true
 				assert.Equal(t, "tcp://session-redis:6380/3?auth=secret", envVar.Value)
+			}
+			// Ensure PHP_SESSION_SAVE_PATH is NOT set when DSN is provided
+			if envVar.Name == "PHP_SESSION_SAVE_PATH" {
+				t.Errorf("PHP_SESSION_SAVE_PATH should not be set when DSN is provided")
 			}
 		}
 		assert.True(t, foundHandler, "PHP_SESSION_HANDLER should be set")
-		assert.True(t, foundSavePath, "PHP_SESSION_SAVE_PATH should be set with DSN value")
+		assert.True(t, foundRedisDSN, "REDIS_SESSION_DSN should be set with DSN value")
 	})
 
 	t.Run("SessionCache without DSN", func(t *testing.T) {
