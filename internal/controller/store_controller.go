@@ -65,7 +65,7 @@ func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager, logger *zap.Sugared
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1.Store{}).
-		// We get triggerd by every update on the created resources, this leeads to high reconciles at the start.
+		// We get triggered by every update on the created resources, this leads to high reconciles at the start.
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.Service{}).
 		Owns(&networkingv1.Ingress{}).
