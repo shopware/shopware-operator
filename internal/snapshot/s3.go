@@ -163,7 +163,7 @@ func (s *SnapshotService) createAssetBackup(
 		logger := logger.With(zap.String("bucket", "private"))
 		logger.Info("Starting S3 bucket read")
 
-		// make sure to create the directory for the public bucket backup, even if the bucket is empty
+		// make sure to create the directory for the private bucket backup, even if the bucket is empty
 		routeFilePath := filepath.Join(snapshotCtx.TempArchiveDir, "private")
 		if err := os.MkdirAll(routeFilePath, 0755); err != nil {
 			logger.Errorw("failed to create directory for bucket backup", zap.String("path", routeFilePath), zap.Error(err))
@@ -192,9 +192,9 @@ func (s *SnapshotService) createAssetBackup(
 		logger.Info("Starting S3 bucket read")
 
 		// make sure to create the directory for the public bucket backup, even if the bucket is empty
-		routeFilePath := filepath.Join(snapshotCtx.TempArchiveDir, "public")
-		if err := os.MkdirAll(routeFilePath, 0755); err != nil {
-			logger.Errorw("failed to create directory for bucket backup", zap.String("path", routeFilePath), zap.Error(err))
+		rootDirPath := filepath.Join(snapshotCtx.TempArchiveDir, "public")
+		if err := os.MkdirAll(rootDirPath, 0755); err != nil {
+			logger.Errorw("failed to create directory for bucket backup", zap.String("path", rootDirPath), zap.Error(err))
 			errChan <- fmt.Errorf("failed to create directory for public bucket backup: %w", err)
 			return
 		}
@@ -202,7 +202,7 @@ func (s *SnapshotService) createAssetBackup(
 		downloader := util.NewS3Downloader(minioClient, cfg.S3.PublicBucket)
 		err := downloader.DownloadBucket(ctx,
 			parallelDownloads,
-			processDownloadObject(routeFilePath, logger))
+			processDownloadObject(rootDirPath, logger))
 		if err != nil {
 			logger.Errorw("bucket backup failed", zap.Error(err))
 			errChan <- fmt.Errorf("public bucket backup: %w", err)
