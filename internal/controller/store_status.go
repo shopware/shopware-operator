@@ -8,10 +8,12 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v1 "github.com/shopware/shopware-operator/api/v1"
+	"github.com/shopware/shopware-operator/internal/cronjob"
 	"github.com/shopware/shopware-operator/internal/deployment"
 	"github.com/shopware/shopware-operator/internal/job"
 	"github.com/shopware/shopware-operator/internal/k8s"
 	"github.com/shopware/shopware-operator/internal/logging"
+	"github.com/shopware/shopware-operator/internal/metrics"
 	"github.com/shopware/shopware-operator/internal/util"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
@@ -117,6 +119,16 @@ func (r *StoreReconciler) reconcileCRStatus(
 
 	logging.FromContext(ctx).Infow("Update store status", zap.Any("status", store.Status))
 	r.SendEvent(ctx, *store, "Update store status")
+	metrics.UpdateStoreMetrics(store)
+
+	scheduledCronJob, err := cronjob.GetScheduledCronJob(ctx, r.Client, *store)
+	if err != nil {
+		if !k8serrors.IsNotFound(err) {
+			logging.FromContext(ctx).Warnw("failed to get scheduled task cronjob for metrics", zap.Error(err))
+		}
+		scheduledCronJob = nil
+	}
+	metrics.UpdateScheduledTaskMetrics(store, scheduledCronJob)
 
 	return writeStoreStatus(ctx, r.Client, types.NamespacedName{
 		Namespace: store.Namespace,

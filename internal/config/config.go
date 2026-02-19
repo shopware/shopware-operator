@@ -58,8 +58,12 @@ type StoreConfig struct {
 	NatsHandler NatsHandler `env:",prefix=NATS_"`
 
 	// Metrics and health probe configuration
-	MetricsAddr string `env:"METRICS_BIND_ADDRESS, default=0"`
+	MetricsAddr string `env:"METRICS_BIND_ADDRESS, default=:8080"`
 	ProbeAddr   string `env:"HEALTH_PROBE_BIND_ADDRESS, default=:8081"`
+
+	// OperatorServiceURL is exposed to store containers as K8S_OPERATOR_URL so
+	// the Shopware consumer knows how to reach the operator service.
+	OperatorServiceURL string `env:"OPERATOR_SERVICE_URL"`
 
 	EnableLeaderElection bool   `env:"LEADER_ELECT, default=true"`
 	DisableChecks        bool   `env:"DISABLE_CHECKS, default=false"`
