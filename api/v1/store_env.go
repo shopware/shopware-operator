@@ -16,6 +16,13 @@ const (
 	DatabaseTLSKeyFile    = DatabaseTLSMountPath + "/tls.key"
 )
 
+// Set by the cmd main
+var operatorServiceURL string
+
+func SetOperatorServiceURL(value string) {
+	operatorServiceURL = value
+}
+
 func (s Store) GetDatabaseTLSVolumes() []corev1.Volume {
 	if s.Spec.Database.TLS.SecretName == "" {
 		return nil
@@ -610,6 +617,10 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 		{
 			Name:  "DATABASE_PERSISTENT_CONNECTION",
 			Value: "0",
+		},
+		{
+			Name:  "SHOPWARE_OPERATOR_URL",
+			Value: operatorServiceURL,
 		},
 	}
 
