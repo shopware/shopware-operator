@@ -79,6 +79,10 @@ spec:
           value: "{{ .Values.logFormat | default "json" }}"
         - name: DISABLE_CHECKS
           value: "{{ .Values.disableChecks | default "false" }}"
+        {{- if .Values.metrics.enabled }}
+        - name: OPERATOR_SERVICE_URL
+          value: "http://shopware-operator.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.metrics.port | default 8080 }}"
+        {{- end }}
         {{- if and (hasKey .Values "events") (hasKey .Values.events "nats") (.Values.events.nats.enable) }}
         - name: NATS_ENABLE
           value: "true"

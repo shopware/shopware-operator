@@ -8,6 +8,17 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// operatorServiceURL is set once at operator startup and injected into every
+// store container as K8S_OPERATOR_URL so the Shopware consumer knows how to
+// reach the operator.
+var operatorServiceURL string
+
+// SetOperatorServiceURL stores the operator's service URL globally so it can
+// be included in every store's environment without modifying the Store CRD.
+func SetOperatorServiceURL(url string) {
+	operatorServiceURL = url
+}
+
 // TODO: If building more than one instance print a warning for the cache to use
 // redis
 func (s *Store) getAppCache() []corev1.EnvVar {
@@ -507,6 +518,13 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 			Name:  "DATABASE_PERSISTENT_CONNECTION",
 			Value: "1",
 		},
+	}
+
+	if operatorServiceURL != "" {
+		c = append(c, corev1.EnvVar{
+			Name:  "K8S_OPERATOR_URL",
+			Value: operatorServiceURL,
+		})
 	}
 
 	if s.Spec.ShopConfiguration.UsageDataConsent == "revoked" {
