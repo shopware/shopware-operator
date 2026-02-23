@@ -472,7 +472,7 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 				},
 			},
 		},
-		// When using https we need this for header trusting
+		// deprecated since 6.7
 		{
 			Name:  "TRUSTED_PROXIES",
 			Value: "REMOTE_ADDR",
@@ -481,6 +481,10 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 		{
 			Name:  "SYMFONY_TRUSTED_PROXIES",
 			Value: "REMOTE_ADDR",
+		},
+		{
+			Name:  "SYMFONY_TRUSTED_HEADERS",
+			Value: "['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-forwarded-port']",
 		},
 		// Some Shopware best practises
 		{
