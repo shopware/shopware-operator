@@ -540,14 +540,18 @@ func TestWorkerRedisDsnOverwrite(t *testing.T) {
 		}
 
 		env := store.GetEnv()
-		var foundDSN bool
+		var foundDSN, foundConsumerName bool
 		for _, envVar := range env {
 			if envVar.Name == "MESSENGER_TRANSPORT_DSN" {
 				foundDSN = true
 				assert.Equal(t, "redis://worker-redis:6380/messages?password=secret&group=custom", envVar.Value)
 			}
+			if envVar.Name == "MESSENGER_CONSUMER_NAME" {
+				foundConsumerName = true
+			}
 		}
 		assert.True(t, foundDSN, "MESSENGER_TRANSPORT_DSN should be set with DSN value")
+		assert.True(t, foundConsumerName, "MESSENGER_CONSUMER_NAME should be set")
 	})
 
 	t.Run("Worker without DSN", func(t *testing.T) {
@@ -565,13 +569,17 @@ func TestWorkerRedisDsnOverwrite(t *testing.T) {
 		}
 
 		env := store.GetEnv()
-		var foundDSN bool
+		var foundDSN, foundConsumerName bool
 		for _, envVar := range env {
 			if envVar.Name == "MESSENGER_TRANSPORT_DSN" {
 				foundDSN = true
 				assert.Equal(t, "redis://worker-host:6379/messages/symfony/consumer?auto_setup=true&serializer=1&stream_max_entries=0&dbindex=3", envVar.Value)
 			}
+			if envVar.Name == "MESSENGER_CONSUMER_NAME" {
+				foundConsumerName = true
+			}
 		}
 		assert.True(t, foundDSN, "MESSENGER_TRANSPORT_DSN should be built from individual fields")
+		assert.True(t, foundConsumerName, "MESSENGER_CONSUMER_NAME should be set")
 	})
 }

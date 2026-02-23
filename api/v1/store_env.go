@@ -194,6 +194,15 @@ func (s *Store) getWorker() []corev1.EnvVar {
 					Name:  "MESSENGER_TRANSPORT_DSN",
 					Value: s.Spec.Worker.RedisDSN,
 				},
+				{
+					Name: "MESSENGER_CONSUMER_NAME",
+					ValueFrom: &corev1.EnvVarSource{
+						FieldRef: &corev1.ObjectFieldSelector{
+							APIVersion: "v1",
+							FieldPath:  "metadata.name",
+						},
+					},
+				},
 			}
 		}
 
