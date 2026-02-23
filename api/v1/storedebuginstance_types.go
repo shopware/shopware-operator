@@ -37,6 +37,12 @@ type StoreDebugInstanceSpec struct {
 	// ExtraContainerPorts is the extra ports to add to the debug instance
 	// if it should be exposed to the outside world
 	ExtraContainerPorts []corev1.ContainerPort `json:"extraContainerPorts,omitempty"`
+	// CustomImage allows overriding the container image from the store
+	// +optional
+	CustomImage string `json:"customImage,omitempty"`
+	// IgnoreStoreStatus allows the debug instance to start even if the store is not ready
+	// +optional
+	IgnoreStoreStatus bool `json:"ignoreStoreStatus,omitempty"`
 }
 
 // +kubebuilder:object:root=true

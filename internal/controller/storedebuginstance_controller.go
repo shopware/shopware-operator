@@ -110,9 +110,15 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return rr, nil
 	}
 
-	if !store.IsState(shopv1.StateReady) {
+	// Only check store readiness if not explicitly ignored
+	if !storeDebugInstance.Spec.IgnoreStoreStatus && !store.IsState(shopv1.StateReady) {
 		log.Info("Skip reconcile, because store is not ready yet.", zap.Any("store", store.Status))
 		return rr, nil
+	}
+
+	if storeDebugInstance.Spec.IgnoreStoreStatus {
+		log.Info("Ignoring store status check for debug instance",
+			zap.String("storeState", string(store.Status.State)))
 	}
 
 	log = log.With(zap.String("store", storeDebugInstance.Spec.StoreRef))
