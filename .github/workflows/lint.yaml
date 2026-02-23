@@ -82,10 +82,11 @@ jobs:
             image=moby/buildkit:v0.12.5
             network=host
 
-      - name: Remove arm from goreleaser
+      - name: Configure goreleaser for amd64 linux only
         uses: mikefarah/yq@master
         with:
-          cmd: yq -i 'del(.dockers_v2.[].platforms[1])' .goreleaser.yaml
+          cmd: |
+            yq -i '.builds[].goos = ["linux"] | .builds[].goarch = ["amd64"] | .dockers_v2[].platforms = ["linux/amd64"]' .goreleaser.yaml
 
       - name: Create Snapshot
         id: goreleaser
@@ -150,6 +151,12 @@ jobs:
           }
           kubectl wait --namespace test --for=jsonpath="{.status.state}"=wait --timeout=2m storeexec/test || {
             kubectl get --namespace test cronjob/test-cron -o json && exit 2
+          }
+
+          # Test StoreDebugInstances
+          kubectl apply -f examples/storedebuginstance.yaml --namespace test
+          kubectl wait --namespace test --for=jsonpath="{.status.state}"=wait --timeout=2m storedebuginstance/debug || {
+            kubectl get --namespace test storedebuginstance/debug -o json && exit 1
           }
 
           # Test StoreSnapshotCreate resource
