@@ -194,6 +194,15 @@ func (s *Store) getWorker() []corev1.EnvVar {
 					Name:  "MESSENGER_TRANSPORT_DSN",
 					Value: s.Spec.Worker.RedisDSN,
 				},
+				{
+					Name: "MESSENGER_CONSUMER_NAME",
+					ValueFrom: &corev1.EnvVarSource{
+						FieldRef: &corev1.ObjectFieldSelector{
+							APIVersion: "v1",
+							FieldPath:  "metadata.name",
+						},
+					},
+				},
 			}
 		}
 
@@ -202,11 +211,20 @@ func (s *Store) getWorker() []corev1.EnvVar {
 			{
 				Name: "MESSENGER_TRANSPORT_DSN",
 				Value: fmt.Sprintf(
-					"redis://%s:%d/messages/symfony/consumer?auto_setup=true&serializer=1&stream_max_entries=0&dbindex=%d",
+					"redis://%s:%d/messages/symfony?auto_setup=true&serializer=1&stream_max_entries=0&dbindex=%d",
 					s.Spec.Worker.RedisHost,
 					s.Spec.Worker.RedisPort,
 					s.Spec.Worker.RedisIndex,
 				),
+			},
+			{
+				Name: "MESSENGER_CONSUMER_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						APIVersion: "v1",
+						FieldPath:  "metadata.name",
+					},
+				},
 			},
 		}
 	}
