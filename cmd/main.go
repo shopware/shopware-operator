@@ -56,8 +56,11 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(shopv1.AddToScheme(scheme))
-	utilruntime.Must(gatewayv1.Install(scheme))
 	//+kubebuilder:scaffold:scheme
+	//
+	// Ignore errors because gateway-api is not per default installed
+	// nolint:errcheck
+	gatewayv1.Install(scheme)
 }
 
 func main() {
