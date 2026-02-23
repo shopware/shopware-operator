@@ -15,6 +15,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/job"
 	"github.com/shopware/shopware-operator/internal/k8s"
 	"github.com/shopware/shopware-operator/internal/logging"
+	"github.com/shopware/shopware-operator/internal/metrics"
 	"github.com/shopware/shopware-operator/internal/pdb"
 	"github.com/shopware/shopware-operator/internal/secret"
 	"github.com/shopware/shopware-operator/internal/service"
@@ -160,6 +161,7 @@ func (r *StoreReconciler) Reconcile(
 	// }
 
 	if !store.DeletionTimestamp.IsZero() {
+		metrics.RemoveStoreMetrics(store)
 		return shortRequeue, nil
 	}
 

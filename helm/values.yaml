@@ -94,3 +94,7 @@ logFormat: json
 # Disable check for s3/database/fastly and Opensearch checks. Useful if network access is not given for one of the services.
 # This is a global level. You can also control this per store.
 disableChecks: false
+
+metrics:
+  enabled: false
+  port: 8080

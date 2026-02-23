@@ -1,0 +1,29 @@
+{{- if not .Values.crds.installOnly }}
+{{- if .Values.metrics.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: shopware-operator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/created-by: shopware-operator
+    app.kubernetes.io/instance: shopware-operator
+    app.kubernetes.io/managed-by: shopware-operator
+    app.kubernetes.io/name: service
+    app.kubernetes.io/part-of: shopware-operator
+    control-plane: shopware-operator
+{{- with .Values.labels }}
+    {{- toYaml . | nindent 4 }}
+{{- end }}
+spec:
+  type: ClusterIP
+  selector:
+    control-plane: shopware-operator
+  ports:
+    - name: http-metrics
+      port: {{ .Values.metrics.port | default 8080 }}
+      targetPort: 8080
+      protocol: TCP
+{{- end }}
+{{- end }}
