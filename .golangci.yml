@@ -1,40 +1,31 @@
-version: "2"
 run:
+  timeout: 8m
   allow-parallel-runners: true
+
 linters:
   enable:
     - dupl
     - gocyclo
-    - lll
     - misspell
     - nakedret
     - prealloc
     - unconvert
     - unparam
-  exclusions:
-    generated: lax
-    rules:
-      - linters:
-          - lll
-        path: api/*
-      - linters:
-          - dupl
-        path: api/v1/store_test.go
-      - linters:
-          - dupl
-          - lll
-        path: internal/*
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
-formatters:
-  enable:
-    - gofmt
-    - goimports
-  exclusions:
-    generated: lax
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
+
+issues:
+  exclude-dirs:
+    - third_party
+    - builtin
+    - examples
+  exclude-rules:
+    - path: api/
+      linters:
+        - lll
+    - path: api/v1/store_test.go
+      linters:
+        - dupl
+    - path: internal/
+      linters:
+        - dupl
+        - lll
+  exclude-generated: lax
