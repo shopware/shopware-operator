@@ -573,7 +573,7 @@ func TestWorkerRedisDsnOverwrite(t *testing.T) {
 		for _, envVar := range env {
 			if envVar.Name == "MESSENGER_TRANSPORT_DSN" {
 				foundDSN = true
-				assert.Equal(t, "redis://worker-host:6379/messages/symfony/consumer?auto_setup=true&serializer=1&stream_max_entries=0&dbindex=3", envVar.Value)
+				assert.Equal(t, "redis://worker-host:6379/messages/symfony?auto_setup=true&serializer=1&stream_max_entries=0&dbindex=3", envVar.Value)
 			}
 			if envVar.Name == "MESSENGER_CONSUMER_NAME" {
 				foundConsumerName = true
