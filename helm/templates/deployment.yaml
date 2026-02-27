@@ -110,6 +110,11 @@ spec:
           initialDelaySeconds: 15
           periodSeconds: 20
         name: operator
+        {{- if .Values.metrics.enabled }}
+        ports:
+          - containerPort: {{ .Values.metrics.port | default 8080 }}
+            name: http-metrics
+        {{- end }}
         readinessProbe:
           httpGet:
             path: /readyz
