@@ -359,56 +359,7 @@ func runUploadWorkers(
 	files <-chan string,
 	worker func(context.Context, string) error,
 ) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	if workers <= 0 {
-		workers = 1
-	}
-
-	wg := sync.WaitGroup{}
-	errCh := make(chan error, 1)
-
-	for i := 0; i < workers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case file, ok := <-files:
-					if !ok {
-						return
-					}
-
-					if err := worker(ctx, file); err != nil {
-						select {
-						case errCh <- err:
-							cancel()
-						default:
-						}
-						return
-					}
-				}
-			}
-		}()
-	}
-
-	wg.Wait()
-
-	select {
-	case err := <-errCh:
-		return err
-	default:
-	}
-
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-
-	return nil
+	return runWorkers(ctx, workers, files, worker)
 }
 
 type S3Downloader struct {
@@ -455,12 +406,64 @@ func runDownloadWorkers(
 		batchCount = 1
 	}
 
+	objCh := make(chan minio.ObjectInfo, batchCount)
+	listErrCh := make(chan error, 1)
+
+	go func() {
+		defer close(objCh)
+
+		for object := range objects {
+			if object.Err != nil {
+				listErrCh <- fmt.Errorf("error listing objects: %w", object.Err)
+				cancel()
+				return
+			}
+
+			select {
+			case <-ctx.Done():
+				listErrCh <- ctx.Err()
+				return
+			case objCh <- object:
+			}
+		}
+
+		listErrCh <- nil
+	}()
+
+	workerErr := runWorkers(ctx, batchCount, objCh, worker)
+	listErr := <-listErrCh
+
+	if workerErr != nil {
+		if errors.Is(workerErr, context.Canceled) && listErr != nil && !errors.Is(listErr, context.Canceled) {
+			return listErr
+		}
+		return workerErr
+	}
+
+	if listErr != nil && !errors.Is(listErr, context.Canceled) {
+		return listErr
+	}
+
+	return nil
+}
+
+func runWorkers[T any](
+	ctx context.Context,
+	workers int,
+	items <-chan T,
+	worker func(context.Context, T) error,
+) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	if workers <= 0 {
+		workers = 1
+	}
+
 	wg := sync.WaitGroup{}
 	errCh := make(chan error, 1)
-	objCh := make(chan minio.ObjectInfo, batchCount)
 
-	// start workers
-	for i := 0; i < batchCount; i++ {
+	for i := 0; i < workers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -469,12 +472,12 @@ func runDownloadWorkers(
 				select {
 				case <-ctx.Done():
 					return
-				case obj, ok := <-objCh:
+				case item, ok := <-items:
 					if !ok {
 						return
 					}
 
-					if err := worker(ctx, obj); err != nil {
+					if err := worker(ctx, item); err != nil {
 						select {
 						case errCh <- err:
 							cancel()
@@ -487,39 +490,19 @@ func runDownloadWorkers(
 		}()
 	}
 
-	// feed objects to workers
-	for object := range objects {
-		if object.Err != nil {
-			close(objCh)
-			wg.Wait()
-			return fmt.Errorf("error listing objects: %w", object.Err)
-		}
-
-		select {
-		case <-ctx.Done():
-			close(objCh)
-			wg.Wait()
-			select {
-			case err := <-errCh:
-				if err != nil {
-					return err
-				}
-			default:
-			}
-			return ctx.Err()
-		case objCh <- object:
-		}
-	}
-
-	close(objCh)
 	wg.Wait()
 
 	select {
 	case err := <-errCh:
 		return err
 	default:
-		return nil
 	}
+
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	return nil
 }
 
 func downloadBucket(ctx context.Context, s3Client *minio.Client, bucketName string, destinationPath string) error {
