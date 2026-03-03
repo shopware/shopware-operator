@@ -140,7 +140,7 @@ func (s *SnapshotService) createAssetBackup(
 
 	var wg sync.WaitGroup
 	errChan := make(chan error, 2)
-	parallelDownloads := 30
+	parallelDownloads := 10 // it's double that since private and public bucket are downloaded in parallel
 
 	cred, err := getAWSKeysWithAsumeRole(ctx, cfg.S3)
 	if err != nil {
