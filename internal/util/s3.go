@@ -261,93 +261,124 @@ func uploadBucket(ctx context.Context, s3Client *minio.Client, bucketName, sourc
 		return fmt.Errorf("failed to stat source path: %w", err)
 	}
 
-	var files []string
-	err := filepath.WalkDir(sourcePath, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			logger.Errorw("Error walking directory", zap.String("path", path), zap.Error(err))
-			return err
-		}
-		if !d.IsDir() {
-			files = append(files, path)
-		}
-		return nil
-	})
-	if err != nil {
-		logger.Errorw("Failed to walk source path", zap.Error(err))
-		return fmt.Errorf("walking source path: %w", err)
-	}
-
-	logger.Infow("Found files to upload", zap.Int("file_count", len(files)))
-	if len(files) == 0 {
-		logger.Info("No files to upload, operation complete")
-		return nil
-	}
-
 	const workers = 30
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	wg := sync.WaitGroup{}
-	errCh := make(chan error, workers)
-	sem := make(chan struct{}, workers)
+	errCh := make(chan error, 1)
+	fileCh := make(chan string, workers)
+	fileCount := int64(0)
 	uploadedCount := int64(0)
 
 	logger.Infow("Starting upload with workers", zap.Int("worker_count", workers))
 
-	for i, file := range files {
-		file := file
-		fileIndex := i + 1
+	for i := 0; i < workers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
-			select {
-			case sem <- struct{}{}:
-			case <-ctx.Done():
-				logger.Debug("Upload cancelled by context")
-				return
-			}
-			defer func() { <-sem }()
+			for {
+				select {
+				case <-ctx.Done():
+					logger.Debug("Upload cancelled by context")
+					return
+				case file, ok := <-fileCh:
+					if !ok {
+						return
+					}
 
-			relPath, err := filepath.Rel(sourcePath, file)
-			if err != nil {
-				logger.Errorw("Failed to get relative path", zap.String("file", file), zap.Error(err))
-				errCh <- fmt.Errorf("rel path error for %s: %w", file, err)
-				return
-			}
+					relPath, err := filepath.Rel(sourcePath, file)
+					if err != nil {
+						logger.Errorw("Failed to get relative path", zap.String("file", file), zap.Error(err))
+						select {
+						case errCh <- fmt.Errorf("rel path error for %s: %w", file, err):
+							cancel()
+						default:
+						}
+						return
+					}
 
-			logger.Debugw("Uploading file",
-				zap.String("local_file", file),
-				zap.String("s3_key", relPath),
-				zap.Int("file_index", fileIndex),
-				zap.Int("total_files", len(files)))
+					logger.Debugw("Uploading file",
+						zap.String("local_file", file),
+						zap.String("s3_key", relPath))
 
-			info, err := s3Client.FPutObject(ctx, bucketName, relPath, file, minio.PutObjectOptions{})
-			if err != nil {
-				logger.Errorw("Failed to upload file", zap.String("file", file), zap.String("s3_key", relPath), zap.Error(err))
-				errCh <- fmt.Errorf("error uploading %s: %w", file, err)
-				return
-			}
+					info, err := s3Client.FPutObject(ctx, bucketName, relPath, file, minio.PutObjectOptions{})
+					if err != nil {
+						logger.Errorw("Failed to upload file", zap.String("file", file), zap.String("s3_key", relPath), zap.Error(err))
+						select {
+						case errCh <- fmt.Errorf("error uploading %s: %w", file, err):
+							cancel()
+						default:
+						}
+						return
+					}
 
-			uploaded := atomic.AddInt64(&uploadedCount, 1)
-			if uploaded%100 == 0 || uploaded == int64(len(files)) {
-				logger.Infow("Upload progress",
-					zap.Int64("uploaded_count", uploaded),
-					zap.Int("total_files", len(files)),
-					zap.String("latest_file", relPath),
-					zap.Int64("size_bytes", info.Size))
+					uploaded := atomic.AddInt64(&uploadedCount, 1)
+					if uploaded%100 == 0 {
+						logger.Infow("Upload progress",
+							zap.Int64("uploaded_count", uploaded),
+							zap.Int64("scanned_files", atomic.LoadInt64(&fileCount)),
+							zap.String("latest_file", relPath),
+							zap.Int64("size_bytes", info.Size))
+					}
+				}
 			}
 		}()
 	}
 
+	err := filepath.WalkDir(sourcePath, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			logger.Errorw("Error walking directory", zap.String("path", path), zap.Error(walkErr))
+			return walkErr
+		}
+
+		if d.IsDir() {
+			return nil
+		}
+
+		atomic.AddInt64(&fileCount, 1)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case fileCh <- path:
+			return nil
+		}
+	})
+	close(fileCh)
+
 	logger.Info("Waiting for all uploads to complete")
 	wg.Wait()
-	close(errCh)
 
-	for err := range errCh {
-		logger.Errorw("Upload failed", zap.Error(err))
-		return err
+	select {
+	case workerErr := <-errCh:
+		logger.Errorw("Upload failed", zap.Error(workerErr))
+		return workerErr
+	default:
+	}
+
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			select {
+			case workerErr := <-errCh:
+				logger.Errorw("Upload failed", zap.Error(workerErr))
+				return workerErr
+			default:
+			}
+		}
+
+		logger.Errorw("Failed to walk source path", zap.Error(err))
+		return fmt.Errorf("walking source path: %w", err)
+	}
+
+	if fileCount == 0 {
+		logger.Info("No files to upload, operation complete")
+		return nil
 	}
 
 	logger.Infow("Successfully completed bucket upload",
-		zap.Int("total_files_uploaded", len(files)),
+		zap.Int64("total_files_uploaded", uploadedCount),
+		zap.Int64("total_files_scanned", fileCount),
 		zap.String("bucket", bucketName))
 	return nil
 }
@@ -400,6 +431,7 @@ func runDownloadWorkers(
 	errCh := make(chan error, 1)
 	objCh := make(chan minio.ObjectInfo, batchCount)
 
+	// start workers
 	for i := 0; i < batchCount; i++ {
 		wg.Add(1)
 		go func() {
@@ -427,6 +459,7 @@ func runDownloadWorkers(
 		}()
 	}
 
+	// feed objects to workers
 	for object := range objects {
 		if object.Err != nil {
 			close(objCh)
