@@ -20,6 +20,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const totalUploadWorkers = 20
+
 type FileEntry struct {
 	Name string
 	Size int64
@@ -130,7 +132,7 @@ func RestoreFromFilesystem(ctx context.Context, cred *credentials.Credentials, d
 
 	wg.Add(1)
 	go func() {
-		err := uploadBucket(ctx, s3Client, s.PublicBucketName, filepath.Join(directory, "public"), emptyBeforeRestore)
+		err := uploadBucket(ctx, s3Client, s.PublicBucketName, filepath.Join(directory, "public"), totalUploadWorkers/2, emptyBeforeRestore)
 		if err != nil {
 			errChan <- fmt.Errorf("error uploading to public bucket: %w", err)
 		}
@@ -139,7 +141,7 @@ func RestoreFromFilesystem(ctx context.Context, cred *credentials.Credentials, d
 
 	wg.Add(1)
 	go func() {
-		err := uploadBucket(ctx, s3Client, s.PrivateBucketName, filepath.Join(directory, "private"), emptyBeforeRestore)
+		err := uploadBucket(ctx, s3Client, s.PrivateBucketName, filepath.Join(directory, "private"), totalUploadWorkers/2, emptyBeforeRestore)
 		if err != nil {
 			errChan <- fmt.Errorf("error uploading to private bucket: %w", err)
 		}
@@ -237,7 +239,7 @@ func emptyBucketAsync(ctx context.Context, s3Client *minio.Client, bucketName st
 	}
 }
 
-func uploadBucket(ctx context.Context, s3Client *minio.Client, bucketName, sourcePath string, emptyBeforeRestore bool) error {
+func uploadBucket(ctx context.Context, s3Client *minio.Client, bucketName, sourcePath string, workers int, emptyBeforeRestore bool) error {
 	logger := logging.FromContext(ctx).With(zap.String("bucket", bucketName), zap.String("source_path", sourcePath))
 	logger.Info("Starting bucket upload process")
 
@@ -261,7 +263,6 @@ func uploadBucket(ctx context.Context, s3Client *minio.Client, bucketName, sourc
 		return fmt.Errorf("failed to stat source path: %w", err)
 	}
 
-	const workers = 30
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
