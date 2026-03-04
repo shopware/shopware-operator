@@ -288,14 +288,18 @@ func uploadBucket(ctx context.Context, s3Client *minio.Client, bucketName, sourc
 				return nil
 			}
 
-			atomic.AddInt64(&fileCount, 1)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case fileCh <- path:
+				atomic.AddInt64(&fileCount, 1)
 				return nil
 			}
 		})
+
+		if walkErr != nil && !errors.Is(walkErr, context.Canceled) {
+			cancel()
+		}
 
 		close(fileCh)
 		walkErrCh <- walkErr
@@ -382,6 +386,9 @@ func NewS3Downloader(client *minio.Client, bucket string) *S3Downloader {
 	}
 }
 
+// DownloadBucket downloads all objects from the configured bucket and processes them with the provided function.
+// The function is called for each object with the object's metadata and a reader for the object's content.
+// The function is responsible for closing the reader after processing the object.
 func (s *S3Downloader) DownloadBucket(ctx context.Context, batchCount int, f func(minio.ObjectInfo, *minio.Object) error) error {
 	objects := s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
 		Recursive: true,
