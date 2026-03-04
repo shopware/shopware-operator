@@ -322,6 +322,9 @@ func uploadBucket(ctx context.Context, s3Client *minio.Client, bucketName, sourc
 
 		return nil
 	})
+	if err != nil {
+		cancel()
+	}
 
 	walkErr := <-walkErrCh
 
@@ -431,6 +434,9 @@ func runDownloadWorkers(
 	}()
 
 	workerErr := runWorkers(ctx, batchCount, objCh, worker)
+	if workerErr != nil {
+		cancel()
+	}
 	listErr := <-listErrCh
 
 	if workerErr != nil {

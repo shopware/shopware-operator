@@ -65,6 +65,43 @@ func TestRunUploadWorkers_ReturnsWorkerError(t *testing.T) {
 	assert.ErrorContains(t, err, "boom")
 }
 
+func TestRunUploadWorkers_NoDeadlockWithBlockedProducerOnWorkerError(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	files := make(chan string, 4)
+	producerDone := make(chan error, 1)
+
+	go func() {
+		for i := 0; i < 500; i++ {
+			select {
+			case <-ctx.Done():
+				producerDone <- nil
+				return
+			case files <- fmt.Sprintf("file-%d", i):
+			}
+		}
+		close(files)
+		producerDone <- nil
+	}()
+
+	err := runUploadWorkers(ctx, 2, files, func(_ context.Context, _ string) error {
+		return errors.New("boom")
+	})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "boom")
+
+	cancel()
+	select {
+	case producerErr := <-producerDone:
+		require.NoError(t, producerErr)
+	case <-time.After(2 * time.Second):
+		t.Fatal("producer did not exit; possible deadlock with blocked sender")
+	}
+}
+
 func TestRunUploadWorkers_UsesAtLeastOneWorker(t *testing.T) {
 	files := make(chan string, 1)
 	files <- "file"

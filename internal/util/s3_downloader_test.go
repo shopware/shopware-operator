@@ -67,6 +67,31 @@ func TestRunDownloadWorkers_ReturnsWorkerError(t *testing.T) {
 	assert.ErrorContains(t, err, "boom")
 }
 
+func TestRunDownloadWorkers_NoDeadlockOnWorkerError(t *testing.T) {
+	t.Parallel()
+
+	objects := make(chan minio.ObjectInfo, 200)
+	for i := 0; i < cap(objects); i++ {
+		objects <- minio.ObjectInfo{Key: fmt.Sprintf("obj-%d", i)}
+	}
+	close(objects)
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- runDownloadWorkers(context.Background(), 4, objects, func(_ context.Context, _ minio.ObjectInfo) error {
+			return errors.New("boom")
+		})
+	}()
+
+	select {
+	case err := <-errCh:
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "boom")
+	case <-time.After(2 * time.Second):
+		t.Fatal("runDownloadWorkers did not return; possible deadlock")
+	}
+}
+
 func TestRunDownloadWorkers_ReturnsListError(t *testing.T) {
 	objects := make(chan minio.ObjectInfo, 1)
 	objects <- minio.ObjectInfo{Err: io.EOF}
