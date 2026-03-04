@@ -92,6 +92,43 @@ func TestRunDownloadWorkers_NoDeadlockOnWorkerError(t *testing.T) {
 	}
 }
 
+func TestRunDownloadWorkers_NoDeadlockWithBlockedProducerOnWorkerError(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	objects := make(chan minio.ObjectInfo, 4)
+	producerDone := make(chan error, 1)
+
+	go func() {
+		for i := 0; i < 500; i++ {
+			select {
+			case <-ctx.Done():
+				producerDone <- nil
+				return
+			case objects <- minio.ObjectInfo{Key: fmt.Sprintf("obj-%d", i)}:
+			}
+		}
+		close(objects)
+		producerDone <- nil
+	}()
+
+	err := runDownloadWorkers(ctx, 2, objects, func(_ context.Context, _ minio.ObjectInfo) error {
+		return errors.New("boom")
+	})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "boom")
+
+	cancel()
+	select {
+	case producerErr := <-producerDone:
+		require.NoError(t, producerErr)
+	case <-time.After(2 * time.Second):
+		t.Fatal("producer did not exit; possible deadlock with blocked sender")
+	}
+}
+
 func TestRunDownloadWorkers_ReturnsListError(t *testing.T) {
 	objects := make(chan minio.ObjectInfo, 1)
 	objects <- minio.ObjectInfo{Err: io.EOF}

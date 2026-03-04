@@ -266,12 +266,17 @@ func uploadBucket(ctx context.Context, s3Client *minio.Client, bucketName, sourc
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	fileCh := make(chan string, workers)
+	effectiveWorkers := workers
+	if effectiveWorkers <= 0 {
+		effectiveWorkers = 1
+	}
+
+	fileCh := make(chan string, effectiveWorkers)
 	walkErrCh := make(chan error, 1)
 	fileCount := int64(0)
 	uploadedCount := int64(0)
 
-	logger.Infow("Starting upload with workers", zap.Int("worker_count", workers))
+	logger.Infow("Starting upload with workers", zap.Int("worker_count", effectiveWorkers))
 	go func() {
 		walkErr := filepath.WalkDir(sourcePath, func(path string, d fs.DirEntry, fileErr error) error {
 			if fileErr != nil {
@@ -296,7 +301,7 @@ func uploadBucket(ctx context.Context, s3Client *minio.Client, bucketName, sourc
 		walkErrCh <- walkErr
 	}()
 
-	err := runUploadWorkers(ctx, workers, fileCh, func(ctx context.Context, file string) error {
+	err := runUploadWorkers(ctx, effectiveWorkers, fileCh, func(ctx context.Context, file string) error {
 		relPath, err := filepath.Rel(sourcePath, file)
 		if err != nil {
 			return fmt.Errorf("rel path error for %s: %w", file, err)
