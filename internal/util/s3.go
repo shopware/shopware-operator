@@ -394,7 +394,7 @@ func (s *S3Downloader) DownloadBucket(ctx context.Context, batchCount int, f fun
 		}
 
 		if err := f(obj, r); err != nil {
-			return fmt.Errorf("error processing in func %s: %w", obj.Key, err)
+			return fmt.Errorf("error processing object %s: %w", obj.Key, err)
 		}
 
 		return nil
