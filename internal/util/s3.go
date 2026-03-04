@@ -20,7 +20,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const totalUploadWorkers = 20
+const totalUploadWorkers = 30
 
 type FileEntry struct {
 	Name string

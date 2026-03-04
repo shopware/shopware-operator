@@ -18,7 +18,7 @@ import (
 )
 
 // shared between private and public bucket, so that we can split the workers
-const totalDownloadWorkers = 20
+const totalDownloadWorkers = 30
 
 func (s *SnapshotService) RestoreBackup(
 	ctx context.Context, cfg *config.SnapshotConfig, snapshotCtx *SnapshotContext,
