@@ -77,7 +77,8 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 			"--backup-file", snapshot.Path,
 			"--tempdir", "/temp",
 		},
-		Env: snapshot.GetEnv(store),
+		Env:       snapshot.GetEnv(store),
+		Resources: snapshot.Container.Resources,
 	})
 
 	volumes := append(snapshot.Container.Volumes, corev1.Volume{
