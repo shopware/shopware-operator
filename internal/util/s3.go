@@ -323,10 +323,9 @@ func uploadBucket(ctx context.Context, s3Client *minio.Client, bucketName, sourc
 
 		uploaded := atomic.AddInt64(&uploadedCount, 1)
 		if uploaded%100 == 0 {
-			logger.Infow("Upload progress",
+			logger.Debugw("Upload progress",
 				zap.Int64("uploaded_count", uploaded),
 				zap.Int64("scanned_files", atomic.LoadInt64(&fileCount)),
-				zap.String("latest_file", relPath),
 				zap.Int64("size_bytes", info.Size))
 		}
 
