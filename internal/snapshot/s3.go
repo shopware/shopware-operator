@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -18,7 +19,7 @@ import (
 )
 
 // shared between private and public bucket, so that we can split the workers
-const totalDownloadWorkers = 30
+var totalDownloadWorkers = 2 * runtime.GOMAXPROCS(0)
 
 func (s *SnapshotService) RestoreBackup(
 	ctx context.Context, cfg *config.SnapshotConfig, snapshotCtx *SnapshotContext,

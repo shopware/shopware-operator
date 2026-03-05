@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"sync/atomic"
 
@@ -20,7 +21,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const totalUploadWorkers = 30
+var totalUploadWorkers = 2 * runtime.GOMAXPROCS(0)
 
 type FileEntry struct {
 	Name string
