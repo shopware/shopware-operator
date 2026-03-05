@@ -198,12 +198,13 @@ util.dumpSchemas(["{{.Name}}"], "` + escapeJSString(input.DumpFilePath) + `", {
 		return resp, fmt.Errorf("run command: %w", err)
 	}
 
-	outputStr := string(output)
+	outputTail := tailString(output, 64*1024)
 	logging.FromContext(ctx).Debugw("mysql-shell dump output",
-		zap.String("output", outputStr),
-		zap.Int("length", len(outputStr)))
+		zap.String("output_tail", outputTail),
+		zap.Int("tail_length", len(outputTail)),
+		zap.Int("output_len", len(output)))
 
-	resp, err = parseDumpOutput(outputStr)
+	resp, err = parseDumpOutput(outputTail)
 	if err != nil {
 		// Output parsing failed but dump may have succeeded - check if dump directory was created
 		if _, statErr := os.Stat(input.DumpFilePath); statErr == nil {
@@ -462,6 +463,14 @@ func parseSize(s string) (int64, error) {
 	}
 
 	return int64(sizeInt), nil
+}
+
+func tailString(output []byte, maxBytes int) string {
+	if maxBytes <= 0 || len(output) <= maxBytes {
+		return string(output)
+	}
+
+	return string(output[len(output)-maxBytes:])
 }
 
 // escapeJSString escapes a string for safe use in JavaScript string literals

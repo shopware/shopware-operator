@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -16,6 +17,9 @@ import (
 	"github.com/shopware/shopware-operator/internal/util"
 	"go.uber.org/zap"
 )
+
+// shared between private and public bucket, so that we can split the workers
+var totalDownloadWorkers = 2 * runtime.GOMAXPROCS(0)
 
 func (s *SnapshotService) RestoreBackup(
 	ctx context.Context, cfg *config.SnapshotConfig, snapshotCtx *SnapshotContext,
@@ -140,7 +144,6 @@ func (s *SnapshotService) createAssetBackup(
 
 	var wg sync.WaitGroup
 	errChan := make(chan error, 2)
-	parallelDownloads := 30
 
 	cred, err := getAWSKeysWithAsumeRole(ctx, cfg.S3)
 	if err != nil {
@@ -173,7 +176,7 @@ func (s *SnapshotService) createAssetBackup(
 
 		downloader := util.NewS3Downloader(minioClient, cfg.S3.PrivateBucket)
 		err := downloader.DownloadBucket(ctx,
-			parallelDownloads,
+			totalDownloadWorkers/2,
 			processDownloadObject(routeFilePath, logger))
 		if err != nil {
 			logger.Errorw("bucket backup failed", zap.Error(err))
@@ -201,7 +204,7 @@ func (s *SnapshotService) createAssetBackup(
 
 		downloader := util.NewS3Downloader(minioClient, cfg.S3.PublicBucket)
 		err := downloader.DownloadBucket(ctx,
-			parallelDownloads,
+			totalDownloadWorkers/2,
 			processDownloadObject(rootDirPath, logger))
 		if err != nil {
 			logger.Errorw("bucket backup failed", zap.Error(err))

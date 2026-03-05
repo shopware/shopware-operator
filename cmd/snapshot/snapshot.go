@@ -74,7 +74,7 @@ func main() {
 				Destination: &includeS3,
 			},
 		},
-		Name:  "snpashot",
+		Name:  "snapshot",
 		Usage: "creates an snapshot for a given shopware store",
 		Commands: []*cli.Command{
 			{
