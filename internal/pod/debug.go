@@ -40,6 +40,7 @@ func DebugPod(store v1.Store, storeDebugInstance v1.StoreDebugInstance) *corev1.
 	podSpec.Labels = labels
 	podSpec.Spec.RestartPolicy = corev1.RestartPolicyNever
 
+	// nolint:prealloc
 	ports := []corev1.ContainerPort{
 		{
 			ContainerPort: store.Spec.Container.Port,
