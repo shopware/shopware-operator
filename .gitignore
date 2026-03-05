@@ -35,3 +35,4 @@ Dockerfile.cross
 dist/
 config/rbac/role.yaml
 .claude/
+.tool-versions
