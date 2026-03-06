@@ -9,6 +9,7 @@ import (
 )
 
 func DebugService(store v1.Store, debugInstance v1.StoreDebugInstance) *corev1.Service {
+	// nolint:prealloc
 	ports := []corev1.ServicePort{
 		{
 			Name:       "http",
