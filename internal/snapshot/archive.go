@@ -236,7 +236,7 @@ func (s *SnapshotService) createArchiveAndUploadToS3(ctx context.Context, cfg *c
 
 	logger.Infow("Uploading archive to S3", zap.String("s3URL", snapshotCtx.BackupFile), zap.Int64("archiveSize", archiveInfo.Size()))
 
-	err = s.uploadToS3(ctx, cfg, snapshotCtx.BackupFile, "application/zip", archiveFile)
+	err = s.uploadToS3WithAWSSDK(ctx, cfg, snapshotCtx.BackupFile, "application/zip", archiveFile)
 	if err != nil {
 		return fmt.Errorf("failed to upload archive to S3: %w", err)
 	}
