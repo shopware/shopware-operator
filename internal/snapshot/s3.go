@@ -145,7 +145,7 @@ func (s *SnapshotService) createAssetBackup(
 	var wg sync.WaitGroup
 	errChan := make(chan error, 2)
 
-	cred, err := getAWSKeysWithAsumeRole(ctx, cfg.S3)
+	cred, err := getAWSKeysWithAsumeRoleForMinio(ctx, cfg.S3)
 	if err != nil {
 		return fmt.Errorf("failed to get AWS credentials: %w", err)
 	}
@@ -352,7 +352,7 @@ func (s *SnapshotService) uploadToS3(ctx context.Context, cfg *config.SnapshotCo
 		return fmt.Errorf("failed to parse S3 URL: %w", err)
 	}
 
-	cred, err := getAWSKeysWithAsumeRole(ctx, cfg.S3)
+	cred, err := getAWSKeysWithAsumeRoleForMinio(ctx, cfg.S3)
 	if err != nil {
 		return fmt.Errorf("failed to get AWS credentials: %w", err)
 	}
@@ -386,7 +386,7 @@ func (s *SnapshotService) downloadFromS3(ctx context.Context, cfg *config.Snapsh
 		return nil, fmt.Errorf("failed to parse S3 URL: %w", err)
 	}
 
-	cred, err := getAWSKeysWithAsumeRole(ctx, cfg.S3)
+	cred, err := getAWSKeysWithAsumeRoleForMinio(ctx, cfg.S3)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get AWS credentials: %w", err)
 	}

@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	aconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	v1 "github.com/shopware/shopware-operator/api/v1"
@@ -41,7 +42,7 @@ func NewSnapshotService(cfg *config.SnapshotConfig) *SnapshotService {
 }
 
 func (s *SnapshotService) restoreS3(ctx context.Context, cfg config.S3Config, directory string) error {
-	cred, err := getAWSKeysWithAsumeRole(ctx, cfg)
+	cred, err := getAWSKeysWithAsumeRoleForMinio(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("failed to get AWS credentials: %w", err)
 	}
@@ -68,16 +69,16 @@ func (s *SnapshotService) restoreS3(ctx context.Context, cfg config.S3Config, di
 // AWS_STS_REGIONAL_ENDPOINTS=regional
 // AWS_DEFAULT_REGION=eu-central-1
 // AWS_REGION=eu-central-1
-func getAWSKeysWithAsumeRole(ctx context.Context, cfg config.S3Config) (*credentials.Credentials, error) {
+func getAWSKeysWithAsumeRole(ctx context.Context, cfg config.S3Config) (*aws.Credentials, error) {
 	if cfg.AccessKeyID != "" && cfg.SecretAccessKey != "" {
 		logging.FromContext(ctx).
 			Infow("AccessKey and SecretAccessKey set, using provided AWS credentials, instead of assuming role")
 
-		return credentials.NewStaticV4(
-			cfg.AccessKeyID,
-			cfg.SecretAccessKey,
-			cfg.SessionToken,
-		), nil
+		return &aws.Credentials{
+			AccessKeyID:     cfg.AccessKeyID,
+			SecretAccessKey: cfg.SecretAccessKey,
+			SessionToken:    cfg.SessionToken,
+		}, nil
 	}
 
 	awsCfg, err := aconfig.LoadDefaultConfig(ctx)
@@ -109,6 +110,14 @@ func getAWSKeysWithAsumeRole(ctx context.Context, cfg config.S3Config) (*credent
 		return nil, fmt.Errorf("failed to retrieve AWS credentials: %w", err)
 	}
 
+	return &creds, nil
+}
+
+func getAWSKeysWithAsumeRoleForMinio(ctx context.Context, cfg config.S3Config) (*credentials.Credentials, error) {
+	creds, err := getAWSKeysWithAsumeRole(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
 	return credentials.NewStaticV4(
 		creds.AccessKeyID,
 		creds.SecretAccessKey,
