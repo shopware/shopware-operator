@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/shopware/shopware-operator/internal/config"
 	"github.com/shopware/shopware-operator/internal/logging"
@@ -62,7 +61,7 @@ func (s *SnapshotService) extractArchiveFromS3(ctx context.Context, cfg *config.
 	}()
 
 	// Create temporary file to stream the archive to disk instead of memory
-	tempFile, err := os.CreateTemp("", fmt.Sprintf("snapshot-archive-%d.zip", time.Now().Unix()))
+	tempFile, err := os.CreateTemp("", "snapshot-archive-*.zip")
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
@@ -195,7 +194,7 @@ func (s *SnapshotService) createLocalArchive(ctx context.Context, snapshotCtx *S
 func (s *SnapshotService) createArchiveAndUploadToS3(ctx context.Context, cfg *config.SnapshotConfig, snapshotCtx *SnapshotContext) error {
 	logger := logging.FromContext(ctx)
 
-	tempFile, err := os.CreateTemp("", fmt.Sprintf("snapshot-archive-%d.zip", time.Now().Unix()))
+	tempFile, err := os.CreateTemp("", "snapshot-archive-*.zip")
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
