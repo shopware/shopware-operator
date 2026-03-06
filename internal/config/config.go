@@ -41,6 +41,7 @@ type S3Config struct {
 	Endpoint        string `env:"ENDPOINT, default=s3.eu-central-1.amazonaws.com"`
 	AccessKeyID     string `env:"ACCESS_KEY_ID"`
 	SecretAccessKey string `env:"SECRET_ACCESS_KEY"`
+	SessionToken    string `env:"SESSION_TOKEN"`
 
 	PrivateBucket string `env:"PRIVATE_BUCKET"`
 	PublicBucket  string `env:"PUBLIC_BUCKET"`

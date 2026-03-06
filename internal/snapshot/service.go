@@ -81,7 +81,7 @@ func getAWSKeysWithAsumeRole(ctx context.Context, cfg config.S3Config) (*credent
 		return credentials.NewStaticV4(
 			cfg.AccessKeyID,
 			cfg.SecretAccessKey,
-			"",
+			cfg.SessionToken,
 		), nil
 	}
 
