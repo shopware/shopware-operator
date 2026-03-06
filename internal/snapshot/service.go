@@ -13,7 +13,6 @@ import (
 	"github.com/shopware/shopware-operator/internal/config"
 	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/util"
-	"go.uber.org/zap"
 )
 
 type SnapshotContext struct {
@@ -42,14 +41,10 @@ func NewSnapshotService(cfg *config.SnapshotConfig) *SnapshotService {
 }
 
 func (s *SnapshotService) restoreS3(ctx context.Context, cfg config.S3Config, directory string) error {
-	logger := logging.FromContext(ctx)
-	logger.Debugw("Starting with following s3 configuration", zap.Any("config", cfg))
-
 	cred, err := getAWSKeysWithAsumeRole(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("failed to get AWS credentials: %w", err)
 	}
-	logger.Debugw("S3 Credentials", zap.Any("credentials", cred))
 
 	err = util.RestoreFromFilesystem(ctx, cred, directory, v1.S3Storage{
 		EndpointURL:        cfg.Endpoint,
