@@ -190,6 +190,11 @@ jobs:
             exit 1
           fi
 
+          if grep -i "error" operator-logs.txt; then
+            echo "ERROR: Found error in operator logs"
+            exit 1
+          fi
+
           echo "No permission or unhandled errors found in operator logs"
 
           # Cleanup test resources
