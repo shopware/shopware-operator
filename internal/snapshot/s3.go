@@ -11,6 +11,10 @@ import (
 	"strings"
 	"sync"
 
+	awsv2 "github.com/aws/aws-sdk-go-v2/aws"
+	awsv2config "github.com/aws/aws-sdk-go-v2/config"
+	awsv2credentials "github.com/aws/aws-sdk-go-v2/credentials"
+	awsv2s3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/minio/minio-go/v7"
 	"github.com/shopware/shopware-operator/internal/config"
 	"github.com/shopware/shopware-operator/internal/logging"
@@ -377,6 +381,84 @@ func (s *SnapshotService) uploadToS3(ctx context.Context, cfg *config.SnapshotCo
 	if err != nil {
 		return fmt.Errorf("failed to upload to s3: %w", err)
 	}
+	return nil
+}
+
+func (s *SnapshotService) uploadToS3WithAWSSDK(
+	ctx context.Context,
+	cfg *config.SnapshotConfig,
+	s3Url string,
+	contentType string,
+	reader io.ReadCloser,
+) error {
+	defer func() {
+		if err := reader.Close(); err != nil {
+			logging.FromContext(ctx).Warnw("failed to close AWS SDK upload reader", zap.Error(err))
+		}
+	}()
+
+	logging.FromContext(ctx).Infow("Uploading to S3 with AWS SDK")
+
+	bucket, objectFile, err := parseS3URL(s3Url)
+	if err != nil {
+		return fmt.Errorf("failed to parse S3 URL: %w", err)
+	}
+
+	creds, err := getAWSKeysWithAsumeRole(ctx, cfg.S3)
+	if err != nil {
+		return fmt.Errorf("failed to get AWS credentials: %w", err)
+	}
+
+	region := cfg.S3.Region
+	if region == "" {
+		region = cfg.S3.DefaultRegion
+	}
+	if region == "" {
+		region = "eu-central-1"
+	}
+
+	loadOptions := []func(*awsv2config.LoadOptions) error{
+		awsv2config.WithRegion(region),
+		awsv2config.WithCredentialsProvider(
+			awsv2credentials.NewStaticCredentialsProvider(
+				creds.AccessKeyID,
+				creds.SecretAccessKey,
+				creds.SessionToken,
+			),
+		),
+	}
+
+	customEndpoint := ""
+	if cfg.S3.Endpoint != "" {
+		customEndpoint = cfg.S3.Endpoint
+		if !strings.HasPrefix(customEndpoint, "http://") && !strings.HasPrefix(customEndpoint, "https://") {
+			customEndpoint = "https://" + customEndpoint
+		}
+	}
+
+	awsCfg, err := awsv2config.LoadDefaultConfig(ctx, loadOptions...)
+	if err != nil {
+		return fmt.Errorf("failed to load AWS SDK config: %w", err)
+	}
+
+	client := awsv2s3.NewFromConfig(awsCfg, func(o *awsv2s3.Options) {
+		if customEndpoint != "" {
+			o.BaseEndpoint = awsv2.String(customEndpoint)
+			o.UsePathStyle = true
+		}
+	})
+
+	_, err = client.PutObject(ctx, &awsv2s3.PutObjectInput{
+		Bucket:      awsv2.String(bucket),
+		Key:         awsv2.String(objectFile),
+		Body:        reader,
+		ContentType: awsv2.String(contentType),
+		Tagging:     awsv2.String("object-type=store-snapshot-backup"),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to upload to s3 via aws sdk: %w", err)
+	}
+
 	return nil
 }
 
