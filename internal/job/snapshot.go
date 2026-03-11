@@ -61,17 +61,40 @@ func SnapshotRestoreJob(store v1.Store, snapshot v1.StoreSnapshotRestore) *batch
 func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapshotSpec, subCommand string) *batchv1.Job {
 	sharedProcessNamespace := true
 	res := resource.MustParse("20Gi")
+	tempDirMountPath := "/temp"
+	addDefaultTempDir := true
 
-	vm := append(snapshot.Container.VolumeMounts, corev1.VolumeMount{
-		Name:      "tempdir",
-		ReadOnly:  false,
-		MountPath: "/temp",
-	})
+	for _, volume := range snapshot.Container.Volumes {
+		if volume.Ephemeral == nil {
+			continue
+		}
+
+		for _, mount := range snapshot.Container.VolumeMounts {
+			if mount.Name == volume.Name && mount.MountPath != "" {
+				tempDirMountPath = mount.MountPath
+				addDefaultTempDir = false
+				break
+			}
+		}
+
+		if !addDefaultTempDir {
+			break
+		}
+	}
+
+	vm := snapshot.Container.VolumeMounts
+	if addDefaultTempDir {
+		vm = append(vm, corev1.VolumeMount{
+			Name:      "tempdir",
+			ReadOnly:  false,
+			MountPath: tempDirMountPath,
+		})
+	}
 	// Build args with labels
 	args := []string{
 		subCommand,
 		"--backup-file", snapshot.Path,
-		"--tempdir", "/temp",
+		"--tempdir", tempDirMountPath,
 	}
 	// Add labels from meta
 	if meta.Labels != nil {
@@ -90,14 +113,17 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 		Resources:       snapshot.Container.Resources,
 	})
 
-	volumes := append(snapshot.Container.Volumes, corev1.Volume{
-		Name: "tempdir",
-		VolumeSource: corev1.VolumeSource{
-			EmptyDir: &corev1.EmptyDirVolumeSource{
-				SizeLimit: &res,
+	volumes := snapshot.Container.Volumes
+	if addDefaultTempDir {
+		volumes = append(volumes, corev1.Volume{
+			Name: "tempdir",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{
+					SizeLimit: &res,
+				},
 			},
-		},
-	})
+		})
+	}
 
 	labels := util.GetDefaultStoreSnapshotLabels(store, meta.Labels, meta.Name, subCommand)
 	annotations := util.GetDefaultContainerSnapshotAnnotations(CONTAINER_NAME_SNAPSHOT, snapshot)
