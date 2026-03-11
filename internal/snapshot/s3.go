@@ -347,8 +347,8 @@ func (s *SnapshotService) uploadToS3(ctx context.Context, cfg *config.SnapshotCo
 			logging.FromContext(ctx).Warnw("failed to close S3 upload reader", zap.Error(err))
 		}
 	}()
-	s3Url := snapshotCtx.BackupFile
-	bucket, objectFile, err := parseS3URL(s3Url)
+
+	bucket, objectFile, err := parseS3URL(snapshotCtx.BackupFile)
 	if err != nil {
 		return fmt.Errorf("failed to parse S3 URL: %w", err)
 	}
