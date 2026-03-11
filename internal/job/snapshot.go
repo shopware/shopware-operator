@@ -67,18 +67,27 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 		ReadOnly:  false,
 		MountPath: "/temp",
 	})
+	// Build args with labels
+	args := []string{
+		subCommand,
+		"--backup-file", snapshot.Path,
+		"--tempdir", "/temp",
+	}
+	// Add labels from meta
+	if meta.Labels != nil {
+		for key, value := range meta.Labels {
+			args = append(args, "--label", fmt.Sprintf("%s=%s", key, value))
+		}
+	}
+
 	containers := append(snapshot.Container.ExtraContainers, corev1.Container{
 		Name:            CONTAINER_NAME_SNAPSHOT,
 		VolumeMounts:    vm,
 		ImagePullPolicy: snapshot.Container.ImagePullPolicy,
 		Image:           snapshot.Container.Image,
-		Args: []string{
-			subCommand,
-			"--backup-file", snapshot.Path,
-			"--tempdir", "/temp",
-		},
-		Env:       snapshot.GetEnv(store),
-		Resources: snapshot.Container.Resources,
+		Args:            args,
+		Env:             snapshot.GetEnv(store),
+		Resources:       snapshot.Container.Resources,
 	})
 
 	volumes := append(snapshot.Container.Volumes, corev1.Volume{
