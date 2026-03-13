@@ -3,6 +3,7 @@ package job
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
@@ -97,8 +98,16 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 		"--tempdir", tempDirMountPath,
 	}
 	// Add labels from meta
+	// We sort the labels to ensure consistent ordering, so we don't trigger unnecessary job restarts due to label order changes
 	if meta.Labels != nil {
-		for key, value := range meta.Labels {
+		labelKeys := make([]string, 0, len(meta.Labels))
+		for key := range meta.Labels {
+			labelKeys = append(labelKeys, key)
+		}
+		sort.Strings(labelKeys)
+
+		for _, key := range labelKeys {
+			value := meta.Labels[key]
 			args = append(args, "--label", fmt.Sprintf("%s=%s", key, value))
 		}
 	}

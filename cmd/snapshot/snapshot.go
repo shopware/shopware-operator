@@ -25,12 +25,12 @@ var (
 	includeS3  = true
 	labels     []string
 	// coming from the CRD
-	expectedLabelNames = map[string]struct{}{
-		"organization-id": {},
-		"project-id":      {},
-		"application-id":  {},
-		"deployment-id":   {},
-		"component":       {},
+	allowedLabelNames = []string{
+		"application-id",
+		"deployment-id",
+		"organization-id",
+		"project-id",
+		"component",
 	}
 )
 
@@ -127,15 +127,20 @@ func main() {
 						zap.Strings("labels", labels),
 					)
 
-					labelsMap := make(map[string]string)
+					parsedLabels := make(map[string]string)
 					for _, label := range labels {
 						parts := strings.SplitN(label, "=", 2)
 						if len(parts) != 2 {
 							logger.Warnw("Invalid label format, skipping", zap.String("label", label))
 							continue
 						}
-						if _, exists := expectedLabelNames[parts[0]]; exists {
-							labelsMap[parts[0]] = parts[1]
+						parsedLabels[parts[0]] = parts[1]
+					}
+
+					labelsMap := make(map[string]string)
+					for _, allowedName := range allowedLabelNames {
+						if value, exists := parsedLabels[allowedName]; exists {
+							labelsMap[allowedName] = value
 						}
 					}
 
