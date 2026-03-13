@@ -149,7 +149,8 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 			Annotations: annotations,
 		},
 		Spec: batchv1.JobSpec{
-			BackoffLimit: &snapshot.MaxRetries,
+			BackoffLimit:            &snapshot.MaxRetries,
+			TTLSecondsAfterFinished: func(i int32) *int32 { return &i }(60),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
