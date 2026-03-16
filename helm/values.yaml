@@ -96,5 +96,26 @@ logFormat: json
 disableChecks: false
 
 metrics:
+  # When enabled, a Service named 'shopware-operator' is created, the metrics
+  # endpoint is exposed, and K8S_OPERATOR_URL is injected into every store
+  # container so the Shopware consumer can reach the operator.
   enabled: false
   port: 8080
+  # shopwareOperatorUrl overrides the K8S_OPERATOR_URL injected into store
+  # containers (admin, storefront, worker). When left empty the URL is
+  # auto-constructed as:
+  #   http://shopware-operator.<namespace>.svc.cluster.local:<port>
+  shopwareOperatorUrl: ""
+  # serviceMonitor: configure a Prometheus Operator ServiceMonitor to scrape
+  # the operator metrics. Requires the Prometheus Operator CRDs to be installed.
+  serviceMonitor:
+    enabled: false
+    # Interval at which Prometheus scrapes the metrics endpoint.
+    interval: 30s
+    # Timeout for each scrape request.
+    scrapeTimeout: 10s
+    # Additional labels added to the ServiceMonitor, e.g. to match a Prometheus
+    # Operator release label selector:
+    #   additionalLabels:
+    #     release: kube-prometheus-stack
+    additionalLabels: {}

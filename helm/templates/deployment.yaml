@@ -81,7 +81,7 @@ spec:
           value: "{{ .Values.disableChecks | default "false" }}"
         {{- if .Values.metrics.enabled }}
         - name: OPERATOR_SERVICE_URL
-          value: "http://shopware-operator.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.metrics.port | default 8080 }}"
+          value: "{{ .Values.metrics.shopwareOperatorUrl | default (printf "http://shopware-operator.%s.svc.cluster.local:%d" .Release.Namespace (.Values.metrics.port | default 8080 | int)) }}"
         {{- end }}
         {{- if and (hasKey .Values "events") (hasKey .Values.events "nats") (.Values.events.nats.enable) }}
         - name: NATS_ENABLE
