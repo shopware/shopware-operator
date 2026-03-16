@@ -182,6 +182,9 @@ type OpensearchSpec struct {
 
 	// +kubebuilder:default={prefix: sw, shards: 3, replicas: 3}
 	Index OpensearchIndexSpec `json:"index,omitempty"`
+
+	// +kubebuilder:default=false
+	CleanupOnDeletion bool `json:"cleanupOnDeletion,omitempty"`
 }
 
 type OpensearchIndexSpec struct {
