@@ -341,13 +341,14 @@ func (s *SnapshotService) restoreAssetBackup(
 	return nil
 }
 
-func (s *SnapshotService) uploadToS3(ctx context.Context, cfg *config.SnapshotConfig, s3Url string, contentType string, reader io.ReadCloser) error {
+func (s *SnapshotService) uploadToS3(ctx context.Context, cfg *config.SnapshotConfig, snapshotCtx *SnapshotContext, contentType string, reader io.ReadCloser) error {
 	defer func() {
 		if err := reader.Close(); err != nil {
 			logging.FromContext(ctx).Warnw("failed to close S3 upload reader", zap.Error(err))
 		}
 	}()
-	bucket, objectFile, err := parseS3URL(s3Url)
+
+	bucket, objectFile, err := parseS3URL(snapshotCtx.BackupFile)
 	if err != nil {
 		return fmt.Errorf("failed to parse S3 URL: %w", err)
 	}
@@ -367,12 +368,17 @@ func (s *SnapshotService) uploadToS3(ctx context.Context, cfg *config.SnapshotCo
 		return fmt.Errorf("failed to create minio client: %w", err)
 	}
 
+	userTags := map[string]string{
+		"object-type": "store-snapshot-backup",
+	}
+	for k, v := range snapshotCtx.Labels {
+		userTags[k] = v
+	}
+
 	_, err = minioClient.PutObject(ctx, bucket, objectFile, reader, -1,
 		minio.PutObjectOptions{
 			ContentType: contentType,
-			UserTags: map[string]string{
-				"object-type": "store-snapshot-backup",
-			},
+			UserTags:    userTags,
 		})
 	if err != nil {
 		return fmt.Errorf("failed to upload to s3: %w", err)

@@ -20,6 +20,7 @@ type SnapshotContext struct {
 	BackupFile     string
 	IncludeDB      bool
 	IncludeS3      bool
+	Labels         map[string]string
 }
 
 type TarEntry struct {
