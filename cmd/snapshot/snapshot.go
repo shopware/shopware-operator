@@ -24,14 +24,6 @@ var (
 	includeDB  = true
 	includeS3  = true
 	labels     []string
-	// coming from the CRD
-	allowedLabelNames = []string{
-		"application-id",
-		"deployment-id",
-		"organization-id",
-		"project-id",
-		"component",
-	}
 )
 
 // Write errors into this file: /dev/termination-log when running in k8s
@@ -137,20 +129,13 @@ func main() {
 						parsedLabels[parts[0]] = parts[1]
 					}
 
-					labelsMap := make(map[string]string)
-					for _, allowedName := range allowedLabelNames {
-						if value, exists := parsedLabels[allowedName]; exists {
-							labelsMap[allowedName] = value
-						}
-					}
-
 					now := time.Now()
 					if err := snapshotService.CreateBackup(ctx, cfg, &snapshot.SnapshotContext{
 						BackupFile:     backupFile,
 						TempArchiveDir: snapshotDir,
 						IncludeDB:      includeDB,
 						IncludeS3:      includeS3,
-						Labels:         labelsMap,
+						Labels:         parsedLabels,
 					}); err != nil {
 						logger.Errorw("Backup failed", zap.Error(err))
 						return fmt.Errorf("backup failed: %w", err)
