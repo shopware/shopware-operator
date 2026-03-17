@@ -422,14 +422,16 @@ func (r *StoreReconciler) reconcileHTTPRoute(ctx context.Context, store *v1.Stor
 		return fmt.Errorf("reconcile unready httproute: %w", err)
 	}
 
-	if changed {
-		r.Recorder.Event(store, "Normal", "Diff httproute hash",
-			fmt.Sprintf("Update Store %s httproute in namespace %s. Diff hash",
-				store.Name,
-				store.Namespace))
-		if err := k8s.EnsureHTTPRoute(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
-			return fmt.Errorf("reconcile unready httproute: %w", err)
-		}
+	if !changed {
+		return nil
+	}
+
+	r.Recorder.Event(store, "Normal", "Diff httproute hash",
+		fmt.Sprintf("Update Store %s httproute in namespace %s. Diff hash",
+			store.Name,
+			store.Namespace))
+	if err := k8s.EnsureHTTPRoute(ctx, r.Client, store, obj, r.Scheme, true); err != nil {
+		return fmt.Errorf("reconcile unready httproute: %w", err)
 	}
 
 	return nil

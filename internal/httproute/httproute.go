@@ -54,6 +54,8 @@ func StoreHTTPRoute(store v1.Store) *gatewayv1.HTTPRoute {
 	storefrontServiceName := gatewayv1.ObjectName(service.GetStorefrontServiceName(store))
 	port := gatewayv1.PortNumber(store.Spec.Network.Port)
 
+	retry := BuildHTTPRouteRetry(store.Spec.Network.GatewayRetry)
+
 	rules := []gatewayv1.HTTPRouteRule{
 		{
 			Matches: []gatewayv1.HTTPRouteMatch{
@@ -137,6 +139,12 @@ func StoreHTTPRoute(store v1.Store) *gatewayv1.HTTPRoute {
 		},
 	}
 
+	if retry != nil {
+		for i := range rules {
+			rules[i].Retry = retry
+		}
+	}
+
 	parentRef := gatewayv1.ParentReference{
 		Name: gatewayv1.ObjectName(store.Spec.Network.GatewayName),
 	}
@@ -172,6 +180,27 @@ func StoreHTTPRoute(store v1.Store) *gatewayv1.HTTPRoute {
 			Rules:     rules,
 		},
 	}
+}
+
+func BuildHTTPRouteRetry(spec *v1.HTTPRouteRetrySpec) *gatewayv1.HTTPRouteRetry {
+	if spec == nil {
+		return nil
+	}
+	retry := &gatewayv1.HTTPRouteRetry{
+		Attempts: spec.Attempts,
+	}
+	if len(spec.Codes) > 0 {
+		codes := make([]gatewayv1.HTTPRouteRetryStatusCode, len(spec.Codes))
+		for i, c := range spec.Codes {
+			codes[i] = gatewayv1.HTTPRouteRetryStatusCode(c)
+		}
+		retry.Codes = codes
+	}
+	if spec.Backoff != nil {
+		backoff := gatewayv1.Duration(*spec.Backoff)
+		retry.Backoff = &backoff
+	}
+	return retry
 }
 
 func GetStoreHTTPRouteName(store v1.Store) string {
