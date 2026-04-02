@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/shopware/shopware-operator/internal/config"
@@ -22,6 +23,7 @@ var (
 	tempDir    = os.TempDir()
 	includeDB  = true
 	includeS3  = true
+	labels     []string
 )
 
 // Write errors into this file: /dev/termination-log when running in k8s
@@ -73,8 +75,13 @@ func main() {
 				Value:       true,
 				Destination: &includeS3,
 			},
+			&cli.StringSliceFlag{
+				Name:        "label",
+				Usage:       "Labels to attach to the snapshot (format: key=value)",
+				Destination: &labels,
+			},
 		},
-		Name:  "snpashot",
+		Name:  "snapshot",
 		Usage: "creates an snapshot for a given shopware store",
 		Commands: []*cli.Command{
 			{
@@ -109,7 +116,18 @@ func main() {
 						zap.String("temp", snapshotDir),
 						zap.Bool("includeDB", includeDB),
 						zap.Bool("includeS3", includeS3),
+						zap.Strings("labels", labels),
 					)
+
+					parsedLabels := make(map[string]string)
+					for _, label := range labels {
+						parts := strings.SplitN(label, "=", 2)
+						if len(parts) != 2 {
+							logger.Warnw("Invalid label format, skipping", zap.String("label", label))
+							continue
+						}
+						parsedLabels[parts[0]] = parts[1]
+					}
 
 					now := time.Now()
 					if err := snapshotService.CreateBackup(ctx, cfg, &snapshot.SnapshotContext{
@@ -117,6 +135,7 @@ func main() {
 						TempArchiveDir: snapshotDir,
 						IncludeDB:      includeDB,
 						IncludeS3:      includeS3,
+						Labels:         parsedLabels,
 					}); err != nil {
 						logger.Errorw("Backup failed", zap.Error(err))
 						return fmt.Errorf("backup failed: %w", err)

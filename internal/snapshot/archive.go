@@ -2,7 +2,6 @@ package snapshot
 
 import (
 	"archive/zip"
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -195,25 +194,49 @@ func (s *SnapshotService) createLocalArchive(ctx context.Context, snapshotCtx *S
 func (s *SnapshotService) createArchiveAndUploadToS3(ctx context.Context, cfg *config.SnapshotConfig, snapshotCtx *SnapshotContext) error {
 	logger := logging.FromContext(ctx)
 
-	// Create archive in memory
-	var buf bytes.Buffer
-	zipWriter := zip.NewWriter(&buf)
-
-	err := s.addFilesToZip(zipWriter, snapshotCtx.TempArchiveDir)
+	tempFile, err := os.CreateTemp("", "snapshot-archive-*.zip")
 	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tempFilePath := tempFile.Name()
+	defer func() {
+		if err := os.Remove(tempFilePath); err != nil {
+			logger.Warnw("failed to remove temp archive file", zap.String("file", tempFilePath), zap.Error(err))
+		}
+	}()
+
+	zipWriter := zip.NewWriter(tempFile)
+
+	err = s.addFilesToZip(zipWriter, snapshotCtx.TempArchiveDir)
+	if err != nil {
+		_ = tempFile.Close()
 		return fmt.Errorf("failed to create zip archive: %w", err)
 	}
 
 	err = zipWriter.Close()
 	if err != nil {
+		_ = tempFile.Close()
 		return fmt.Errorf("failed to close zip writer: %w", err)
 	}
 
-	// Upload to S3
-	reader := io.NopCloser(bytes.NewReader(buf.Bytes()))
-	logger.Infow("Uploading archive to S3", zap.String("s3URL", snapshotCtx.BackupFile), zap.Int("archiveSize", buf.Len()))
+	if err := tempFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp archive file: %w", err)
+	}
 
-	err = s.uploadToS3(ctx, cfg, snapshotCtx.BackupFile, "application/zip", reader)
+	archiveFile, err := os.Open(tempFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to open temp archive file for upload: %w", err)
+	}
+
+	archiveInfo, err := archiveFile.Stat()
+	if err != nil {
+		_ = archiveFile.Close()
+		return fmt.Errorf("failed to stat temp archive file: %w", err)
+	}
+
+	logger.Infow("Uploading archive to S3", zap.String("s3URL", snapshotCtx.BackupFile), zap.Int64("archiveSize", archiveInfo.Size()))
+
+	err = s.uploadToS3(ctx, cfg, snapshotCtx, "application/zip", archiveFile)
 	if err != nil {
 		return fmt.Errorf("failed to upload archive to S3: %w", err)
 	}

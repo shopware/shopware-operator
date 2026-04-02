@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"sync/atomic"
 
@@ -19,6 +20,8 @@ import (
 	"github.com/shopware/shopware-operator/internal/logging"
 	"go.uber.org/zap"
 )
+
+var totalUploadWorkers = 2 * runtime.GOMAXPROCS(0)
 
 type FileEntry struct {
 	Name string
@@ -130,7 +133,7 @@ func RestoreFromFilesystem(ctx context.Context, cred *credentials.Credentials, d
 
 	wg.Add(1)
 	go func() {
-		err := uploadBucket(ctx, s3Client, s.PublicBucketName, filepath.Join(directory, "public"), emptyBeforeRestore)
+		err := uploadBucket(ctx, s3Client, s.PublicBucketName, filepath.Join(directory, "public"), totalUploadWorkers/2, emptyBeforeRestore)
 		if err != nil {
 			errChan <- fmt.Errorf("error uploading to public bucket: %w", err)
 		}
@@ -139,7 +142,7 @@ func RestoreFromFilesystem(ctx context.Context, cred *credentials.Credentials, d
 
 	wg.Add(1)
 	go func() {
-		err := uploadBucket(ctx, s3Client, s.PrivateBucketName, filepath.Join(directory, "private"), emptyBeforeRestore)
+		err := uploadBucket(ctx, s3Client, s.PrivateBucketName, filepath.Join(directory, "private"), totalUploadWorkers/2, emptyBeforeRestore)
 		if err != nil {
 			errChan <- fmt.Errorf("error uploading to private bucket: %w", err)
 		}
@@ -237,7 +240,7 @@ func emptyBucketAsync(ctx context.Context, s3Client *minio.Client, bucketName st
 	}
 }
 
-func uploadBucket(ctx context.Context, s3Client *minio.Client, bucketName, sourcePath string, emptyBeforeRestore bool) error {
+func uploadBucket(ctx context.Context, s3Client *minio.Client, bucketName, sourcePath string, workers int, emptyBeforeRestore bool) error {
 	logger := logging.FromContext(ctx).With(zap.String("bucket", bucketName), zap.String("source_path", sourcePath))
 	logger.Info("Starting bucket upload process")
 
@@ -261,95 +264,114 @@ func uploadBucket(ctx context.Context, s3Client *minio.Client, bucketName, sourc
 		return fmt.Errorf("failed to stat source path: %w", err)
 	}
 
-	var files []string
-	err := filepath.WalkDir(sourcePath, func(path string, d fs.DirEntry, err error) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	effectiveWorkers := workers
+	if effectiveWorkers <= 0 {
+		effectiveWorkers = 1
+	}
+
+	fileCh := make(chan string, effectiveWorkers)
+	walkErrCh := make(chan error, 1)
+	fileCount := int64(0)
+	uploadedCount := int64(0)
+
+	logger.Infow("Starting upload with workers", zap.Int("worker_count", effectiveWorkers))
+	go func() {
+		walkErr := filepath.WalkDir(sourcePath, func(path string, d fs.DirEntry, fileErr error) error {
+			if fileErr != nil {
+				logger.Errorw("Error walking directory", zap.String("path", path), zap.Error(fileErr))
+				return fileErr
+			}
+
+			if d.IsDir() {
+				return nil
+			}
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case fileCh <- path:
+				atomic.AddInt64(&fileCount, 1)
+				return nil
+			}
+		})
+
+		if walkErr != nil && !errors.Is(walkErr, context.Canceled) {
+			cancel()
+		}
+
+		close(fileCh)
+		walkErrCh <- walkErr
+	}()
+
+	err := runUploadWorkers(ctx, effectiveWorkers, fileCh, func(ctx context.Context, file string) error {
+		relPath, err := filepath.Rel(sourcePath, file)
 		if err != nil {
-			logger.Errorw("Error walking directory", zap.String("path", path), zap.Error(err))
-			return err
+			return fmt.Errorf("rel path error for %s: %w", file, err)
 		}
-		if !d.IsDir() {
-			files = append(files, path)
+
+		logger.Debugw("Uploading file",
+			zap.String("local_file", file),
+			zap.String("s3_key", relPath))
+
+		info, err := s3Client.FPutObject(ctx, bucketName, relPath, file, minio.PutObjectOptions{})
+		if err != nil {
+			return fmt.Errorf("error uploading %s: %w", file, err)
 		}
+
+		uploaded := atomic.AddInt64(&uploadedCount, 1)
+		if uploaded%100 == 0 {
+			logger.Debugw("Upload progress",
+				zap.Int64("uploaded_count", uploaded),
+				zap.Int64("scanned_files", atomic.LoadInt64(&fileCount)),
+				zap.Int64("size_bytes", info.Size))
+		}
+
 		return nil
 	})
 	if err != nil {
-		logger.Errorw("Failed to walk source path", zap.Error(err))
-		return fmt.Errorf("walking source path: %w", err)
+		cancel()
 	}
 
-	logger.Infow("Found files to upload", zap.Int("file_count", len(files)))
-	if len(files) == 0 {
-		logger.Info("No files to upload, operation complete")
-		return nil
-	}
+	walkErr := <-walkErrCh
 
-	const workers = 30
-	wg := sync.WaitGroup{}
-	errCh := make(chan error, workers)
-	sem := make(chan struct{}, workers)
-	uploadedCount := int64(0)
-
-	logger.Infow("Starting upload with workers", zap.Int("worker_count", workers))
-
-	for i, file := range files {
-		file := file
-		fileIndex := i + 1
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			select {
-			case sem <- struct{}{}:
-			case <-ctx.Done():
-				logger.Debug("Upload cancelled by context")
-				return
-			}
-			defer func() { <-sem }()
-
-			relPath, err := filepath.Rel(sourcePath, file)
-			if err != nil {
-				logger.Errorw("Failed to get relative path", zap.String("file", file), zap.Error(err))
-				errCh <- fmt.Errorf("rel path error for %s: %w", file, err)
-				return
-			}
-
-			logger.Debugw("Uploading file",
-				zap.String("local_file", file),
-				zap.String("s3_key", relPath),
-				zap.Int("file_index", fileIndex),
-				zap.Int("total_files", len(files)))
-
-			info, err := s3Client.FPutObject(ctx, bucketName, relPath, file, minio.PutObjectOptions{})
-			if err != nil {
-				logger.Errorw("Failed to upload file", zap.String("file", file), zap.String("s3_key", relPath), zap.Error(err))
-				errCh <- fmt.Errorf("error uploading %s: %w", file, err)
-				return
-			}
-
-			uploaded := atomic.AddInt64(&uploadedCount, 1)
-			if uploaded%100 == 0 || uploaded == int64(len(files)) {
-				logger.Infow("Upload progress",
-					zap.Int64("uploaded_count", uploaded),
-					zap.Int("total_files", len(files)),
-					zap.String("latest_file", relPath),
-					zap.Int64("size_bytes", info.Size))
-			}
-		}()
-	}
-
-	logger.Info("Waiting for all uploads to complete")
-	wg.Wait()
-	close(errCh)
-
-	for err := range errCh {
+	if err != nil {
 		logger.Errorw("Upload failed", zap.Error(err))
 		return err
 	}
 
+	if walkErr != nil {
+		if !errors.Is(walkErr, context.Canceled) {
+			logger.Errorw("Failed to walk source path", zap.Error(walkErr))
+			return fmt.Errorf("walking source path: %w", walkErr)
+		}
+		if ctx.Err() != nil {
+			logger.Errorw("Failed to walk source path", zap.Error(ctx.Err()))
+			return fmt.Errorf("walking source path: %w", ctx.Err())
+		}
+	}
+
+	if fileCount == 0 {
+		logger.Info("No files to upload, operation complete")
+		return nil
+	}
+
 	logger.Infow("Successfully completed bucket upload",
-		zap.Int("total_files_uploaded", len(files)),
+		zap.Int64("total_files_uploaded", uploadedCount),
+		zap.Int64("total_files_scanned", fileCount),
 		zap.String("bucket", bucketName))
 	return nil
+}
+
+func runUploadWorkers(
+	ctx context.Context,
+	workers int,
+	files <-chan string,
+	worker func(context.Context, string) error,
+) error {
+	return runWorkers(ctx, workers, files, worker)
 }
 
 type S3Downloader struct {
@@ -364,72 +386,138 @@ func NewS3Downloader(client *minio.Client, bucket string) *S3Downloader {
 	}
 }
 
+// DownloadBucket downloads all objects from the configured bucket and processes them with the provided function.
+// The function is called for each object with the object's metadata and a reader for the object's content.
+// The function is responsible for closing the reader after processing the object.
 func (s *S3Downloader) DownloadBucket(ctx context.Context, batchCount int, f func(minio.ObjectInfo, *minio.Object) error) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	wg := sync.WaitGroup{}
-	errCh := make(chan error, 1)
-	sem := make(chan struct{}, batchCount)
-
 	objects := s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
 		Recursive: true,
 	})
-	for object := range objects {
-		if object.Err != nil {
-			return fmt.Errorf("error listing objects: %w", object.Err)
+
+	return runDownloadWorkers(ctx, batchCount, objects, func(ctx context.Context, obj minio.ObjectInfo) error {
+		r, err := s.client.GetObject(ctx, s.bucket, obj.Key, minio.GetObjectOptions{})
+		if err != nil {
+			return fmt.Errorf("error downloading %s: %w", obj.Key, err)
 		}
 
-		// Check if we've already failed
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
+		if err := f(obj, r); err != nil {
+			return fmt.Errorf("error processing object %s: %w", obj.Key, err)
 		}
 
-		wg.Add(1)
-		go func(obj minio.ObjectInfo) {
-			defer wg.Done()
+		return nil
+	})
+}
 
-			// Acquire semaphore
-			select {
-			case <-ctx.Done():
-				return
-			case sem <- struct{}{}:
-			}
-			defer func() { <-sem }()
+func runDownloadWorkers(
+	ctx context.Context,
+	batchCount int,
+	objects <-chan minio.ObjectInfo,
+	worker func(context.Context, minio.ObjectInfo) error,
+) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-			r, err := s.client.GetObject(ctx, s.bucket, obj.Key, minio.GetObjectOptions{})
-			if err != nil {
-				select {
-				case errCh <- fmt.Errorf("error downloading %s: %w", obj.Key, err):
-					cancel() // Stop other downloads
-				default:
-				}
-				return
-			}
-
-			err = f(obj, r)
-			if err != nil {
-				select {
-				case errCh <- fmt.Errorf("error processing in func %s: %w", obj.Key, err):
-					cancel() // Stop other downloads
-				default:
-				}
-				return
-			}
-		}(object)
+	if batchCount <= 0 {
+		batchCount = 1
 	}
 
-	// Wait for all goroutines and close error channel
+	objCh := make(chan minio.ObjectInfo, batchCount)
+	listErrCh := make(chan error, 1)
+
 	go func() {
-		wg.Wait()
-		close(errCh)
+		defer close(objCh)
+
+		for object := range objects {
+			if object.Err != nil {
+				listErrCh <- fmt.Errorf("error listing objects: %w", object.Err)
+				cancel()
+				return
+			}
+
+			select {
+			case <-ctx.Done():
+				listErrCh <- ctx.Err()
+				return
+			case objCh <- object:
+			}
+		}
+
+		listErrCh <- nil
 	}()
 
-	// Return first error encountered
-	for err := range errCh {
+	workerErr := runWorkers(ctx, batchCount, objCh, worker)
+	if workerErr != nil {
+		cancel()
+	}
+	listErr := <-listErrCh
+
+	if workerErr != nil {
+		if errors.Is(workerErr, context.Canceled) && listErr != nil && !errors.Is(listErr, context.Canceled) {
+			return listErr
+		}
+		return workerErr
+	}
+
+	if listErr != nil && !errors.Is(listErr, context.Canceled) {
+		return listErr
+	}
+
+	return nil
+}
+
+func runWorkers[T any](
+	ctx context.Context,
+	workers int,
+	items <-chan T,
+	worker func(context.Context, T) error,
+) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	if workers <= 0 {
+		workers = 1
+	}
+
+	wg := sync.WaitGroup{}
+	errCh := make(chan error, 1)
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case item, ok := <-items:
+					if !ok {
+						return
+					}
+
+					if err := worker(ctx, item); err != nil {
+						select {
+						case errCh <- err:
+							cancel()
+						default:
+						}
+						return
+					}
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	select {
+	case err := <-errCh:
 		return err
+	default:
+	}
+
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
 
 	return nil
