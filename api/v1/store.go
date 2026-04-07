@@ -274,6 +274,8 @@ type ContainerSpec struct {
 	// RuntimeClassName              *string             `json:"runtimeClassName,omitempty"`
 
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+	// +kubebuilder:default=false
+	EnableServiceLinks *bool `json:"enableServiceLinks,omitempty"`
 
 	// Configuration string `json:"configuration,omitempty"`
 	ExtraEnvs []corev1.EnvVar `json:"extraEnvs,omitempty"`
@@ -304,6 +306,7 @@ type ContainerMergeSpec struct {
 	Resources          corev1.ResourceRequirements `json:"resources,omitempty"`
 	ExtraEnvs          []corev1.EnvVar             `json:"extraEnvs,omitempty"`
 	ServiceAccountName string                      `json:"serviceAccountName,omitempty"`
+	EnableServiceLinks *bool                       `json:"enableServiceLinks,omitempty"`
 }
 
 type SessionCacheSpec struct {
@@ -462,6 +465,9 @@ func (c *ContainerSpec) Merge(from ContainerMergeSpec) {
 
 	if from.ServiceAccountName != "" {
 		c.ServiceAccountName = from.ServiceAccountName
+	}
+	if from.EnableServiceLinks != nil {
+		c.EnableServiceLinks = from.EnableServiceLinks
 	}
 
 	// Initialize resources maps if nil

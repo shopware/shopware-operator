@@ -90,6 +90,7 @@ func MigrationJob(store v1.Store) *batchv1.Job {
 					TerminationGracePeriodSeconds: &containerSpec.TerminationGracePeriodSeconds,
 					NodeSelector:                  containerSpec.NodeSelector,
 					ImagePullSecrets:              containerSpec.ImagePullSecrets,
+					EnableServiceLinks:            containerSpec.EnableServiceLinks,
 					RestartPolicy:                 "Never",
 					Containers:                    containers,
 					SecurityContext:               containerSpec.SecurityContext,

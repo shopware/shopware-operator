@@ -151,6 +151,7 @@ func getJobSpec(store v1.Store, ex v1.StoreExec, labels map[string]string) batch
 				TerminationGracePeriodSeconds: &containerSpec.TerminationGracePeriodSeconds,
 				NodeSelector:                  containerSpec.NodeSelector,
 				ImagePullSecrets:              containerSpec.ImagePullSecrets,
+				EnableServiceLinks:            containerSpec.EnableServiceLinks,
 				RestartPolicy:                 "Never",
 				Containers:                    containers,
 				SecurityContext:               containerSpec.SecurityContext,
