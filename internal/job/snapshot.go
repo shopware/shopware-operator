@@ -163,6 +163,7 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 					TerminationGracePeriodSeconds: &snapshot.Container.TerminationGracePeriodSeconds,
 					NodeSelector:                  snapshot.Container.NodeSelector,
 					ImagePullSecrets:              snapshot.Container.ImagePullSecrets,
+					EnableServiceLinks:            snapshot.Container.EnableServiceLinks,
 					RestartPolicy:                 "Never",
 					Containers:                    containers,
 					SecurityContext:               snapshot.Container.SecurityContext,

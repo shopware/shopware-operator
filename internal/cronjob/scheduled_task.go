@@ -99,6 +99,7 @@ func ScheduledTaskJob(store v1.Store) *batchv1.CronJob {
 							TopologySpreadConstraints:     store.Spec.Container.TopologySpreadConstraints,
 							NodeSelector:                  store.Spec.Container.NodeSelector,
 							ImagePullSecrets:              store.Spec.Container.ImagePullSecrets,
+							EnableServiceLinks:            store.Spec.Container.EnableServiceLinks,
 							RestartPolicy:                 "Never",
 							Containers:                    containers,
 							SecurityContext:               store.Spec.Container.SecurityContext,

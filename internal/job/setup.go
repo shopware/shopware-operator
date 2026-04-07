@@ -99,6 +99,7 @@ func SetupJob(store v1.Store) *batchv1.Job {
 					TopologySpreadConstraints:     containerSpec.TopologySpreadConstraints,
 					NodeSelector:                  containerSpec.NodeSelector,
 					ImagePullSecrets:              containerSpec.ImagePullSecrets,
+					EnableServiceLinks:            containerSpec.EnableServiceLinks,
 					RestartPolicy:                 "Never",
 					Containers:                    containers,
 					SecurityContext:               containerSpec.SecurityContext,

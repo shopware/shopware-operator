@@ -159,6 +159,7 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 					TopologySpreadConstraints: containerSpec.TopologySpreadConstraints,
 					NodeSelector:              containerSpec.NodeSelector,
 					ImagePullSecrets:          containerSpec.ImagePullSecrets,
+					EnableServiceLinks:        containerSpec.EnableServiceLinks,
 					RestartPolicy:             containerSpec.RestartPolicy,
 					Containers:                containers,
 					SecurityContext:           containerSpec.SecurityContext,

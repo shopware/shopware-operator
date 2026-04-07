@@ -11,6 +11,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
+func boolPtr(v bool) *bool {
+	return &v
+}
+
 // Helper function to create a base container spec with common fields
 func createTestContainerSpec(name string, replicas int32, policy corev1.PullPolicy) v1.ContainerSpec {
 	return v1.ContainerSpec{
@@ -220,6 +224,28 @@ func TestServiceAccountMerge(t *testing.T) {
 	emptyMergeSpec := v1.ContainerMergeSpec{}
 	baseContainer.Spec.Container.Merge(emptyMergeSpec)
 	assert.Equal(t, "new-sa", baseContainer.Spec.Container.ServiceAccountName)
+}
+
+func TestEnableServiceLinksMerge(t *testing.T) {
+	baseContainer := &v1.Store{
+		Spec: v1.StoreSpec{
+			Container: v1.ContainerSpec{
+				EnableServiceLinks: boolPtr(true),
+			},
+		},
+	}
+
+	mergeSpec := v1.ContainerMergeSpec{
+		EnableServiceLinks: boolPtr(false),
+	}
+	baseContainer.Spec.Container.Merge(mergeSpec)
+	require.NotNil(t, baseContainer.Spec.Container.EnableServiceLinks)
+	assert.False(t, *baseContainer.Spec.Container.EnableServiceLinks)
+
+	emptyMergeSpec := v1.ContainerMergeSpec{}
+	baseContainer.Spec.Container.Merge(emptyMergeSpec)
+	require.NotNil(t, baseContainer.Spec.Container.EnableServiceLinks)
+	assert.False(t, *baseContainer.Spec.Container.EnableServiceLinks)
 }
 
 func TestSecurityContextMerge(t *testing.T) {
