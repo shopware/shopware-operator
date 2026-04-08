@@ -79,6 +79,10 @@ spec:
           value: "{{ .Values.logFormat | default "json" }}"
         - name: DISABLE_CHECKS
           value: "{{ .Values.disableChecks | default "false" }}"
+        {{- if .Values.metrics.enabled }}
+        - name: OPERATOR_SERVICE_URL
+          value: "{{ .Values.metrics.shopwareOperatorUrl | default (printf "http://shopware-operator.%s.svc.cluster.local:%d" .Release.Namespace (.Values.metrics.port | default 8080 | int)) }}"
+        {{- end }}
         {{- if and (hasKey .Values "events") (hasKey .Values.events "nats") (.Values.events.nats.enable) }}
         - name: NATS_ENABLE
           value: "true"
@@ -106,6 +110,11 @@ spec:
           initialDelaySeconds: 15
           periodSeconds: 20
         name: operator
+        {{- if .Values.metrics.enabled }}
+        ports:
+          - containerPort: {{ .Values.metrics.port | default 8080 }}
+            name: http-metrics
+        {{- end }}
         readinessProbe:
           httpGet:
             path: /readyz
