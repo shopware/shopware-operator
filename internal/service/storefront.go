@@ -28,8 +28,7 @@ func StorefrontService(store v1.Store) *corev1.Service {
 			Selector: map[string]string{
 				util.ShopwareKey("store.app"): appName,
 			},
-			Type:      corev1.ServiceTypeClusterIP,
-			ClusterIP: "None",
+			Type: corev1.ServiceTypeClusterIP,
 			Ports: []corev1.ServicePort{
 				{
 					Protocol:   "TCP",
