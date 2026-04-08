@@ -218,14 +218,21 @@ type NetworkSpec struct {
 	IngressAnnotations map[string]string `json:"ingressAnnotations,omitempty"`
 	IngressLabels      map[string]string `json:"ingressLabels,omitempty"`
 
-	GatewayName        string            `json:"gatewayName,omitempty"`
-	GatewayNamespace   string            `json:"gatewayNamespace,omitempty"`
-	GatewaySectionName string            `json:"gatewaySectionName,omitempty"`
-	GatewayAnnotations map[string]string `json:"gatewayAnnotations,omitempty"`
-	GatewayLabels      map[string]string `json:"gatewayLabels,omitempty"`
+	GatewayName        string              `json:"gatewayName,omitempty"`
+	GatewayNamespace   string              `json:"gatewayNamespace,omitempty"`
+	GatewaySectionName string              `json:"gatewaySectionName,omitempty"`
+	GatewayAnnotations map[string]string   `json:"gatewayAnnotations,omitempty"`
+	GatewayLabels      map[string]string   `json:"gatewayLabels,omitempty"`
+	GatewayRetry       *HTTPRouteRetrySpec `json:"gatewayRetry,omitempty"`
 
 	// +kubebuilder:default=store-tls
 	TLSSecretName string `json:"tlsSecretName,omitempty"`
+}
+
+type HTTPRouteRetrySpec struct {
+	Codes    []int   `json:"codes,omitempty"`
+	Attempts *int    `json:"attempts,omitempty"`
+	Backoff  *string `json:"backoff,omitempty"`
 }
 
 type ContainerSpec struct {
