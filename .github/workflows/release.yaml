@@ -56,11 +56,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create resources for release
-        run: |
-          make resources path=release
-          make licenses path=release
-
       - name: Run goreleaser on release branch
         id: goreleaser
         uses: goreleaser/goreleaser-action@v6
