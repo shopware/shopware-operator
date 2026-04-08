@@ -76,6 +76,11 @@ func (s *Store) getOldSessionCache() []corev1.EnvVar {
 					Name:  "PHP_SESSION_HANDLER",
 					Value: "redis",
 				},
+				// We need to set this, because if we not add this env the docker image will set this env to empty which leads to a config loading error
+				{
+					Name:  "PHP_SESSION_SAVE_PATH",
+					Value: "tcp://127.0.0.1:6379",
+				},
 			}
 		} else {
 			// Otherwise build from individual fields
