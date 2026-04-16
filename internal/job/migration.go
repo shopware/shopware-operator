@@ -58,6 +58,7 @@ func MigrationJob(store v1.Store) *batchv1.Job {
 		VolumeMounts:    containerSpec.VolumeMounts,
 		ImagePullPolicy: containerSpec.ImagePullPolicy,
 		Image:           containerSpec.Image,
+		SecurityContext: util.RestrictedContainerSecurityContext(),
 		Command:         []string{"sh", "-c"},
 		Args:            []string{store.Spec.MigrationScript},
 		Env:             envs,

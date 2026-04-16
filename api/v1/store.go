@@ -242,9 +242,11 @@ type ContainerSpec struct {
 	VolumeMounts     []corev1.VolumeMount          `json:"volumeMounts,omitempty"`
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 	RestartPolicy    corev1.RestartPolicy          `json:"restartPolicy,omitempty"`
-	SecurityContext  *corev1.PodSecurityContext    `json:"podSecurityContext,omitempty"`
-	ExtraContainers  []corev1.Container            `json:"extraContainers,omitempty"`
-	InitContainers   []corev1.Container            `json:"initContainers,omitempty"`
+
+	// +kubebuilder:default={"fsGroup":82,"runAsGroup":82,"runAsNonRoot":true,"runAsUser":82,"seccompProfile":{"type":"RuntimeDefault"}}
+	SecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+	ExtraContainers []corev1.Container         `json:"extraContainers,omitempty"`
+	InitContainers  []corev1.Container         `json:"initContainers,omitempty"`
 
 	// +kubebuilder:default=2
 	Replicas int32 `json:"replicas,omitempty"`

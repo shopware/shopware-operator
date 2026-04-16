@@ -112,6 +112,7 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 		},
 		Image:           containerSpec.Image,
 		ImagePullPolicy: containerSpec.ImagePullPolicy,
+		SecurityContext: util.RestrictedContainerSecurityContext(),
 		Env:             envs,
 		VolumeMounts:    containerSpec.VolumeMounts,
 		Ports: []corev1.ContainerPort{

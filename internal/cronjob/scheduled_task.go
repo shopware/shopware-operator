@@ -55,6 +55,7 @@ func ScheduledTaskJob(store v1.Store) *batchv1.CronJob {
 		VolumeMounts:    store.Spec.Container.VolumeMounts,
 		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
 		Image:           store.Spec.Container.Image,
+		SecurityContext: util.RestrictedContainerSecurityContext(),
 		Command:         []string{"sh", "-c"},
 		Args:            []string{store.Spec.ScheduledTask.Command},
 		Env:             store.GetEnv(),

@@ -117,6 +117,7 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 		VolumeMounts:    vm,
 		ImagePullPolicy: snapshot.Container.ImagePullPolicy,
 		Image:           snapshot.Container.Image,
+		SecurityContext: util.RestrictedContainerSecurityContext(),
 		Args:            args,
 		Env:             snapshot.GetEnv(store),
 		Resources:       snapshot.Container.Resources,

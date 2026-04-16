@@ -121,6 +121,7 @@ func getJobSpec(store v1.Store, ex v1.StoreExec, labels map[string]string) batch
 		VolumeMounts:    containerSpec.VolumeMounts,
 		ImagePullPolicy: containerSpec.ImagePullPolicy,
 		Image:           containerSpec.Image,
+		SecurityContext: util.RestrictedContainerSecurityContext(),
 		Command:         []string{"sh", "-c"},
 		Args:            []string{ex.Spec.Script},
 		Env:             envs,
