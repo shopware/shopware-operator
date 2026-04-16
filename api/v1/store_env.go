@@ -2,6 +2,7 @@ package v1
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 
@@ -143,7 +144,30 @@ func (s *Store) getSessionCache() []corev1.EnvVar {
 	}
 }
 
-func (f *FPMSpec) getFPMConfiguration() []corev1.EnvVar {
+func (f *FPMSpec) getFPMConfiguration(s *Store) []corev1.EnvVar {
+	const (
+		startServersRatio    = 0.25
+		minSpareServersRatio = 0.2
+		maxSpareServersRatio = 0.375
+		memoryPerChildMiB    = 80 //Every PHP-FPM process in an empty shop uses 70.6MiB
+	)
+
+	memoryLimitMiB := s.Spec.StorefrontDeploymentContainer.Resources.Limits.Memory().Value() / (1024 * 1024)
+	maxChildren := int(math.Round(float64(memoryLimitMiB / memoryPerChildMiB)))
+	startServers := int(math.Round(float64(maxChildren) * startServersRatio))
+	minSpare := int(math.Round(float64(maxChildren) * minSpareServersRatio))
+	maxSpare := int(math.Round(float64(maxChildren)*maxSpareServersRatio) + 1)
+
+	fmt.Println("Calculated FPM configuration based on memory limit:")
+	fmt.Printf("Memory Limit (MiB): %d\n", memoryLimitMiB)
+	fmt.Printf("Max Children: %d\n", maxChildren)
+	fmt.Printf("Start Servers: %d\n", startServers)
+	fmt.Printf("Min Spare Servers: %d\n", minSpare)
+	fmt.Printf("Max Spare Servers: %d\n", maxSpare)
+	fmt.Printf("mode: %d\n", f.ProcessManagement)
+
+	// The formulas are based on CPU cores and MiB, not Kubernetes base units.
+
 	if f.ProcessManagement != "dynamic" {
 		return []corev1.EnvVar{
 			{
@@ -165,19 +189,19 @@ func (f *FPMSpec) getFPMConfiguration() []corev1.EnvVar {
 			},
 			{
 				Name:  "FPM_PM_MAX_CHILDREN",
-				Value: strconv.Itoa(f.MaxChildren),
+				Value: strconv.Itoa(maxChildren),
 			},
 			{
 				Name:  "FPM_PM_START_SERVERS",
-				Value: strconv.Itoa(f.StartServers),
+				Value: strconv.Itoa(startServers),
 			},
 			{
 				Name:  "FPM_PM_MIN_SPARE_SERVERS",
-				Value: strconv.Itoa(f.MinSpareServers),
+				Value: strconv.Itoa(minSpare),
 			},
 			{
 				Name:  "FPM_PM_MAX_SPARE_SERVERS",
-				Value: strconv.Itoa(f.MaxSpareServers),
+				Value: strconv.Itoa(maxSpare),
 			},
 		}
 	}
@@ -185,6 +209,22 @@ func (f *FPMSpec) getFPMConfiguration() []corev1.EnvVar {
 		{
 			Name:  "FPM_PM",
 			Value: f.ProcessManagement,
+		},
+		{
+			Name:  "FPM_PM_MAX_CHILDREN",
+			Value: strconv.Itoa(maxChildren),
+		},
+		{
+			Name:  "FPM_PM_START_SERVERS",
+			Value: strconv.Itoa(startServers),
+		},
+		{
+			Name:  "FPM_PM_MIN_SPARE_SERVERS",
+			Value: strconv.Itoa(minSpare),
+		},
+		{
+			Name:  "FPM_PM_MAX_SPARE_SERVERS",
+			Value: strconv.Itoa(maxSpare),
 		},
 	}
 }
@@ -548,7 +588,7 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 	c = append(c, s.getWorker()...)
 	c = append(c, s.getOpensearch()...)
 	c = append(c, s.getFastly()...)
-	c = append(c, s.Spec.FPM.getFPMConfiguration()...)
+	c = append(c, s.Spec.FPM.getFPMConfiguration(s)...)
 
 	for _, obj2 := range s.Spec.Container.ExtraEnvs {
 		if i := slices.IndexFunc(c, func(c corev1.EnvVar) bool { return c.Name == obj2.Name }); i > -1 {
