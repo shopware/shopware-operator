@@ -1122,7 +1122,6 @@ func (in *StoreSpec) DeepCopyInto(out *StoreSpec) {
 	in.StorefrontDeploymentContainer.DeepCopyInto(&out.StorefrontDeploymentContainer)
 	in.SetupJobContainer.DeepCopyInto(&out.SetupJobContainer)
 	in.MigrationJobContainer.DeepCopyInto(&out.MigrationJobContainer)
-	in.ScheduledTaskContainer.DeepCopyInto(&out.ScheduledTaskContainer)
 	in.Network.DeepCopyInto(&out.Network)
 	out.S3Storage = in.S3Storage
 	out.Blackfire = in.Blackfire

@@ -29,7 +29,7 @@ func GetScheduledCronJob(ctx context.Context, client client.Client, store v1.Sto
 
 func ScheduledTaskJob(store v1.Store) *batchv1.CronJob {
 	// Merge Overwritten jobContainer fields into container fields
-	store.Spec.Container.Merge(store.Spec.ScheduledTaskContainer)
+	store.Spec.Container.Merge(store.Spec.SetupJobContainer)
 
 	parallelism := int32(1)
 	completions := int32(1)
