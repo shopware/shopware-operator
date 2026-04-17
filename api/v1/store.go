@@ -48,8 +48,6 @@ type StoreSpec struct {
 	SetupJobContainer ContainerMergeSpec `json:"setupJobContainer,omitempty"`
 	// +kubebuilder:default={}
 	MigrationJobContainer ContainerMergeSpec `json:"migrationJobContainer,omitempty"`
-	// +kubebuilder:default={}
-	ScheduledTaskContainer ContainerMergeSpec `json:"scheduledTaskContainer,omitempty"`
 
 	Network                 NetworkSpec   `json:"network,omitempty"`
 	S3Storage               S3Storage     `json:"s3Storage,omitempty"`
@@ -107,6 +105,8 @@ type StoreSpec struct {
 
 	// +kubebuilder:default={timeZone: "Etc/UTC", schedule: "0 * * * *", command: "bin/console scheduled-task:run -v -n --no-wait"}
 	ScheduledTask ScheduledTaskSpec `json:"scheduledTask,omitempty"`
+
+	ScheduledTaskLabels map[string]string `json:"scheduledTaskLabels,omitempty"`
 }
 
 func init() {

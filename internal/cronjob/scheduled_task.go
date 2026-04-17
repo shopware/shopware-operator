@@ -3,6 +3,7 @@ package cronjob
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
@@ -29,7 +30,7 @@ func GetScheduledCronJob(ctx context.Context, client client.Client, store v1.Sto
 
 func ScheduledTaskJob(store v1.Store) *batchv1.CronJob {
 	// Merge Overwritten jobContainer fields into container fields
-	store.Spec.Container.Merge(store.Spec.ScheduledTaskContainer)
+	store.Spec.Container.Merge(store.Spec.SetupJobContainer)
 
 	parallelism := int32(1)
 	completions := int32(1)
@@ -47,6 +48,14 @@ func ScheduledTaskJob(store v1.Store) *batchv1.CronJob {
 
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.SetupJobContainer.Labels)
 	labels[util.ShopwareKey("store.type")] = "scheduled-task"
+
+	// Hack: The current size of the CRD is at the limit.
+	// The clean way would be to have ScheduledTaskContainer ContainerMergeSpec `json:"scheduledTaskContainer,omitempty"`
+	// in the CRD and merge it like the SetupJobContainer but then the CRD is too big for ETCD
+	// This will be removed once the CRD definition is refactored to consume less space
+	if store.Spec.ScheduledTaskLabels != nil {
+		maps.Copy(labels, store.Spec.ScheduledTaskLabels)
+	}
 
 	annotations := util.GetDefaultContainerAnnotations(CONTAINER_NAME_SCHEDULED_JOB, store, store.Spec.SetupJobContainer.Annotations)
 
