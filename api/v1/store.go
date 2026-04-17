@@ -236,17 +236,29 @@ type ContainerSpec struct {
 	// +kubebuilder:default=IfNotPresent
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
 	Volumes []corev1.Volume `json:"volumes,omitempty"`
 
 	// +kubebuilder:default=8000
 	Port int32 `json:"port,omitempty"`
 
-	VolumeMounts     []corev1.VolumeMount          `json:"volumeMounts,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
+	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 	RestartPolicy    corev1.RestartPolicy          `json:"restartPolicy,omitempty"`
-	SecurityContext  *corev1.PodSecurityContext    `json:"podSecurityContext,omitempty"`
-	ExtraContainers  []corev1.Container            `json:"extraContainers,omitempty"`
-	InitContainers   []corev1.Container            `json:"initContainers,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
+	SecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
+	ExtraContainers []corev1.Container `json:"extraContainers,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
+	InitContainers []corev1.Container `json:"initContainers,omitempty"`
 
 	// +kubebuilder:default=2
 	Replicas int32 `json:"replicas,omitempty"`
@@ -260,14 +272,22 @@ type ContainerSpec struct {
 	// ReadinessProbe corev1.Probe `json:"readinessProbe,omitempty"`
 	// LivenessProbe  corev1.Probe `json:"livenessProbe,omitempty"`
 
-	Annotations               map[string]string                 `json:"annotations,omitempty"`
-	Labels                    map[string]string                 `json:"labels,omitempty"`
-	NodeSelector              map[string]string                 `json:"nodeSelector,omitempty"`
+	Annotations  map[string]string `json:"annotations,omitempty"`
+	Labels       map[string]string `json:"labels,omitempty"`
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
 	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
-	Tolerations               []corev1.Toleration               `json:"tolerations,omitempty"`
-	Affinity                  corev1.Affinity                   `json:"affinity,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
+	Affinity corev1.Affinity `json:"affinity,omitempty"`
 	// InitImage   string            `json:"initImage,omitempty"`
 
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 
 	// PriorityClassName             string              `json:"priorityClassName,omitempty"`
@@ -280,35 +300,56 @@ type ContainerSpec struct {
 	EnableServiceLinks *bool `json:"enableServiceLinks,omitempty"`
 
 	// Configuration string `json:"configuration,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
 	ExtraEnvs []corev1.EnvVar `json:"extraEnvs,omitempty"`
 }
 
 type ContainerMergeSpec struct {
 	// +kubebuilder:validation:MinLength=1
-	Image                         string                        `json:"image,omitempty"`
-	ImagePullPolicy               corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
-	ImagePullSecrets              []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
-	Volumes                       []corev1.Volume               `json:"volumes,omitempty"`
-	VolumeMounts                  []corev1.VolumeMount          `json:"volumeMounts,omitempty"`
-	RestartPolicy                 corev1.RestartPolicy          `json:"restartPolicy,omitempty"`
-	SecurityContext               *corev1.PodSecurityContext    `json:"podSecurityContext,omitempty"`
-	ExtraContainers               []corev1.Container            `json:"extraContainers,omitempty"`
-	InitContainers                []corev1.Container            `json:"initContainers,omitempty"`
-	Replicas                      int32                         `json:"replicas,omitempty"`
-	ProgressDeadlineSeconds       int32                         `json:"progressDeadlineSeconds,omitempty"`
-	TerminationGracePeriodSeconds int64                         `json:"terminationGracePeriodSeconds,omitempty"`
+	Image           string            `json:"image,omitempty"`
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
+	Volumes []corev1.Volume `json:"volumes,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	VolumeMounts  []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+	RestartPolicy corev1.RestartPolicy `json:"restartPolicy,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
+	SecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
+	ExtraContainers []corev1.Container `json:"extraContainers,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	InitContainers                []corev1.Container `json:"initContainers,omitempty"`
+	Replicas                      int32              `json:"replicas,omitempty"`
+	ProgressDeadlineSeconds       int32              `json:"progressDeadlineSeconds,omitempty"`
+	TerminationGracePeriodSeconds int64              `json:"terminationGracePeriodSeconds,omitempty"`
 
-	Annotations               map[string]string                 `json:"annotations,omitempty"`
-	Labels                    map[string]string                 `json:"labels,omitempty"`
-	NodeSelector              map[string]string                 `json:"nodeSelector,omitempty"`
+	Annotations  map[string]string `json:"annotations,omitempty"`
+	Labels       map[string]string `json:"labels,omitempty"`
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
 	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
-	Tolerations               []corev1.Toleration               `json:"tolerations,omitempty"`
-	Affinity                  corev1.Affinity                   `json:"affinity,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
+	Affinity corev1.Affinity `json:"affinity,omitempty"`
 
-	Resources          corev1.ResourceRequirements `json:"resources,omitempty"`
-	ExtraEnvs          []corev1.EnvVar             `json:"extraEnvs,omitempty"`
-	ServiceAccountName string                      `json:"serviceAccountName,omitempty"`
-	EnableServiceLinks *bool                       `json:"enableServiceLinks,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraEnvs          []corev1.EnvVar `json:"extraEnvs,omitempty"`
+	ServiceAccountName string          `json:"serviceAccountName,omitempty"`
+	EnableServiceLinks *bool           `json:"enableServiceLinks,omitempty"`
 }
 
 type SessionCacheSpec struct {
