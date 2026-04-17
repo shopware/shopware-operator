@@ -105,6 +105,8 @@ type StoreSpec struct {
 
 	// +kubebuilder:default={timeZone: "Etc/UTC", schedule: "0 * * * *", command: "bin/console scheduled-task:run -v -n --no-wait"}
 	ScheduledTask ScheduledTaskSpec `json:"scheduledTask,omitempty"`
+
+	ScheduledTaskLabels map[string]string `json:"scheduledTaskLabels,omitempty"`
 }
 
 func init() {
