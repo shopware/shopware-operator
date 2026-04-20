@@ -83,6 +83,7 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 		Image:           containerSpec.Image,
 		ImagePullPolicy: containerSpec.ImagePullPolicy,
 		Env:             envs,
+		SecurityContext: util.RestrictedContainerSecurityContext(),
 		Command: []string{
 			"bin/console",
 		},
