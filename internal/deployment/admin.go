@@ -76,7 +76,7 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.AdminDeploymentContainer.Annotations)
 
 	// Merge containerSpec.ExtraEnvs to override with merged values from AdminDeploymentContainer
-	envs := util.MergeEnv(store.GetEnv("admin"), containerSpec.ExtraEnvs)
+	envs := util.MergeEnv(store.GetEnv(v1.AdminComponent), containerSpec.ExtraEnvs)
 
 	containers := append(containerSpec.ExtraContainers, corev1.Container{
 		LivenessProbe: &corev1.Probe{

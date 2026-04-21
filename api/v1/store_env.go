@@ -9,6 +9,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+type Component string
+
+const (
+	AdminComponent Component = "admin"
+	StoreComponent Component = "store"
+)
+
 // TODO: If building more than one instance print a warning for the cache to use
 // redis
 func (s *Store) getAppCache() []corev1.EnvVar {
@@ -144,7 +151,7 @@ func (s *Store) getSessionCache() []corev1.EnvVar {
 	}
 }
 
-func (f *FPMSpec) getFPMConfiguration(s *Store, env string) []corev1.EnvVar {
+func (f *FPMSpec) getFPMConfiguration(s *Store, component Component) []corev1.EnvVar {
 	const (
 		startServersRatio    = 0.25
 		minSpareServersRatio = 0.2
@@ -153,7 +160,7 @@ func (f *FPMSpec) getFPMConfiguration(s *Store, env string) []corev1.EnvVar {
 	)
 	var memoryLimitMiB, maxSpare, minSpare, startServers, maxChildren int
 
-	if env == "admin" {
+	if component == AdminComponent {
 		memoryLimitMiB = int(s.Spec.AdminDeploymentContainer.Resources.Limits.Memory().Value() / (1024 * 1024))
 	} else {
 		memoryLimitMiB = int(s.Spec.StorefrontDeploymentContainer.Resources.Limits.Memory().Value() / (1024 * 1024))
@@ -476,7 +483,7 @@ func (s *Store) getFastly() []corev1.EnvVar {
 	return envVars
 }
 
-func (s *Store) GetEnv(env string) []corev1.EnvVar {
+func (s *Store) GetEnv(component Component) []corev1.EnvVar {
 	var appUrl string
 	if s.Spec.Network.AppURLHost == "" {
 		appUrl = fmt.Sprintf("https://%s", s.Spec.Network.Host)
@@ -583,7 +590,7 @@ func (s *Store) GetEnv(env string) []corev1.EnvVar {
 	c = append(c, s.getWorker()...)
 	c = append(c, s.getOpensearch()...)
 	c = append(c, s.getFastly()...)
-	c = append(c, s.Spec.FPM.getFPMConfiguration(s, env)...)
+	c = append(c, s.Spec.FPM.getFPMConfiguration(s, component)...)
 
 	for _, obj2 := range s.Spec.Container.ExtraEnvs {
 		if i := slices.IndexFunc(c, func(c corev1.EnvVar) bool { return c.Name == obj2.Name }); i > -1 {

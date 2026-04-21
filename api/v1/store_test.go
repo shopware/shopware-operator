@@ -353,7 +353,7 @@ func TestEnvMerge(t *testing.T) {
 			},
 		},
 	}
-	env := baseContainer.GetEnv("store")
+	env := baseContainer.GetEnv(v1.StoreComponent)
 	for _, envVar := range env {
 		if envVar.Name == "APP_URL" {
 			require.Equal(t, "overwritten", envVar.Value)
@@ -377,7 +377,7 @@ func TestAppCacheRedisDsnOverwrite(t *testing.T) {
 			},
 		}
 
-		env := store.GetEnv("store")
+		env := store.GetEnv(v1.StoreComponent)
 		var foundCacheType, foundRedisDSN bool
 		for _, envVar := range env {
 			if envVar.Name == "K8S_CACHE_TYPE" {
@@ -411,7 +411,7 @@ func TestAppCacheRedisDsnOverwrite(t *testing.T) {
 			},
 		}
 
-		env := store.GetEnv("store")
+		env := store.GetEnv(v1.StoreComponent)
 		var foundHost, foundPort, foundIndex, foundURL bool
 		for _, envVar := range env {
 			if envVar.Name == "K8S_CACHE_HOST" {
@@ -451,7 +451,7 @@ func TestSessionCacheRedisDsnOverwrite(t *testing.T) {
 			},
 		}
 
-		env := store.GetEnv("store")
+		env := store.GetEnv(v1.StoreComponent)
 		var foundHandler, foundRedisDSN bool
 		for _, envVar := range env {
 			if envVar.Name == "PHP_SESSION_HANDLER" {
@@ -481,7 +481,7 @@ func TestSessionCacheRedisDsnOverwrite(t *testing.T) {
 			},
 		}
 
-		env := store.GetEnv("store")
+		env := store.GetEnv(v1.StoreComponent)
 		var foundHandler, foundSavePath bool
 		for _, envVar := range env {
 			if envVar.Name == "PHP_SESSION_HANDLER" {
@@ -511,7 +511,7 @@ func TestNewSessionCacheRedisDsnOverwrite(t *testing.T) {
 			},
 		}
 
-		env := store.GetEnv("store")
+		env := store.GetEnv(v1.StoreComponent)
 		var foundRedisDSN bool
 		for _, envVar := range env {
 			if envVar.Name == "K8S_REDIS_SESSION_DSN" {
@@ -536,7 +536,7 @@ func TestNewSessionCacheRedisDsnOverwrite(t *testing.T) {
 			},
 		}
 
-		env := store.GetEnv("store")
+		env := store.GetEnv(v1.StoreComponent)
 		var foundRedisDSN bool
 		for _, envVar := range env {
 			if envVar.Name == "K8S_REDIS_SESSION_DSN" {
@@ -561,7 +561,7 @@ func TestWorkerRedisDsnOverwrite(t *testing.T) {
 			},
 		}
 
-		env := store.GetEnv("store")
+		env := store.GetEnv(v1.StoreComponent)
 		var foundDSN, foundConsumerName bool
 		for _, envVar := range env {
 			if envVar.Name == "MESSENGER_TRANSPORT_DSN" {
@@ -590,7 +590,7 @@ func TestWorkerRedisDsnOverwrite(t *testing.T) {
 			},
 		}
 
-		env := store.GetEnv("store")
+		env := store.GetEnv(v1.StoreComponent)
 		var foundDSN, foundConsumerName bool
 		for _, envVar := range env {
 			if envVar.Name == "MESSENGER_TRANSPORT_DSN" {

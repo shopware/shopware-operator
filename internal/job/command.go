@@ -114,7 +114,7 @@ func getJobSpec(store v1.Store, ex v1.StoreExec, labels map[string]string) batch
 	containerSpec := store.Spec.Container.DeepCopy()
 	sharedProcessNamespace := true
 
-	envs := util.MergeEnv(store.GetEnv("store"), ex.Spec.ExtraEnvs)
+	envs := util.MergeEnv(store.GetEnv(v1.StoreComponent), ex.Spec.ExtraEnvs)
 
 	containers := append(containerSpec.ExtraContainers, corev1.Container{
 		Name:            CONTAINER_NAME_COMMAND,
