@@ -51,7 +51,7 @@ func MigrationJob(store v1.Store) *batchv1.Job {
 	annotations["shop.shopware.com/store.newImage"] = containerSpec.Image
 
 	// Merge containerSpec.ExtraEnvs to override with merged values from MigrationJobContainer
-	envs := util.MergeEnv(store.GetEnv(), containerSpec.ExtraEnvs)
+	envs := util.MergeEnv(store.GetEnv("store"), containerSpec.ExtraEnvs)
 
 	containers := append(containerSpec.ExtraContainers, corev1.Container{
 		Name:            CONTAINER_NAME_MIGRATION_JOB,

@@ -57,7 +57,7 @@ func ScheduledTaskJob(store v1.Store) *batchv1.CronJob {
 		Image:           store.Spec.Container.Image,
 		Command:         []string{"sh", "-c"},
 		Args:            []string{store.Spec.ScheduledTask.Command},
-		Env:             store.GetEnv(),
+		Env:             store.GetEnv("store"),
 		Resources:       store.Spec.Container.Resources, // Add Resources here
 	})
 

@@ -80,7 +80,7 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.StorefrontDeploymentContainer.Annotations)
 
 	// Merge containerSpec.ExtraEnvs to override with merged values from StorefrontDeploymentContainer
-	envs := util.MergeEnv(store.GetEnv(), containerSpec.ExtraEnvs)
+	envs := util.MergeEnv(store.GetEnv("store"), containerSpec.ExtraEnvs)
 
 	containers := append(containerSpec.ExtraContainers, corev1.Container{
 		Name: DEPLOYMENT_STOREFRONT_CONTAINER_NAME,

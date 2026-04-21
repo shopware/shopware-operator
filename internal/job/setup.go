@@ -41,7 +41,7 @@ func SetupJob(store v1.Store) *batchv1.Job {
 	// Use util function for annotations
 	annotations := util.GetDefaultContainerAnnotations(CONTAINER_NAME_SETUP_JOB, store, store.Spec.SetupJobContainer.Annotations)
 
-	envs := append(store.GetEnv(),
+	envs := append(store.GetEnv("store"),
 		corev1.EnvVar{
 			Name: "INSTALL_ADMIN_PASSWORD",
 			ValueFrom: &corev1.EnvVarSource{
