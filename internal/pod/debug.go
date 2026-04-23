@@ -60,7 +60,7 @@ func DebugPod(store v1.Store, storeDebugInstance v1.StoreDebugInstance) *corev1.
 		// we don't need the liveness and readiness probe to make sure that the container always starts
 		Image:           containerImage, // Use custom image if provided
 		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
-		Env:             store.GetEnv(v1.StoreComponent),
+		Env:             store.GetEnv(),
 		VolumeMounts:    store.Spec.Container.VolumeMounts,
 		Ports:           ports,
 		Resources:       store.Spec.Container.Resources,

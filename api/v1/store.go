@@ -341,7 +341,7 @@ type RedisSpec struct {
 }
 
 type FPMSpec struct {
-	// +kubebuilder:validation:Enum=static;dynamic;ondemand
+	// +kubebuilder:validation:Enum=static;dynamic;ondemand;operator
 	// +kubebuilder:default=static
 	ProcessManagement string `json:"processManagement"`
 
