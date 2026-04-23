@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"math"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
@@ -16,7 +17,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const DEPLOYMENT_STOREFRONT_CONTAINER_NAME = "shopware-storefront"
+const (
+	DEPLOYMENT_STOREFRONT_CONTAINER_NAME = "shopware-storefront"
+	startServersRatio                    = 0.25
+	minSpareServersRatio                 = 0.2
+	maxSpareServersRatio                 = 0.375
+	memoryPerChildMiB                    = 80 //Every PHP-FPM process in an empty shop uses 70.6MiB
+)
+
+var memoryLimitMiB, maxSpare, minSpare, startServers, maxChildren int
 
 func GetStorefrontDeployment(
 	ctx context.Context,
@@ -80,7 +89,17 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.StorefrontDeploymentContainer.Annotations)
 
 	// Merge containerSpec.ExtraEnvs to override with merged values from StorefrontDeploymentContainer
-	envs := util.MergeEnv(store.GetEnv(v1.StoreComponent), containerSpec.ExtraEnvs)
+	envs := util.MergeEnv(store.GetEnv(), containerSpec.ExtraEnvs)
+
+	phpEnvs := GetStorefrontDeploymentCalculatedPHPFPMValues(store)
+
+	envs = util.MergeEnv(envs, phpEnvs)
+
+	memoryLimitMiB = int(store.Spec.StorefrontDeploymentContainer.Resources.Limits.Memory().Value() / (1024 * 1024))
+	maxChildren = int(math.Round(float64(memoryLimitMiB / memoryPerChildMiB)))
+	startServers = int(math.Round(float64(maxChildren) * startServersRatio))
+	minSpare = int(math.Round(float64(maxChildren) * minSpareServersRatio))
+	maxSpare = int(math.Round(float64(maxChildren)*maxSpareServersRatio) + 1)
 
 	containers := append(containerSpec.ExtraContainers, corev1.Container{
 		Name: DEPLOYMENT_STOREFRONT_CONTAINER_NAME,
@@ -187,3 +206,37 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 func GetStorefrontDeploymentName(store v1.Store) string {
 	return fmt.Sprintf("%s-storefront", store.Name)
 }
+
+func GetStorefrontDeploymentCalculatedPHPFPMValues(store v1.Store) []corev1.EnvVar {
+	memoryLimitMiB = int(store.Spec.StorefrontDeploymentContainer.Resources.Limits.Memory().Value() / (1024 * 1024))
+	maxChildren = int(math.Round(float64(memoryLimitMiB / memoryPerChildMiB)))
+	startServers = int(math.Round(float64(maxChildren) * startServersRatio))
+	minSpare = int(math.Round(float64(maxChildren) * minSpareServersRatio))
+	maxSpare = int(math.Round(float64(maxChildren)*maxSpareServersRatio) + 1)
+
+	env := []corev1.EnvVar{
+		{
+			Name:  "PHP_FPM_PM",
+			Value: "dynamic",
+		},
+		{
+			Name:  "PHP_FPM_PM_MAX_CHILDREN",
+			Value: fmt.Sprintf("%d", maxChildren),
+		},
+		{
+			Name:  "PHP_FPM_PM_START_SERVERS",
+			Value: fmt.Sprintf("%d", startServers),
+		},
+		{
+			Name:  "PHP_FPM_PM_MIN_SPARE_SERVERS",
+			Value: fmt.Sprintf("%d", minSpare),
+		},
+		{
+			Name:  "PHP_FPM_PM_MAX_SPARE_SERVERS",
+			Value: fmt.Sprintf("%d", maxSpare),
+		},
+	}
+	return env
+}
+
+// The formulas are based on CPU cores and MiB, not Kubernetes base units.
