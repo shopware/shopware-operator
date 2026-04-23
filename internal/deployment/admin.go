@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"math"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
@@ -77,6 +78,10 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 
 	// Merge containerSpec.ExtraEnvs to override with merged values from AdminDeploymentContainer
 	envs := util.MergeEnv(store.GetEnv(), containerSpec.ExtraEnvs)
+
+	phpEnvs := GetAdminDeploymentCalculatedPHPFPMValues(store)
+
+	envs = util.MergeEnv(envs, phpEnvs)
 
 	containers := append(containerSpec.ExtraContainers, corev1.Container{
 		LivenessProbe: &corev1.Probe{
@@ -183,4 +188,36 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 
 func GetAdminDeploymentName(store v1.Store) string {
 	return fmt.Sprintf("%s-store-admin", store.Name)
+}
+
+func GetAdminDeploymentCalculatedPHPFPMValues(store v1.Store) []corev1.EnvVar {
+	memoryLimitMiB = int(store.Spec.AdminDeploymentContainer.Resources.Limits.Memory().Value() / (1024 * 1024))
+	maxChildren = int(math.Round(float64(memoryLimitMiB / memoryPerChildMiB)))
+	startServers = int(math.Round(float64(maxChildren) * startServersRatio))
+	minSpare = int(math.Round(float64(maxChildren) * minSpareServersRatio))
+	maxSpare = int(math.Round(float64(maxChildren)*maxSpareServersRatio) + 1)
+
+	env := []corev1.EnvVar{
+		{
+			Name:  "PHP_FPM_PM",
+			Value: "dynamic",
+		},
+		{
+			Name:  "PHP_FPM_PM_MAX_CHILDREN",
+			Value: fmt.Sprintf("%d", maxChildren),
+		},
+		{
+			Name:  "PHP_FPM_PM_START_SERVERS",
+			Value: fmt.Sprintf("%d", startServers),
+		},
+		{
+			Name:  "PHP_FPM_PM_MIN_SPARE_SERVERS",
+			Value: fmt.Sprintf("%d", minSpare),
+		},
+		{
+			Name:  "PHP_FPM_PM_MAX_SPARE_SERVERS",
+			Value: fmt.Sprintf("%d", maxSpare),
+		},
+	}
+	return env
 }
