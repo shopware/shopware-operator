@@ -79,8 +79,13 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 
 	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.StorefrontDeploymentContainer.Annotations)
 
-	// Merge containerSpec.ExtraEnvs to override with merged values from StorefrontDeploymentContainer
 	envs := util.MergeEnv(store.GetEnv(), containerSpec.ExtraEnvs)
+	if store.Spec.FPM.ProcessManagement == "operator" {
+		if containerSpec.Resources.Limits.Memory().Value() != 0 {
+			phpEnvs := GetCalculatedPHPFPMValues(int(containerSpec.Resources.Limits.Memory().Value()))
+			envs = util.MergeEnv(envs, phpEnvs)
+		}
+	}
 
 	containers := append(containerSpec.ExtraContainers, corev1.Container{
 		Name: DEPLOYMENT_STOREFRONT_CONTAINER_NAME,
