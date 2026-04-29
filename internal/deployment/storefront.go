@@ -81,8 +81,14 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 
 	envs := util.MergeEnv(store.GetEnv(), containerSpec.ExtraEnvs)
 	if store.Spec.FPM.ProcessManagement == "operator" {
-		phpEnvs := GetCalculatedPHPFPMValues(int(store.Spec.StorefrontDeploymentContainer.Resources.Limits.Memory().Value()))
-		envs = util.MergeEnv(envs, phpEnvs)
+		if containerSpec.Resources.Limits.Memory() != nil && containerSpec.Resources.Limits.Memory().Value() != 0 {
+			phpEnvs := GetCalculatedPHPFPMValues(int(containerSpec.Resources.Limits.Memory().Value() / (1024 * 1024)))
+			envs = util.MergeEnv(envs, phpEnvs)
+		} else {
+			phpEnvs := GetCalculatedPHPFPMValues(2048)
+			envs = util.MergeEnv(envs, phpEnvs)
+			fmt.Println("envs: ", phpEnvs)
+		}
 	}
 
 	containers := append(containerSpec.ExtraContainers, corev1.Container{
