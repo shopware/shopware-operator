@@ -144,7 +144,7 @@ func (s *Store) getSessionCache() []corev1.EnvVar {
 }
 
 func (f *FPMSpec) getFPMConfiguration() []corev1.EnvVar {
-	if f.ProcessManagement != "dynamic" {
+	if f.ProcessManagement != "dynamic" && f.ProcessManagement != "operator" {
 		return []corev1.EnvVar{
 			{
 				Name:  "FPM_PM",
