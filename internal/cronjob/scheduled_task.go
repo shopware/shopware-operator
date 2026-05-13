@@ -30,7 +30,8 @@ func GetScheduledCronJob(ctx context.Context, client client.Client, store v1.Sto
 
 func ScheduledTaskJob(store v1.Store) *batchv1.CronJob {
 	// Merge Overwritten jobContainer fields into container fields
-	store.Spec.Container.Merge(store.Spec.SetupJobContainer)
+	containerSpec := store.Spec.Container.DeepCopy()
+	containerSpec.Merge(store.Spec.SetupJobContainer)
 
 	parallelism := int32(1)
 	completions := int32(1)
@@ -42,11 +43,12 @@ func ScheduledTaskJob(store v1.Store) *batchv1.CronJob {
 		sa = store.Spec.ServiceAccountName
 	}
 	// Per container way
-	if store.Spec.Container.ServiceAccountName != "" {
-		sa = store.Spec.Container.ServiceAccountName
+	if containerSpec.ServiceAccountName != "" {
+		sa = containerSpec.ServiceAccountName
 	}
 
-	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.SetupJobContainer.Labels)
+	labels := util.GetDefaultContainerStoreLabels(store, nil)
+	labels["component"] = "scheduled-task"
 	labels[util.ShopwareKey("store.type")] = "scheduled-task"
 
 	// Hack: The current size of the CRD is at the limit.
@@ -58,16 +60,17 @@ func ScheduledTaskJob(store v1.Store) *batchv1.CronJob {
 	}
 
 	annotations := util.GetDefaultContainerAnnotations(CONTAINER_NAME_SCHEDULED_JOB, store, store.Spec.SetupJobContainer.Annotations)
+	envs := util.MergeEnv(store.GetEnv(), containerSpec.ExtraEnvs)
 
-	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
+	containers := append(containerSpec.ExtraContainers, corev1.Container{
 		Name:            CONTAINER_NAME_SCHEDULED_JOB,
-		VolumeMounts:    store.Spec.Container.VolumeMounts,
-		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
-		Image:           store.Spec.Container.Image,
+		VolumeMounts:    containerSpec.VolumeMounts,
+		ImagePullPolicy: containerSpec.ImagePullPolicy,
+		Image:           containerSpec.Image,
 		Command:         []string{"sh", "-c"},
 		Args:            []string{store.Spec.ScheduledTask.Command},
-		Env:             store.GetEnv(),
-		Resources:       store.Spec.Container.Resources, // Add Resources here
+		Env:             envs,
+		Resources:       containerSpec.Resources, // Add Resources here
 	})
 
 	job := &batchv1.CronJob{
@@ -103,17 +106,17 @@ func ScheduledTaskJob(store v1.Store) *batchv1.CronJob {
 						},
 						Spec: corev1.PodSpec{
 							ShareProcessNamespace:         &sharedProcessNamespace,
-							TerminationGracePeriodSeconds: &store.Spec.Container.TerminationGracePeriodSeconds,
-							Volumes:                       store.Spec.Container.Volumes,
-							TopologySpreadConstraints:     store.Spec.Container.TopologySpreadConstraints,
-							NodeSelector:                  store.Spec.Container.NodeSelector,
-							ImagePullSecrets:              store.Spec.Container.ImagePullSecrets,
-							EnableServiceLinks:            store.Spec.Container.EnableServiceLinks,
+							TerminationGracePeriodSeconds: &containerSpec.TerminationGracePeriodSeconds,
+							Volumes:                       containerSpec.Volumes,
+							TopologySpreadConstraints:     containerSpec.TopologySpreadConstraints,
+							NodeSelector:                  containerSpec.NodeSelector,
+							ImagePullSecrets:              containerSpec.ImagePullSecrets,
+							EnableServiceLinks:            containerSpec.EnableServiceLinks,
 							RestartPolicy:                 "Never",
 							Containers:                    containers,
-							SecurityContext:               store.Spec.Container.SecurityContext,
+							SecurityContext:               containerSpec.SecurityContext,
 							ServiceAccountName:            sa,
-							InitContainers:                store.Spec.Container.InitContainers,
+							InitContainers:                containerSpec.InitContainers,
 						},
 					},
 				},
