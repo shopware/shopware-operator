@@ -523,7 +523,7 @@ func (r *StoreReconciler) stateInitializing(
 		return v1.StateInitializing
 	}
 
-	worker, err := deployment.GetAdminDeployment(ctx, *store, r.Client)
+	worker, err := deployment.GetWorkerDeployment(ctx, *store, r.Client)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return v1.StateInitializing
