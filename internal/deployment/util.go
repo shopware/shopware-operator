@@ -3,12 +3,21 @@ package deployment
 import (
 	"context"
 	"fmt"
+	"math"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+	startServersRatio    = 0.25
+	minSpareServersRatio = 0.2
+	maxSpareServersRatio = 0.375
+	memoryPerChildMiB    = 80 //Every PHP-FPM process in an empty shop uses 70.6MiB
 )
 
 func getDeploymentCondition(
@@ -91,4 +100,34 @@ func GetStoreDeploymentImage(
 		}
 	}
 	return "", fmt.Errorf("could not find storefront deployment container")
+}
+
+func GetCalculatedPHPFPMValues(memoryLimitMiB int) []corev1.EnvVar {
+	maxChildren := int(math.Round(float64(memoryLimitMiB / memoryPerChildMiB)))
+	startServers := int(math.Round(float64(maxChildren) * startServersRatio))
+	minSpare := int(math.Round(float64(maxChildren) * minSpareServersRatio))
+	maxSpare := int(math.Round(float64(maxChildren)*maxSpareServersRatio) + 1)
+
+	return []corev1.EnvVar{
+		{
+			Name:  "FPM_PM",
+			Value: "dynamic",
+		},
+		{
+			Name:  "FPM_PM_MAX_CHILDREN",
+			Value: fmt.Sprintf("%d", maxChildren),
+		},
+		{
+			Name:  "FPM_PM_START_SERVERS",
+			Value: fmt.Sprintf("%d", startServers),
+		},
+		{
+			Name:  "FPM_PM_MIN_SPARE_SERVERS",
+			Value: fmt.Sprintf("%d", minSpare),
+		},
+		{
+			Name:  "FPM_PM_MAX_SPARE_SERVERS",
+			Value: fmt.Sprintf("%d", maxSpare),
+		},
+	}
 }
