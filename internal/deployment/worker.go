@@ -146,7 +146,7 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 					EnableServiceLinks:        containerSpec.EnableServiceLinks,
 					RestartPolicy:             containerSpec.RestartPolicy,
 					Containers:                containers,
-					SecurityContext:           containerSpec.SecurityContext,
+					SecurityContext:           util.DefaultPodSecurityContext(containerSpec.SecurityContext),
 					InitContainers:            containerSpec.InitContainers,
 				},
 			},

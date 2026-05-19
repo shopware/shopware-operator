@@ -112,7 +112,7 @@ func ScheduledTaskJob(store v1.Store) *batchv1.CronJob {
 							EnableServiceLinks:            store.Spec.Container.EnableServiceLinks,
 							RestartPolicy:                 "Never",
 							Containers:                    containers,
-							SecurityContext:               store.Spec.Container.SecurityContext,
+							SecurityContext:               util.DefaultPodSecurityContext(store.Spec.Container.SecurityContext),
 							ServiceAccountName:            sa,
 							InitContainers:                store.Spec.Container.InitContainers,
 						},

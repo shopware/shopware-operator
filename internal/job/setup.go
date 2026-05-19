@@ -103,7 +103,7 @@ func SetupJob(store v1.Store) *batchv1.Job {
 					EnableServiceLinks:            containerSpec.EnableServiceLinks,
 					RestartPolicy:                 "Never",
 					Containers:                    containers,
-					SecurityContext:               containerSpec.SecurityContext,
+					SecurityContext:               util.DefaultPodSecurityContext(containerSpec.SecurityContext),
 					InitContainers:                containerSpec.InitContainers,
 				},
 			},

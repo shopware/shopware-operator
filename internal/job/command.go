@@ -155,7 +155,7 @@ func getJobSpec(store v1.Store, ex v1.StoreExec, labels map[string]string) batch
 				EnableServiceLinks:            containerSpec.EnableServiceLinks,
 				RestartPolicy:                 "Never",
 				Containers:                    containers,
-				SecurityContext:               containerSpec.SecurityContext,
+				SecurityContext:               util.DefaultPodSecurityContext(containerSpec.SecurityContext),
 				InitContainers:                containerSpec.InitContainers,
 			},
 		},
