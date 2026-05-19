@@ -19,6 +19,24 @@ func RestrictedContainerSecurityContext() *corev1.SecurityContext {
 	}
 }
 
+// DefaultContainerSecurityContexts keeps user-provided container security
+// contexts unchanged and only fills missing ones with the restricted defaults.
+func DefaultContainerSecurityContexts(containers []corev1.Container) []corev1.Container {
+	if containers == nil {
+		return nil
+	}
+
+	defaulted := make([]corev1.Container, len(containers))
+	copy(defaulted, containers)
+	for i := range defaulted {
+		if defaulted[i].SecurityContext == nil {
+			defaulted[i].SecurityContext = RestrictedContainerSecurityContext()
+		}
+	}
+
+	return defaulted
+}
+
 // RestrictedPodSecurityContext mirrors the podSecurityContext default from the
 // CRD for resources that were not API-server defaulted before reconciliation.
 func RestrictedPodSecurityContext() *corev1.PodSecurityContext {

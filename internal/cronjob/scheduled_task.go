@@ -59,7 +59,7 @@ func ScheduledTaskJob(store v1.Store) *batchv1.CronJob {
 
 	annotations := util.GetDefaultContainerAnnotations(CONTAINER_NAME_SCHEDULED_JOB, store, store.Spec.SetupJobContainer.Annotations)
 
-	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
+	containers := append(util.DefaultContainerSecurityContexts(store.Spec.Container.ExtraContainers), corev1.Container{
 		Name:            CONTAINER_NAME_SCHEDULED_JOB,
 		VolumeMounts:    store.Spec.Container.VolumeMounts,
 		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
@@ -114,7 +114,7 @@ func ScheduledTaskJob(store v1.Store) *batchv1.CronJob {
 							Containers:                    containers,
 							SecurityContext:               util.DefaultPodSecurityContext(store.Spec.Container.SecurityContext),
 							ServiceAccountName:            sa,
-							InitContainers:                store.Spec.Container.InitContainers,
+							InitContainers:                util.DefaultContainerSecurityContexts(store.Spec.Container.InitContainers),
 						},
 					},
 				},

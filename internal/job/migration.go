@@ -53,7 +53,7 @@ func MigrationJob(store v1.Store) *batchv1.Job {
 	// Merge containerSpec.ExtraEnvs to override with merged values from MigrationJobContainer
 	envs := util.MergeEnv(store.GetEnv(), containerSpec.ExtraEnvs)
 
-	containers := append(containerSpec.ExtraContainers, corev1.Container{
+	containers := append(util.DefaultContainerSecurityContexts(containerSpec.ExtraContainers), corev1.Container{
 		Name:            CONTAINER_NAME_MIGRATION_JOB,
 		VolumeMounts:    containerSpec.VolumeMounts,
 		ImagePullPolicy: containerSpec.ImagePullPolicy,
@@ -95,7 +95,7 @@ func MigrationJob(store v1.Store) *batchv1.Job {
 					RestartPolicy:                 "Never",
 					Containers:                    containers,
 					SecurityContext:               util.DefaultPodSecurityContext(containerSpec.SecurityContext),
-					InitContainers:                containerSpec.InitContainers,
+					InitContainers:                util.DefaultContainerSecurityContexts(containerSpec.InitContainers),
 				},
 			},
 		},

@@ -86,7 +86,7 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 		}
 	}
 
-	containers := append(containerSpec.ExtraContainers, corev1.Container{
+	containers := append(util.DefaultContainerSecurityContexts(containerSpec.ExtraContainers), corev1.Container{
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
@@ -172,7 +172,7 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 					RestartPolicy:             containerSpec.RestartPolicy,
 					Containers:                containers,
 					SecurityContext:           util.DefaultPodSecurityContext(containerSpec.SecurityContext),
-					InitContainers:            containerSpec.InitContainers,
+					InitContainers:            util.DefaultContainerSecurityContexts(containerSpec.InitContainers),
 				},
 			},
 		},

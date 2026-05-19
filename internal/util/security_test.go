@@ -31,3 +31,34 @@ func TestDefaultPodSecurityContextKeepsProvidedContext(t *testing.T) {
 
 	assert.Same(t, securityContext, util.DefaultPodSecurityContext(securityContext))
 }
+
+func TestDefaultContainerSecurityContextsUsesRestrictedDefaultsWhenMissing(t *testing.T) {
+	containers := []corev1.Container{
+		{Name: "sidecar"},
+	}
+
+	defaulted := util.DefaultContainerSecurityContexts(containers)
+
+	assert.Nil(t, containers[0].SecurityContext)
+	assert.NotNil(t, defaulted[0].SecurityContext)
+	assert.NotNil(t, defaulted[0].SecurityContext.AllowPrivilegeEscalation)
+	assert.False(t, *defaulted[0].SecurityContext.AllowPrivilegeEscalation)
+	assert.NotNil(t, defaulted[0].SecurityContext.Capabilities)
+	assert.Equal(t, []corev1.Capability{"ALL"}, defaulted[0].SecurityContext.Capabilities.Drop)
+}
+
+func TestDefaultContainerSecurityContextsKeepsProvidedContext(t *testing.T) {
+	securityContext := &corev1.SecurityContext{
+		RunAsUser: util.Int64(1000),
+	}
+	containers := []corev1.Container{
+		{
+			Name:            "sidecar",
+			SecurityContext: securityContext,
+		},
+	}
+
+	defaulted := util.DefaultContainerSecurityContexts(containers)
+
+	assert.Same(t, securityContext, defaulted[0].SecurityContext)
+}

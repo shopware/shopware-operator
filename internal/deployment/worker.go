@@ -78,7 +78,7 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 	// Merge containerSpec.ExtraEnvs to override with merged values from WorkerDeploymentContainer
 	envs := util.MergeEnv(store.GetEnv(), containerSpec.ExtraEnvs)
 
-	containers := append(containerSpec.ExtraContainers, corev1.Container{
+	containers := append(util.DefaultContainerSecurityContexts(containerSpec.ExtraContainers), corev1.Container{
 		Name:            appName,
 		Image:           containerSpec.Image,
 		ImagePullPolicy: containerSpec.ImagePullPolicy,
@@ -147,7 +147,7 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 					RestartPolicy:             containerSpec.RestartPolicy,
 					Containers:                containers,
 					SecurityContext:           util.DefaultPodSecurityContext(containerSpec.SecurityContext),
-					InitContainers:            containerSpec.InitContainers,
+					InitContainers:            util.DefaultContainerSecurityContexts(containerSpec.InitContainers),
 				},
 			},
 		},

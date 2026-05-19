@@ -116,7 +116,7 @@ func getJobSpec(store v1.Store, ex v1.StoreExec, labels map[string]string) batch
 
 	envs := util.MergeEnv(store.GetEnv(), ex.Spec.ExtraEnvs)
 
-	containers := append(containerSpec.ExtraContainers, corev1.Container{
+	containers := append(util.DefaultContainerSecurityContexts(containerSpec.ExtraContainers), corev1.Container{
 		Name:            CONTAINER_NAME_COMMAND,
 		VolumeMounts:    containerSpec.VolumeMounts,
 		ImagePullPolicy: containerSpec.ImagePullPolicy,
@@ -156,7 +156,7 @@ func getJobSpec(store v1.Store, ex v1.StoreExec, labels map[string]string) batch
 				RestartPolicy:                 "Never",
 				Containers:                    containers,
 				SecurityContext:               util.DefaultPodSecurityContext(containerSpec.SecurityContext),
-				InitContainers:                containerSpec.InitContainers,
+				InitContainers:                util.DefaultContainerSecurityContexts(containerSpec.InitContainers),
 			},
 		},
 	}
