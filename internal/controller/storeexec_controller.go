@@ -65,6 +65,7 @@ func (r *StoreExecReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if result, handled, cleanupErr := r.reconcileSuccessfulStoreExecCleanup(ctx, ex); handled || cleanupErr != nil {
 		if cleanupErr != nil {
 			log.Errorw("failed to cleanup successful store-exec", zap.Error(cleanupErr))
+			skipStatusUpdate = true
 			return rr, nil
 		}
 		skipStatusUpdate = true
@@ -169,18 +170,6 @@ func (r *StoreExecReconciler) reconcileSuccessfulStoreExecCleanup(
 }
 
 func storeExecFinishedAt(ex *v1.StoreExec) time.Time {
-	for i := len(ex.Status.Conditions) - 1; i >= 0; i-- {
-		con := ex.Status.Conditions[i]
-		if con.Type == v1.ExecStateDone {
-			if !con.LastTransitionTime.IsZero() {
-				return con.LastTransitionTime.Time
-			}
-			if !con.LastUpdateTime.IsZero() {
-				return con.LastUpdateTime.Time
-			}
-		}
-	}
-
 	for i := len(ex.Status.Conditions) - 1; i >= 0; i-- {
 		if !ex.Status.Conditions[i].LastTransitionTime.IsZero() {
 			return ex.Status.Conditions[i].LastTransitionTime.Time

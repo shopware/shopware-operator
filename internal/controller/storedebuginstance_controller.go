@@ -88,6 +88,7 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 	if result, deleted, cleanupErr := r.deleteSuccessfulStoreDebugInstanceIfCleanupDue(ctx, storeDebugInstance); deleted || cleanupErr != nil {
 		if cleanupErr != nil {
 			log.Errorw("failed to cleanup successful store debug instance", zap.Error(cleanupErr))
+			skipStatusUpdate = true
 			return rr, nil
 		}
 		skipStatusUpdate = true
