@@ -40,9 +40,10 @@ import (
 // StoreDebugInstanceReconciler reconciles a StoreDebugInstance object
 type StoreDebugInstanceReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
-	Logger   *zap.SugaredLogger
+	Scheme             *runtime.Scheme
+	Recorder           record.EventRecorder
+	Logger             *zap.SugaredLogger
+	CleanupGracePeriod time.Duration
 }
 
 // +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storedebuginstances,verbs=get;list;watch;create;update;patch;delete
@@ -59,8 +60,12 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	var store *shopv1.Store
 	var storeDebugInstance *shopv1.StoreDebugInstance
+	var skipStatusUpdate bool
 	rr = ctrl.Result{RequeueAfter: 10 * time.Second}
 	defer func() {
+		if skipStatusUpdate {
+			return
+		}
 		if err := r.reconcileCRStatus(ctx, store, storeDebugInstance, err); err != nil {
 			log.Errorw("failed to update status", zap.Error(err))
 		}
@@ -78,6 +83,16 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 	_, err = time.ParseDuration(storeDebugInstance.Spec.Duration)
 	if err != nil {
 		return rr, fmt.Errorf("invalid duration: %w", err)
+	}
+
+	if result, deleted, cleanupErr := r.deleteSuccessfulStoreDebugInstanceIfCleanupDue(ctx, storeDebugInstance); deleted || cleanupErr != nil {
+		if cleanupErr != nil {
+			log.Errorw("failed to cleanup successful store debug instance", zap.Error(cleanupErr))
+			skipStatusUpdate = true
+			return rr, nil
+		}
+		skipStatusUpdate = true
+		return result, nil
 	}
 
 	store, err = k8s.GetStore(ctx, r.Client, types.NamespacedName{
@@ -104,6 +119,15 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 		if err := r.Delete(ctx, svc); err != nil && !k8serrors.IsNotFound(err) {
 			log.Errorw("failed to delete service", zap.Error(err))
 			return rr, nil
+		}
+
+		if result, handled, cleanupErr := r.reconcileSuccessfulStoreDebugInstanceCleanup(ctx, storeDebugInstance); handled || cleanupErr != nil {
+			if cleanupErr != nil {
+				log.Errorw("failed to cleanup successful store debug instance", zap.Error(cleanupErr))
+				return rr, nil
+			}
+			skipStatusUpdate = true
+			return result, nil
 		}
 
 		rr.Requeue = false
@@ -179,6 +203,63 @@ func (r *StoreDebugInstanceReconciler) reconcilePod(ctx context.Context, store *
 	}
 
 	return nil
+}
+
+func (r *StoreDebugInstanceReconciler) deleteSuccessfulStoreDebugInstanceIfCleanupDue(
+	ctx context.Context,
+	storeDebugInstance *shopv1.StoreDebugInstance,
+) (ctrl.Result, bool, error) {
+	if !r.isStoreDebugInstanceCleanupEligible(storeDebugInstance) {
+		return ctrl.Result{}, false, nil
+	}
+
+	if remaining := r.storeDebugInstanceCleanupRemaining(storeDebugInstance); remaining > 0 {
+		return ctrl.Result{}, false, nil
+	}
+
+	return r.deleteSuccessfulStoreDebugInstance(ctx, storeDebugInstance)
+}
+
+func (r *StoreDebugInstanceReconciler) reconcileSuccessfulStoreDebugInstanceCleanup(
+	ctx context.Context,
+	storeDebugInstance *shopv1.StoreDebugInstance,
+) (ctrl.Result, bool, error) {
+	if !r.isStoreDebugInstanceCleanupEligible(storeDebugInstance) {
+		return ctrl.Result{}, false, nil
+	}
+
+	if remaining := r.storeDebugInstanceCleanupRemaining(storeDebugInstance); remaining > 0 {
+		return ctrl.Result{RequeueAfter: remaining}, true, nil
+	}
+
+	return r.deleteSuccessfulStoreDebugInstance(ctx, storeDebugInstance)
+}
+
+func (r *StoreDebugInstanceReconciler) isStoreDebugInstanceCleanupEligible(
+	storeDebugInstance *shopv1.StoreDebugInstance,
+) bool {
+	return r.CleanupGracePeriod > 0 &&
+		storeDebugInstance.DeletionTimestamp == nil &&
+		storeDebugInstance.IsState(shopv1.StoreDebugInstanceStateDone)
+}
+
+func (r *StoreDebugInstanceReconciler) storeDebugInstanceCleanupRemaining(
+	storeDebugInstance *shopv1.StoreDebugInstance,
+) time.Duration {
+	duration, _ := time.ParseDuration(storeDebugInstance.Spec.Duration)
+	deleteAfter := storeDebugInstance.CreationTimestamp.Add(duration).Add(r.CleanupGracePeriod)
+	return time.Until(deleteAfter)
+}
+
+func (r *StoreDebugInstanceReconciler) deleteSuccessfulStoreDebugInstance(
+	ctx context.Context,
+	storeDebugInstance *shopv1.StoreDebugInstance,
+) (ctrl.Result, bool, error) {
+	if err := r.Delete(ctx, storeDebugInstance); err != nil && !k8serrors.IsNotFound(err) {
+		return ctrl.Result{}, false, fmt.Errorf("delete successful StoreDebugInstance: %w", err)
+	}
+
+	return ctrl.Result{Requeue: false}, true, nil
 }
 
 func (r *StoreDebugInstanceReconciler) reconcileService(ctx context.Context, store *shopv1.Store, storeDebugInstance *shopv1.StoreDebugInstance) error {

@@ -79,6 +79,8 @@ spec:
           value: "{{ .Values.logFormat | default "json" }}"
         - name: DISABLE_CHECKS
           value: "{{ .Values.disableChecks | default "false" }}"
+        - name: SUCCESSFUL_CR_CLEANUP_GRACE_PERIOD
+          value: "{{ .Values.successfulCRCleanupGracePeriod | default "1h" }}"
         {{- if and (hasKey .Values "events") (hasKey .Values.events "nats") (.Values.events.nats.enable) }}
         - name: NATS_ENABLE
           value: "true"

@@ -151,10 +151,11 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controller.StoreExecReconciler{
-		Client:   nsClient,
-		Logger:   logger,
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
+		Client:             nsClient,
+		Logger:             logger,
+		Scheme:             mgr.GetScheme(),
+		Recorder:           mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
+		CleanupGracePeriod: cfg.SuccessfulCRCleanupGracePeriod,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create exec controller", "controller", "StoreExec")
 		os.Exit(1)
@@ -184,10 +185,11 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controller.StoreDebugInstanceReconciler{
-		Client:   nsClient,
-		Logger:   logger,
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
+		Client:             nsClient,
+		Logger:             logger,
+		Scheme:             mgr.GetScheme(),
+		Recorder:           mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
+		CleanupGracePeriod: cfg.SuccessfulCRCleanupGracePeriod,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create instance controller", "controller", "StoreDebugInstance")
 		os.Exit(1)
