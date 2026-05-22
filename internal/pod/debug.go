@@ -55,7 +55,7 @@ func DebugPod(store v1.Store, storeDebugInstance v1.StoreDebugInstance) *corev1.
 	}
 	ports = append(ports, storeDebugInstance.Spec.ExtraContainerPorts...)
 
-	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
+	containers := append(util.DefaultContainerSecurityContexts(store.Spec.Container.ExtraContainers), corev1.Container{
 		Name: deployment.DEPLOYMENT_STOREFRONT_CONTAINER_NAME,
 		// we don't need the liveness and readiness probe to make sure that the container always starts
 		Image:           containerImage, // Use custom image if provided
@@ -64,6 +64,7 @@ func DebugPod(store v1.Store, storeDebugInstance v1.StoreDebugInstance) *corev1.
 		VolumeMounts:    store.Spec.Container.VolumeMounts,
 		Ports:           ports,
 		Resources:       store.Spec.Container.Resources,
+		SecurityContext: util.RestrictedContainerSecurityContext(),
 	})
 
 	podSpec.Spec.Containers = containers
@@ -72,8 +73,8 @@ func DebugPod(store v1.Store, storeDebugInstance v1.StoreDebugInstance) *corev1.
 	podSpec.Spec.NodeSelector = store.Spec.Container.NodeSelector
 	podSpec.Spec.ImagePullSecrets = store.Spec.Container.ImagePullSecrets
 	podSpec.Spec.EnableServiceLinks = store.Spec.Container.EnableServiceLinks
-	podSpec.Spec.SecurityContext = store.Spec.Container.SecurityContext
-	podSpec.Spec.InitContainers = store.Spec.Container.InitContainers
+	podSpec.Spec.SecurityContext = util.DefaultPodSecurityContext(store.Spec.Container.SecurityContext)
+	podSpec.Spec.InitContainers = util.DefaultContainerSecurityContexts(store.Spec.Container.InitContainers)
 
 	if store.Spec.ServiceAccountName != "" {
 		podSpec.Spec.ServiceAccountName = store.Spec.ServiceAccountName

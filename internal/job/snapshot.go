@@ -112,11 +112,12 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 		}
 	}
 
-	containers := append(snapshot.Container.ExtraContainers, corev1.Container{
+	containers := append(util.DefaultContainerSecurityContexts(snapshot.Container.ExtraContainers), corev1.Container{
 		Name:            CONTAINER_NAME_SNAPSHOT,
 		VolumeMounts:    vm,
 		ImagePullPolicy: snapshot.Container.ImagePullPolicy,
 		Image:           snapshot.Container.Image,
+		SecurityContext: util.RestrictedContainerSecurityContext(),
 		Args:            args,
 		Env:             snapshot.GetEnv(store),
 		Resources:       snapshot.Container.Resources,
@@ -166,8 +167,8 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 					EnableServiceLinks:            snapshot.Container.EnableServiceLinks,
 					RestartPolicy:                 "Never",
 					Containers:                    containers,
-					SecurityContext:               snapshot.Container.SecurityContext,
-					InitContainers:                snapshot.Container.InitContainers,
+					SecurityContext:               util.DefaultPodSecurityContext(snapshot.Container.SecurityContext),
+					InitContainers:                util.DefaultContainerSecurityContexts(snapshot.Container.InitContainers),
 				},
 			},
 		},

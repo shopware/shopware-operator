@@ -280,4 +280,32 @@ func TestSetupJob(t *testing.T) {
 		assert.NotNil(t, result.Spec.Template.Spec.EnableServiceLinks)
 		assert.False(t, *result.Spec.Template.Spec.EnableServiceLinks)
 	})
+
+	t.Run("test container security context is restricted", func(t *testing.T) {
+		store := v1.Store{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-store",
+				Namespace: "test",
+			},
+			Spec: v1.StoreSpec{
+				Container: v1.ContainerSpec{
+					Image: "shopware:latest",
+				},
+				SetupScript: "/setup.sh",
+				AdminCredentials: v1.Credentials{
+					Username: "admin",
+				},
+				SecretName: "store-secret",
+			},
+		}
+
+		result := job.SetupJob(store)
+		container := result.Spec.Template.Spec.Containers[0]
+
+		assert.NotNil(t, container.SecurityContext)
+		assert.NotNil(t, container.SecurityContext.AllowPrivilegeEscalation)
+		assert.False(t, *container.SecurityContext.AllowPrivilegeEscalation)
+		assert.NotNil(t, container.SecurityContext.Capabilities)
+		assert.Equal(t, []corev1.Capability{"ALL"}, container.SecurityContext.Capabilities.Drop)
+	})
 }

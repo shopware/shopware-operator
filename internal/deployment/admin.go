@@ -86,7 +86,7 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 		}
 	}
 
-	containers := append(containerSpec.ExtraContainers, corev1.Container{
+	containers := append(util.DefaultContainerSecurityContexts(containerSpec.ExtraContainers), corev1.Container{
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
@@ -116,6 +116,7 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 		Name:            appName,
 		Image:           containerSpec.Image,
 		ImagePullPolicy: containerSpec.ImagePullPolicy,
+		SecurityContext: util.RestrictedContainerSecurityContext(),
 		Env:             envs,
 		VolumeMounts:    containerSpec.VolumeMounts,
 		Ports: []corev1.ContainerPort{
@@ -170,8 +171,8 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 					EnableServiceLinks:        containerSpec.EnableServiceLinks,
 					RestartPolicy:             containerSpec.RestartPolicy,
 					Containers:                containers,
-					SecurityContext:           containerSpec.SecurityContext,
-					InitContainers:            containerSpec.InitContainers,
+					SecurityContext:           util.DefaultPodSecurityContext(containerSpec.SecurityContext),
+					InitContainers:            util.DefaultContainerSecurityContexts(containerSpec.InitContainers),
 				},
 			},
 		},

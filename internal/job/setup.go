@@ -62,11 +62,12 @@ func SetupJob(store v1.Store) *batchv1.Job {
 	// Merge containerSpec.ExtraEnvs to override with merged values from SetupJobContainer
 	envs = util.MergeEnv(envs, containerSpec.ExtraEnvs)
 
-	containers := append(containerSpec.ExtraContainers, corev1.Container{
+	containers := append(util.DefaultContainerSecurityContexts(containerSpec.ExtraContainers), corev1.Container{
 		Name:            CONTAINER_NAME_SETUP_JOB,
 		VolumeMounts:    containerSpec.VolumeMounts,
 		ImagePullPolicy: containerSpec.ImagePullPolicy,
 		Image:           containerSpec.Image,
+		SecurityContext: util.RestrictedContainerSecurityContext(),
 		Command:         []string{"sh", "-c"},
 		Args:            []string{store.Spec.SetupScript},
 		Env:             envs,
@@ -102,8 +103,8 @@ func SetupJob(store v1.Store) *batchv1.Job {
 					EnableServiceLinks:            containerSpec.EnableServiceLinks,
 					RestartPolicy:                 "Never",
 					Containers:                    containers,
-					SecurityContext:               containerSpec.SecurityContext,
-					InitContainers:                containerSpec.InitContainers,
+					SecurityContext:               util.DefaultPodSecurityContext(containerSpec.SecurityContext),
+					InitContainers:                util.DefaultContainerSecurityContexts(containerSpec.InitContainers),
 				},
 			},
 		},

@@ -91,7 +91,7 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 		}
 	}
 
-	containers := append(containerSpec.ExtraContainers, corev1.Container{
+	containers := append(util.DefaultContainerSecurityContexts(containerSpec.ExtraContainers), corev1.Container{
 		Name: DEPLOYMENT_STOREFRONT_CONTAINER_NAME,
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
@@ -121,6 +121,7 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 		},
 		Image:           containerSpec.Image,
 		ImagePullPolicy: containerSpec.ImagePullPolicy,
+		SecurityContext: util.RestrictedContainerSecurityContext(),
 		Env:             envs,
 		VolumeMounts:    containerSpec.VolumeMounts,
 		Ports: []corev1.ContainerPort{
@@ -174,8 +175,8 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 					EnableServiceLinks:        containerSpec.EnableServiceLinks,
 					RestartPolicy:             containerSpec.RestartPolicy,
 					Containers:                containers,
-					SecurityContext:           containerSpec.SecurityContext,
-					InitContainers:            containerSpec.InitContainers,
+					SecurityContext:           util.DefaultPodSecurityContext(containerSpec.SecurityContext),
+					InitContainers:            util.DefaultContainerSecurityContexts(containerSpec.InitContainers),
 				},
 			},
 		},
