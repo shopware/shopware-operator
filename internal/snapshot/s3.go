@@ -70,7 +70,12 @@ func (s *SnapshotService) RestoreBackup(
 	wg.Wait()
 	cancel()
 	close(errChan)
-	if err := <-errChan; err != nil {
+	// nolint: prealloc
+	var errs []error
+	for err := range errChan {
+		errs = append(errs, err)
+	}
+	if err := joinSnapshotErrors(errs); err != nil {
 		return fmt.Errorf("snapshot restore failed: %w", err)
 	}
 
@@ -125,8 +130,8 @@ func (s *SnapshotService) CreateBackup(
 	for err := range errChan {
 		errs = append(errs, err)
 	}
-	if len(errs) > 0 {
-		return fmt.Errorf("snapshot creation failed: %w", errors.Join(errs...))
+	if err := joinSnapshotErrors(errs); err != nil {
+		return fmt.Errorf("snapshot creation failed: %w", err)
 	}
 
 	err := s.CreateArchive(ctx, cfg, snapshotCtx)
