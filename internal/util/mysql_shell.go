@@ -22,6 +22,8 @@ type MySQLShell struct {
 	binaryPath string
 }
 
+const mysqlShellConfigHomeEnvKey = "XDG_CONFIG_HOME"
+
 func NewMySQLShell(binaryPath string) MySQLShell {
 	return MySQLShell{binaryPath: binaryPath}
 }
@@ -292,6 +294,23 @@ func (h MySQLShell) run(
 		"--js",
 	)
 
+	mysqlshHomeDir, err := os.MkdirTemp("", "mysqlsh-home-")
+	if err != nil {
+		return nil, fmt.Errorf("create mysqlsh home dir: %w", err)
+	}
+	defer func() {
+		if removeErr := os.RemoveAll(mysqlshHomeDir); removeErr != nil {
+			logging.FromContext(ctx).Warnw("failed to remove mysqlsh home dir", zap.String("path", mysqlshHomeDir), zap.Error(removeErr))
+		}
+	}()
+
+	xdgConfigHome := filepath.Join(mysqlshHomeDir, ".config")
+	if err := os.MkdirAll(xdgConfigHome, 0755); err != nil {
+		return nil, fmt.Errorf("create mysqlsh config dir: %w", err)
+	}
+
+	cmd.Env = buildMySQLShellEnv(os.Environ(), mysqlshHomeDir, xdgConfigHome)
+
 	// Set stdin to the JavaScript command
 	cmd.Stdin = bytes.NewReader(append(jsCmd, '\n'))
 
@@ -312,6 +331,20 @@ func (h MySQLShell) run(
 		zap.Int("output_len", len(output)))
 
 	return output, nil
+}
+
+func buildMySQLShellEnv(baseEnv []string, homeDir, configHome string) []string {
+	filteredEnv := make([]string, 0, len(baseEnv)+2)
+	for _, entry := range baseEnv {
+		if strings.HasPrefix(entry, "HOME=") || strings.HasPrefix(entry, mysqlShellConfigHomeEnvKey+"=") {
+			continue
+		}
+		filteredEnv = append(filteredEnv, entry)
+	}
+
+	filteredEnv = append(filteredEnv, "HOME="+homeDir, mysqlShellConfigHomeEnvKey+"="+configHome)
+
+	return filteredEnv
 }
 
 //	func (h MySQLShell) deleteRecursive(ctx context.Context, bucket string, path string) {
