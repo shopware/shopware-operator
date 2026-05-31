@@ -92,6 +92,14 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 			envs = util.MergeEnv(envs, phpEnvs)
 			fmt.Println("envs: ", phpEnvs)
 		}
+	} else if store.Spec.FPM.ProcessManagement == "frankenphp" {
+		if containerSpec.Resources.Limits.Memory() != nil && containerSpec.Resources.Limits.Memory().Value() != 0 {
+			phpEnvs := GetCalculatedFrankenPHPValues(int(containerSpec.Resources.Limits.Memory().Value() / (1024 * 1024)))
+			envs = util.MergeEnv(envs, phpEnvs)
+		} else {
+			phpEnvs := GetCalculatedFrankenPHPValues(2048)
+			envs = util.MergeEnv(envs, phpEnvs)
+		}
 	}
 
 	containers := append(util.DefaultContainerSecurityContexts(containerSpec.ExtraContainers), corev1.Container{

@@ -131,3 +131,28 @@ func GetCalculatedPHPFPMValues(memoryLimitMiB int) []corev1.EnvVar {
 		},
 	}
 }
+
+const (
+	// FrankenPHP threads are lighter than FPM children since they share the
+	// same process address space. ~50 MiB per thread is a conservative estimate.
+	memoryPerThreadMiB = 50
+	// Minimum number of threads to avoid starving the worker pool.
+	minFrankenPHPThreads = 2
+)
+
+// GetCalculatedFrankenPHPValues auto-calculates the number of FrankenPHP worker
+// threads based on the container memory limit, similar to how
+// GetCalculatedPHPFPMValues works for PHP-FPM.
+func GetCalculatedFrankenPHPValues(memoryLimitMiB int) []corev1.EnvVar {
+	numThreads := memoryLimitMiB / memoryPerThreadMiB
+	if numThreads < minFrankenPHPThreads {
+		numThreads = minFrankenPHPThreads
+	}
+
+	return []corev1.EnvVar{
+		{
+			Name:  "FRANKENPHP_MAX_THREADS",
+			Value: fmt.Sprintf("%d", numThreads),
+		},
+	}
+}
