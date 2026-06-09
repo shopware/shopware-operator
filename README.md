@@ -11,25 +11,6 @@
 
 This repository contains the Shopware Operator for Kubernetes. The Operator is a Kubernetes controller that manages Shopware installations in a Kubernetes cluster.
 
-## Disclaimer
-
-This Shopware operator is currently in an experimental phase and is not yet ready for production use.
-The features, functionalities, and individual steps described in this repository are still under
-development and are not in a final state. As such, they may contain bugs, incomplete
-implementations, or other issues that could affect the stability and performance of your
-Shopware installation.
-
-Please be aware that using this operator in a live environment could lead to unexpected
-behavior, data loss, or other critical problems. We strongly recommend using this operator
-for testing and development purposes only.
-
-By using this software, you acknowledge that you understand these risks and agree not
-to hold the developers or maintainers of this repository liable for any
-damage or loss that may occur.
-
-If you encounter any issues or have suggestions for improvements, please feel free to
-open an issue or contribute to the project.
-
 ## Installation
 
 Below you find a descriptions how to deploy the Operator using `helm` or `kubectl`.
