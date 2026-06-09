@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.1](https://github.com/shopware/shopware-operator/compare/v1.1.0...v1.1.1) (2026-06-09)
+
+
+### Bug Fixes
+
+* trigger release ([1efa190](https://github.com/shopware/shopware-operator/commit/1efa19032bb4f5f19c4f8ca2590ddb7ca62d120a))
+* trigger release ([916abe2](https://github.com/shopware/shopware-operator/commit/916abe2f899510771b206456861919ff60c463bb))
+
 ## [1.1.0](https://github.com/shopware/shopware-operator/compare/v1.0.0...v1.1.0) (2026-06-09)
 
 
