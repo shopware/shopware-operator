@@ -114,7 +114,7 @@ jobs:
           git push origin "${branch}"
           gh pr create \
             --title "Autorelease from shopware operator" \
-            --body "Auto pr from shopware operator" \
+            --body "Auto PR from shopware operator" \
             --head ${branch} \
             --base main \
             --reviewer shopware/product-paas \
