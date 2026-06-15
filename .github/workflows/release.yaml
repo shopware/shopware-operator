@@ -98,27 +98,65 @@ jobs:
           identity: shopware-operator
 
       - name: make pr on helm-charts for this release
+        env:
+          GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
         run: |
+          set -euo pipefail
           make manifests
           tag=${{ needs.release-please.outputs.version }}
-          branch=auto-release-shopware-${tag}
-          git clone https://oauth2:${GITHUB_TOKEN}@github.com/shopware/helm-charts.git
+          branch="auto-release-shopware-${tag}"
+          repo="shopware/helm-charts"
+
+          git clone "https://oauth2:${GITHUB_TOKEN}@github.com/${repo}.git"
           rm -rf helm-charts/charts/shopware-operator
-          make helm version=${tag} path=helm-charts/charts/shopware-operator
+          make helm version="${tag}" path=helm-charts/charts/shopware-operator
+
           cd helm-charts
-          git config user.name "$GITHUB_ACTOR"
-          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-          git checkout -b "${branch}"
-          git add .
-          git commit -m "New shopware operator image"
-          git push origin "${branch}"
+          # Head of the default branch the new branch is cut from.
+          head_oid=$(git rev-parse HEAD)
+          git add -A
+
+          # Build the GraphQL fileChanges payload from the staged diff:
+          # additions carry base64 contents, deletions are path-only.
+          additions=$(git diff --cached --name-status --no-renames \
+            | awk -F'\t' '$1!="D"{print $2}' \
+            | while read -r f; do
+                jq -n --arg path "$f" --arg contents "$(base64 -w0 "$f")" \
+                  '{path:$path, contents:$contents}'
+              done | jq -s '.')
+          deletions=$(git diff --cached --name-status --no-renames \
+            | awk -F'\t' '$1=="D"{print $2}' \
+            | jq -R 'select(length>0) | {path:.}' | jq -s '.')
+
+          # Create the branch ref via the API.
+          gh api "repos/${repo}/git/refs" -f ref="refs/heads/${branch}" -f sha="${head_oid}"
+
+          # Create the commit via GraphQL. Commits made through the API with the
+          # octo-sts app token are signed by GitHub -> shows "Verified", authored
+          # by the octo-sts identity (drops the original author by design).
+          jq -n \
+            --arg repo "$repo" \
+            --arg branch "$branch" \
+            --arg oid "$head_oid" \
+            --arg headline "New shopware operator image ${tag}" \
+            --argjson additions "$additions" \
+            --argjson deletions "$deletions" \
+            '{
+              query: "mutation($input: CreateCommitOnBranchInput!){ createCommitOnBranch(input:$input){ commit{ oid url } } }",
+              variables: { input: {
+                branch: { repositoryNameWithOwner: $repo, branchName: $branch },
+                expectedHeadOid: $oid,
+                message: { headline: $headline },
+                fileChanges: { additions: $additions, deletions: $deletions }
+              }}
+            }' | gh api graphql --input -
+
           gh pr create \
+            --repo "$repo" \
             --title "Autorelease from shopware operator" \
             --body "Auto PR from shopware operator" \
-            --head ${branch} \
+            --head "${branch}" \
             --base main \
             --reviewer shopware/product-paas \
             --label autorelease
-          gh pr merge --merge --auto --delete-branch "${branch}"
-        env:
-          GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          gh pr merge --repo "$repo" --merge --auto --delete-branch "${branch}"
