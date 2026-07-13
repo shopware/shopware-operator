@@ -19,16 +19,20 @@ type NatsHandler struct {
 }
 
 type DatabaseConfig struct {
-	MysqlShellBinaryPath string `env:"MYSQL_SHELL_BINARY_PATH, default=/opt/mysqlsh/bin/mysqlsh"`
-	MysqlDumpBinaryPath  string `env:"MYSQL_DUMP_BINARY_PATH, default=mysqldump"`
-	Host                 string `env:"HOST"`
-	Port                 int32  `env:"PORT, default=3306"`
-	User                 string `env:"USER"`
-	Password             string `env:"PASSWORD"`
-	Database             string `env:"DATABASE"`
-	Version              string `env:"VERSION"`
-	Options              string `env:"OPTIONS"`
-	SSLMode              string `env:"SSL_MODE, default=disable"`
+	MysqlShellBinaryPath    string `env:"MYSQL_SHELL_BINARY_PATH, default=/opt/mysqlsh/bin/mysqlsh"`
+	MysqlDumpBinaryPath     string `env:"MYSQL_DUMP_BINARY_PATH, default=mysqldump"`
+	Host                    string `env:"HOST"`
+	Port                    int32  `env:"PORT, default=3306"`
+	User                    string `env:"USER"`
+	Password                string `env:"PASSWORD"`
+	Database                string `env:"DATABASE"`
+	Version                 string `env:"VERSION"`
+	Options                 string `env:"OPTIONS"`
+	SSLMode                 string `env:"SSL_MODE, default=disable"`
+	SSLCA                   string `env:"SSL_CA"`
+	SSLCert                 string `env:"SSL_CERT"`
+	SSLKey                  string `env:"SSL_KEY"`
+	SSLDontVerifyServerCert bool   `env:"SSL_DONT_VERIFY_SERVER_CERT, default=false"`
 }
 
 type S3Config struct {

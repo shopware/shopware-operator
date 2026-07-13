@@ -126,14 +126,19 @@ func NewMySQLShell(binaryPath string) MySQLShell {
 // }
 
 type DatabaseSpec struct {
-	Host     string
-	Password []byte
-	User     string
-	Port     int32
-	Name     string
-	Version  string
-	SSLMode  string
-	Options  string
+	Host                           string
+	Password                       []byte
+	User                           string
+	Port                           int32
+	Name                           string
+	Version                        string
+	SSLMode                        string
+	Options                        string
+	TLSCA                          []byte
+	TLSCert                        []byte
+	TLSKey                         []byte
+	TLSClientCertificate           bool
+	TLSDontVerifyServerCertificate bool
 }
 
 type DumpInput struct {
@@ -287,12 +292,20 @@ func (h MySQLShell) run(
 	}
 	uri := fmt.Sprintf("mysql://%s:%s@%s:%d/%s", db.User, string(db.Password), db.Host, port, db.Name)
 
+	args := []string{uri, "--js"}
+	if len(db.TLSCA) > 0 {
+		sslMode := "VERIFY_IDENTITY"
+		if db.TLSDontVerifyServerCertificate {
+			sslMode = "REQUIRED"
+		}
+		args = append(args, "--ssl-mode="+sslMode, "--ssl-ca="+string(db.TLSCA))
+		if db.TLSClientCertificate {
+			args = append(args, "--ssl-cert="+string(db.TLSCert), "--ssl-key="+string(db.TLSKey))
+		}
+	}
+
 	//nolint:gosec
-	cmd := exec.CommandContext(ctx,
-		binaryPath,
-		uri,
-		"--js",
-	)
+	cmd := exec.CommandContext(ctx, binaryPath, args...)
 
 	mysqlshHomeDir, err := os.MkdirTemp("", "mysqlsh-home-")
 	if err != nil {

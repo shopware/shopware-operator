@@ -97,7 +97,11 @@ func (r *StoreReconciler) findStoreForReconcile(
 
 	var requests []reconcile.Request
 	for _, store := range stores.Items {
+		if store.Namespace != secret.GetNamespace() {
+			continue
+		}
 		if store.Spec.Database.PasswordSecretRef.Name == secret.GetName() ||
+			store.Spec.Database.TLS.SecretName == secret.GetName() ||
 			store.Spec.OpensearchSpec.PasswordSecretRef.Name == secret.GetName() ||
 			store.Spec.ShopConfiguration.Fastly.TokenRef.Name == secret.GetName() {
 			logging.FromContext(ctx).
