@@ -14,7 +14,6 @@ func TestDatabaseConnectionStringTest(t *testing.T) {
 		Version:  "v2",
 		User:     "user",
 		Name:     "testName",
-		SSLMode:  "REQUIRED",
 		Options:  "tls-version=TLSv1.3&auth-method=AUTO",
 		Password: []byte("password"),
 	}

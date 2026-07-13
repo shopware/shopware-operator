@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/url"
 	"os/exec"
-	"strings"
 
 	"github.com/go-sql-driver/mysql"
 	v1 "github.com/shopware/shopware-operator/api/v1"
@@ -88,13 +87,12 @@ func GetDBSpec(ctx context.Context, store v1.Store, r client.Client) (*DatabaseS
 		Port:                           store.Spec.Database.Port,
 		Name:                           store.Spec.Database.Name,
 		Version:                        store.Spec.Database.Version,
-		SSLMode:                        store.Spec.Database.SSLMode,
 		Options:                        store.Spec.Database.Options,
 		TLSClientCertificate:           store.Spec.Database.TLS.ClientCertificate,
 		TLSDontVerifyServerCertificate: store.Spec.Database.TLS.DontVerifyServerCertificate,
 	}
 
-	tlsRequired := store.Spec.Database.TLS.SecretName != "" || strings.EqualFold(store.Spec.Database.SSLMode, "REQUIRED")
+	tlsRequired := store.Spec.Database.TLS.SecretName != "" || store.Spec.Database.RequiresTLSSecret()
 	if !tlsRequired {
 		return spec, nil
 	}

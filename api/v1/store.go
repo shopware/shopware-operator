@@ -2,6 +2,7 @@ package v1
 
 import (
 	"maps"
+	"strings"
 
 	autoscalerv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -437,6 +438,10 @@ type DatabaseTLS struct {
 	SecretName                  string `json:"secretName,omitempty"`
 	ClientCertificate           bool   `json:"clientCertificate,omitempty"`
 	DontVerifyServerCertificate bool   `json:"dontVerifyServerCertificate,omitempty"`
+}
+
+func (d DatabaseSpec) RequiresTLSSecret() bool {
+	return strings.EqualFold(d.SSLMode, "REQUIRED")
 }
 
 type SecretRef struct {

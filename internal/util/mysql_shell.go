@@ -132,7 +132,6 @@ type DatabaseSpec struct {
 	Port                           int32
 	Name                           string
 	Version                        string
-	SSLMode                        string
 	Options                        string
 	TLSCA                          []byte
 	TLSCert                        []byte

@@ -35,7 +35,6 @@ func createTestStore() *v1.Store {
 				Version: "8.0",
 				User:    "shopware",
 				Name:    "shopware",
-				SSLMode: "PREFERRED",
 				PasswordSecretRef: v1.SecretRef{
 					Name: "db-secret",
 					Key:  "password",
@@ -465,7 +464,6 @@ func TestGenerateStoreSecret(t *testing.T) {
 		Port:     3306,
 		Name:     "shopware",
 		Version:  "8.0",
-		SSLMode:  "PREFERRED",
 	}
 
 	secret := &corev1.Secret{
@@ -526,7 +524,6 @@ func TestGenerateStoreSecret_CustomAdminPassword(t *testing.T) {
 		Port:     3306,
 		Name:     "shopware",
 		Version:  "8.0",
-		SSLMode:  "PREFERRED",
 	}
 
 	secret := &corev1.Secret{
@@ -555,7 +552,6 @@ func TestGenerateStoreSecret_PreservesExistingSecrets(t *testing.T) {
 		Port:     3306,
 		Name:     "shopware",
 		Version:  "8.0",
-		SSLMode:  "PREFERRED",
 	}
 
 	secret := &corev1.Secret{
