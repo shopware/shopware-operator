@@ -275,25 +275,15 @@ func (s *SnapshotService) createDatabaseBackup(
 
 	logger.Info("Starting database backup")
 	targetDir := filepath.Join(snapshotCtx.TempArchiveDir, "database")
+	databaseSpec, err := databaseSpecFromConfig(cfg.Database)
+	if err != nil {
+		return err
+	}
 
 	dump := util.NewMySQLShell(cfg.Database.MysqlShellBinaryPath)
 	out, err := dump.Dump(ctx, util.DumpInput{
 		DumpFilePath: targetDir,
-		DatabaseSpec: util.DatabaseSpec{
-			Host:                           cfg.Database.Host,
-			Password:                       []byte(cfg.Database.Password),
-			User:                           cfg.Database.User,
-			Port:                           cfg.Database.Port,
-			Name:                           cfg.Database.Database,
-			Version:                        cfg.Database.Version,
-			SSLMode:                        cfg.Database.SSLMode,
-			Options:                        cfg.Database.Options,
-			TLSCA:                          []byte(cfg.Database.SSLCA),
-			TLSCert:                        []byte(cfg.Database.SSLCert),
-			TLSKey:                         []byte(cfg.Database.SSLKey),
-			TLSClientCertificate:           cfg.Database.SSLCert != "" || cfg.Database.SSLKey != "",
-			TLSDontVerifyServerCertificate: cfg.Database.SSLDontVerifyServerCert,
-		},
+		DatabaseSpec: databaseSpec,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to dump database: %w", err)
@@ -312,24 +302,14 @@ func (s *SnapshotService) restoreDatabaseBackup(
 
 	// Database dump should be extracted to database subdirectory
 	dumpFilePath := filepath.Join(snapshotCtx.TempArchiveDir, "database")
+	databaseSpec, err := databaseSpecFromConfig(cfg.Database)
+	if err != nil {
+		return err
+	}
 
 	shell := util.NewMySQLShell(cfg.Database.MysqlShellBinaryPath)
-	err := shell.RestoreDump(ctx, util.RestoreInput{
-		DatabaseSpec: util.DatabaseSpec{
-			Host:                           cfg.Database.Host,
-			Password:                       []byte(cfg.Database.Password),
-			User:                           cfg.Database.User,
-			Port:                           cfg.Database.Port,
-			Name:                           cfg.Database.Database,
-			Version:                        cfg.Database.Version,
-			SSLMode:                        cfg.Database.SSLMode,
-			Options:                        cfg.Database.Options,
-			TLSCA:                          []byte(cfg.Database.SSLCA),
-			TLSCert:                        []byte(cfg.Database.SSLCert),
-			TLSKey:                         []byte(cfg.Database.SSLKey),
-			TLSClientCertificate:           cfg.Database.SSLCert != "" || cfg.Database.SSLKey != "",
-			TLSDontVerifyServerCertificate: cfg.Database.SSLDontVerifyServerCert,
-		},
+	err = shell.RestoreDump(ctx, util.RestoreInput{
+		DatabaseSpec: databaseSpec,
 		DumpFilePath: dumpFilePath,
 	})
 	if err != nil {
@@ -338,6 +318,30 @@ func (s *SnapshotService) restoreDatabaseBackup(
 
 	logger.Info("Finished database restore")
 	return nil
+}
+
+func databaseSpecFromConfig(database config.DatabaseConfig) (util.DatabaseSpec, error) {
+	hasCertificate := database.SSLCert != ""
+	hasKey := database.SSLKey != ""
+	if hasCertificate != hasKey {
+		return util.DatabaseSpec{}, fmt.Errorf("database TLS client certificate and key must either both be set or both be empty")
+	}
+
+	return util.DatabaseSpec{
+		Host:                           database.Host,
+		Password:                       []byte(database.Password),
+		User:                           database.User,
+		Port:                           database.Port,
+		Name:                           database.Database,
+		Version:                        database.Version,
+		SSLMode:                        database.SSLMode,
+		Options:                        database.Options,
+		TLSCA:                          []byte(database.SSLCA),
+		TLSCert:                        []byte(database.SSLCert),
+		TLSKey:                         []byte(database.SSLKey),
+		TLSClientCertificate:           hasCertificate,
+		TLSDontVerifyServerCertificate: database.SSLDontVerifyServerCert,
+	}, nil
 }
 
 func (s *SnapshotService) restoreAssetBackup(

@@ -268,6 +268,10 @@ func (h MySQLShell) run(
 	db DatabaseSpec,
 	jsCmd []byte,
 ) ([]byte, error) {
+	if db.TLSClientCertificate && (len(db.TLSCert) == 0 || len(db.TLSKey) == 0) {
+		return nil, fmt.Errorf("database TLS client certificate and key are required when client certificate authentication is enabled")
+	}
+
 	var err error
 	var binaryPath string
 	if strings.Contains(h.binaryPath, "/") {
