@@ -123,8 +123,9 @@ type Configuration struct {
 }
 
 type FastlySpec struct {
-	TokenRef   SecretRef `json:"tokenRef,omitempty"`
-	ServiceRef SecretRef `json:"serviceRef,omitempty"`
+	DisableOnSetupMigration bool      `json:"disableOnSetupMigration,omitempty"`
+	TokenRef                SecretRef `json:"tokenRef,omitempty"`
+	ServiceRef              SecretRef `json:"serviceRef,omitempty"`
 }
 
 type Credentials struct {
