@@ -8,6 +8,39 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+const (
+	DatabaseTLSVolumeName = "shopware-database-tls"
+	DatabaseTLSMountPath  = "/etc/shopware/database-tls"
+	DatabaseTLSCAFile     = DatabaseTLSMountPath + "/ca.crt"
+	DatabaseTLSCertFile   = DatabaseTLSMountPath + "/tls.crt"
+	DatabaseTLSKeyFile    = DatabaseTLSMountPath + "/tls.key"
+)
+
+func (s Store) GetDatabaseTLSVolumes() []corev1.Volume {
+	if s.Spec.Database.TLS.SecretName == "" {
+		return nil
+	}
+
+	return []corev1.Volume{{
+		Name: DatabaseTLSVolumeName,
+		VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{
+			SecretName: s.Spec.Database.TLS.SecretName,
+		}},
+	}}
+}
+
+func (s Store) GetDatabaseTLSVolumeMounts() []corev1.VolumeMount {
+	if s.Spec.Database.TLS.SecretName == "" {
+		return nil
+	}
+
+	return []corev1.VolumeMount{{
+		Name:      DatabaseTLSVolumeName,
+		MountPath: DatabaseTLSMountPath,
+		ReadOnly:  true,
+	}}
+}
+
 // TODO: If building more than one instance print a warning for the cache to use
 // redis
 func (s *Store) getAppCache() []corev1.EnvVar {
@@ -530,6 +563,19 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 			Name:  "DATABASE_PERSISTENT_CONNECTION",
 			Value: "1",
 		},
+	}
+
+	if s.Spec.Database.TLS.SecretName != "" {
+		c = append(c, corev1.EnvVar{Name: "DATABASE_SSL_CA", Value: DatabaseTLSCAFile})
+		if s.Spec.Database.TLS.ClientCertificate {
+			c = append(c,
+				corev1.EnvVar{Name: "DATABASE_SSL_CERT", Value: DatabaseTLSCertFile},
+				corev1.EnvVar{Name: "DATABASE_SSL_KEY", Value: DatabaseTLSKeyFile},
+			)
+		}
+		if s.Spec.Database.TLS.DontVerifyServerCertificate {
+			c = append(c, corev1.EnvVar{Name: "DATABASE_SSL_DONT_VERIFY_SERVER_CERT", Value: "1"})
+		}
 	}
 
 	if s.Spec.ShopConfiguration.UsageDataConsent == "revoked" {

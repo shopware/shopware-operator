@@ -69,6 +69,8 @@ func GetWorkerDeploymentCondition(
 func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 	containerSpec := store.Spec.Container.DeepCopy()
 	containerSpec.Merge(store.Spec.WorkerDeploymentContainer)
+	containerSpec.Volumes = append(containerSpec.Volumes, store.GetDatabaseTLSVolumes()...)
+	containerSpec.VolumeMounts = append(containerSpec.VolumeMounts, store.GetDatabaseTLSVolumeMounts()...)
 
 	appName := "shopware-worker"
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.WorkerDeploymentContainer.Labels)

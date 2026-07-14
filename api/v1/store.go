@@ -2,6 +2,7 @@ package v1
 
 import (
 	"maps"
+	"strings"
 
 	autoscalerv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -416,14 +417,31 @@ type DatabaseSpec struct {
 	// +kubebuilder:default=shopware
 	Name string `json:"name"`
 
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:default=PREFERRED
+	// Deprecated: Shopware does not read sslMode from DATABASE_URL. Use tls instead.
+	// When set to REQUIRED, tls.secretName and its ca.crt key are required for compatibility.
+	// +kubebuilder:validation:deprecatedversion
 	SSLMode string `json:"sslMode,omitempty"`
+
+	TLS DatabaseTLS `json:"tls,omitempty"`
 
 	// +kubebuilder:example=?attribute1=value1&attribute2=value2...
 	Options string `json:"options,omitempty"`
 
 	PasswordSecretRef SecretRef `json:"passwordSecretRef"`
+}
+
+// DatabaseTLS configures file-based TLS settings understood by Shopware.
+// The referenced Secret must contain ca.crt, and tls.crt plus tls.key when
+// clientCertificate is enabled.
+type DatabaseTLS struct {
+	// +kubebuilder:validation:MinLength=1
+	SecretName                  string `json:"secretName,omitempty"`
+	ClientCertificate           bool   `json:"clientCertificate,omitempty"`
+	DontVerifyServerCertificate bool   `json:"dontVerifyServerCertificate,omitempty"`
+}
+
+func (d DatabaseSpec) RequiresTLSSecret() bool {
+	return strings.EqualFold(d.SSLMode, "REQUIRED")
 }
 
 type SecretRef struct {

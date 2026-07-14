@@ -112,6 +112,8 @@ func CommandJobName(exec v1.StoreExec) string {
 
 func getJobSpec(store v1.Store, ex v1.StoreExec, labels map[string]string) batchv1.JobSpec {
 	containerSpec := store.Spec.Container.DeepCopy()
+	containerSpec.Volumes = append(containerSpec.Volumes, store.GetDatabaseTLSVolumes()...)
+	containerSpec.VolumeMounts = append(containerSpec.VolumeMounts, store.GetDatabaseTLSVolumeMounts()...)
 	sharedProcessNamespace := true
 
 	envs := util.MergeEnv(store.GetEnv(), ex.Spec.ExtraEnvs)

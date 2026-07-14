@@ -31,6 +31,8 @@ func GetSetupJob(ctx context.Context, client client.Client, store v1.Store) (*ba
 func SetupJob(store v1.Store) *batchv1.Job {
 	containerSpec := store.Spec.Container.DeepCopy()
 	containerSpec.Merge(store.Spec.SetupJobContainer)
+	containerSpec.Volumes = append(containerSpec.Volumes, store.GetDatabaseTLSVolumes()...)
+	containerSpec.VolumeMounts = append(containerSpec.VolumeMounts, store.GetDatabaseTLSVolumeMounts()...)
 
 	sharedProcessNamespace := true
 	backoffLimit := int32(3)

@@ -84,6 +84,7 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 	}
 
 	vm := snapshot.Container.VolumeMounts
+	vm = append(vm, store.GetDatabaseTLSVolumeMounts()...)
 	if addDefaultTempDir {
 		vm = append(vm, corev1.VolumeMount{
 			Name:      "tempdir",
@@ -124,6 +125,7 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 	})
 
 	volumes := snapshot.Container.Volumes
+	volumes = append(volumes, store.GetDatabaseTLSVolumes()...)
 	if addDefaultTempDir {
 		volumes = append(volumes, corev1.Volume{
 			Name: "tempdir",

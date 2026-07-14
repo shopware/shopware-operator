@@ -70,6 +70,8 @@ func GetStorefrontDeploymentCondition(
 func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 	containerSpec := store.Spec.Container.DeepCopy()
 	containerSpec.Merge(store.Spec.StorefrontDeploymentContainer)
+	containerSpec.Volumes = append(containerSpec.Volumes, store.GetDatabaseTLSVolumes()...)
+	containerSpec.VolumeMounts = append(containerSpec.VolumeMounts, store.GetDatabaseTLSVolumeMounts()...)
 
 	// think of the debug container to when changing the deployment
 
