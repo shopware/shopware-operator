@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.3.0](https://github.com/shopware/shopware-operator/compare/1.2.0...v1.3.0) (2026-07-14)
+
+
+### Features
+
+* database tls support ([496afb3](https://github.com/shopware/shopware-operator/commit/496afb3f3f2364f0c990bfda993aceb0198973b4))
+* database tls support ([d812d2c](https://github.com/shopware/shopware-operator/commit/d812d2c11d5731ab2ecbb56d4b2262eefcd9cc55))
+
+
+### Bug Fixes
+
+* add crd check to also work without gateway api crds ([2ae5e49](https://github.com/shopware/shopware-operator/commit/2ae5e4970cfa35f426b4b1ef3a777d1be343e954))
+* deprecate SSLMode ([cde8086](https://github.com/shopware/shopware-operator/commit/cde8086be77728b0db599a26f0f6ecbaa92bc87e))
+* memory limit for worker and use 90% of the container mem ([6f72c87](https://github.com/shopware/shopware-operator/commit/6f72c87fdae037b35c1858ad31a4b69b4d47e4a5))
+* memory limit for worker and use 90% of the container mem ([59ce262](https://github.com/shopware/shopware-operator/commit/59ce262bd87a1ab5be2400fe5bf1d03fefe9205a))
+* remove gatewayapi need ([a50822f](https://github.com/shopware/shopware-operator/commit/a50822f01a0f7a26710cb2ca9db83a86900a736e))
+
 ## [1.2.0](https://github.com/shopware/shopware-operator/compare/v1.1.1...v1.2.0) (2026-06-09)
 
 
