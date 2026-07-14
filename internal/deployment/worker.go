@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"math"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
@@ -79,6 +80,18 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 
 	// Merge containerSpec.ExtraEnvs to override with merged values from WorkerDeploymentContainer
 	envs := util.MergeEnv(store.GetEnv(), containerSpec.ExtraEnvs)
+
+	// Set PHP_MEMORY_LIMIT to 90% of the container memory limit
+	if containerSpec.Resources.Limits.Memory() != nil && containerSpec.Resources.Limits.Memory().Value() != 0 {
+		memoryLimitMiB := containerSpec.Resources.Limits.Memory().Value() / (1024 * 1024)
+		phpMemoryLimitMiB := int(math.Floor(float64(memoryLimitMiB) * 0.9))
+		envs = util.MergeEnv(envs, []corev1.EnvVar{
+			{
+				Name:  "PHP_MEMORY_LIMIT",
+				Value: fmt.Sprintf("%dM", phpMemoryLimitMiB),
+			},
+		})
+	}
 
 	containers := append(util.DefaultContainerSecurityContexts(containerSpec.ExtraContainers), corev1.Container{
 		Name:            appName,
