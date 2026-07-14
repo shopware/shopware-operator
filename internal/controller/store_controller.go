@@ -25,6 +25,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	policy "k8s.io/api/policy/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -63,13 +64,24 @@ func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager, logger *zap.Sugared
 	if err != nil {
 		return err
 	}
-	return ctrl.NewControllerManagedBy(mgr).
+	controllerBuilder := ctrl.NewControllerManagedBy(mgr).
 		For(&v1.Store{}).
 		// We get triggered by every update on the created resources, this leads to high reconciles at the start.
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.Service{}).
-		Owns(&networkingv1.Ingress{}).
-		Owns(&gatewayv1.HTTPRoute{}).
+		Owns(&networkingv1.Ingress{})
+
+	_, err = mgr.GetRESTMapper().RESTMapping(
+		gatewayv1.SchemeGroupVersion.WithKind("HTTPRoute").GroupKind(),
+		gatewayv1.SchemeGroupVersion.Version,
+	)
+	if err == nil {
+		controllerBuilder = controllerBuilder.Owns(&gatewayv1.HTTPRoute{})
+	} else if !meta.IsNoMatchError(err) {
+		return fmt.Errorf("resolve HTTPRoute REST mapping: %w", err)
+	}
+
+	return controllerBuilder.
 		Owns(&policy.PodDisruptionBudget{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&batchv1.Job{}).
