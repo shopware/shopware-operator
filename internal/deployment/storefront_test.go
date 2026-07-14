@@ -168,10 +168,34 @@ func TestStorefrontDeployment(t *testing.T) {
 
 		result := deployment.StorefrontDeployment(store)
 
-		// Verify security context is overwritten
+		// Verify pod security context is overwritten.
 		assert.NotNil(t, result.Spec.Template.Spec.SecurityContext)
 		assert.Equal(t, int64(2000), *result.Spec.Template.Spec.SecurityContext.RunAsGroup)
 		assert.Nil(t, result.Spec.Template.Spec.SecurityContext.RunAsUser)
+	})
+
+	t.Run("test storefront container security context is restricted", func(t *testing.T) {
+		store := v1.Store{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-store",
+				Namespace: "test",
+			},
+			Spec: v1.StoreSpec{
+				Container: v1.ContainerSpec{
+					Image: "shopware:latest",
+				},
+				SecretName: "store-secret",
+			},
+		}
+
+		result := deployment.StorefrontDeployment(store)
+		container := result.Spec.Template.Spec.Containers[0]
+
+		assert.NotNil(t, container.SecurityContext)
+		assert.NotNil(t, container.SecurityContext.AllowPrivilegeEscalation)
+		assert.False(t, *container.SecurityContext.AllowPrivilegeEscalation)
+		assert.NotNil(t, container.SecurityContext.Capabilities)
+		assert.Equal(t, []corev1.Capability{"ALL"}, container.SecurityContext.Capabilities.Drop)
 	})
 
 	t.Run("test service account merge", func(t *testing.T) {

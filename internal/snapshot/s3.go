@@ -2,10 +2,13 @@ package snapshot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
 
 	"github.com/minio/minio-go/v7"
@@ -14,6 +17,9 @@ import (
 	"github.com/shopware/shopware-operator/internal/util"
 	"go.uber.org/zap"
 )
+
+// shared between private and public bucket, so that we can split the workers
+var totalDownloadWorkers = 2 * runtime.GOMAXPROCS(0)
 
 func (s *SnapshotService) RestoreBackup(
 	ctx context.Context, cfg *config.SnapshotConfig, snapshotCtx *SnapshotContext,
@@ -64,7 +70,12 @@ func (s *SnapshotService) RestoreBackup(
 	wg.Wait()
 	cancel()
 	close(errChan)
-	if err := <-errChan; err != nil {
+	// nolint: prealloc
+	var errs []error
+	for err := range errChan {
+		errs = append(errs, err)
+	}
+	if err := joinSnapshotErrors(errs); err != nil {
 		return fmt.Errorf("snapshot restore failed: %w", err)
 	}
 
@@ -78,9 +89,10 @@ func (s *SnapshotService) CreateBackup(
 	logger := logging.FromContext(ctx)
 	logger.Infow("Creating snapshot", zap.Any("snapshot", snapshotCtx))
 	cancelCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	var wg sync.WaitGroup
-	errChan := make(chan error)
+	errChan := make(chan error, 2)
 
 	if snapshotCtx.IncludeDB {
 		wg.Add(1)
@@ -90,7 +102,7 @@ func (s *SnapshotService) CreateBackup(
 			err := s.createDatabaseBackup(cancelCtx, cfg, snapshotCtx)
 			if err != nil {
 				cancel()
-				logger.Errorw("Failed to create database backup", zap.Error(err))
+				logger.Errorw("failed to create database backup", zap.Error(err))
 				errChan <- fmt.Errorf("failed to create database backup: %w", err)
 			}
 		}()
@@ -104,16 +116,21 @@ func (s *SnapshotService) CreateBackup(
 			err := s.createAssetBackup(cancelCtx, cfg, snapshotCtx)
 			if err != nil {
 				cancel()
-				logger.Errorw("Failed to create asset backup", zap.Error(err))
+				logger.Errorw("failed to create asset backup", zap.Error(err))
 				errChan <- fmt.Errorf("failed to create asset backup: %w", err)
 			}
 		}()
 	}
 
 	wg.Wait()
-	cancel()
 	close(errChan)
-	if err := <-errChan; err != nil {
+
+	// nolint: prealloc
+	var errs []error
+	for err := range errChan {
+		errs = append(errs, err)
+	}
+	if err := joinSnapshotErrors(errs); err != nil {
 		return fmt.Errorf("snapshot creation failed: %w", err)
 	}
 
@@ -132,7 +149,6 @@ func (s *SnapshotService) createAssetBackup(
 
 	var wg sync.WaitGroup
 	errChan := make(chan error, 2)
-	parallelDownloads := 30
 
 	cred, err := getAWSKeysWithAsumeRole(ctx, cfg.S3)
 	if err != nil {
@@ -152,89 +168,104 @@ func (s *SnapshotService) createAssetBackup(
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		var err error
-		logger.Info("Starting S3 private bucket read")
+		logger := logger.With(zap.String("bucket", "private"))
+		logger.Info("Starting S3 bucket read")
+
+		// make sure to create the directory for the private bucket backup, even if the bucket is empty
+		routeFilePath := filepath.Join(snapshotCtx.TempArchiveDir, "private")
+		if err := os.MkdirAll(routeFilePath, 0755); err != nil {
+			logger.Errorw("failed to create directory for bucket backup", zap.String("path", routeFilePath), zap.Error(err))
+			errChan <- fmt.Errorf("failed to create directory for private bucket backup: %w", err)
+			return
+		}
+
 		downloader := util.NewS3Downloader(minioClient, cfg.S3.PrivateBucket)
-		err = downloader.DownloadBucket(ctx, parallelDownloads, func(i minio.ObjectInfo, o *minio.Object) error {
-			var err error
-
-			file := filepath.Join(snapshotCtx.TempArchiveDir, "private", i.Key)
-			if err := os.MkdirAll(filepath.Dir(file), 0755); err != nil {
-				return fmt.Errorf("failed to create directory: %w", err)
-			}
-
-			f, err := os.Create(file)
-			if err != nil {
-				return fmt.Errorf("failed to create file: %w", err)
-			}
-			defer func() {
-				if err := f.Close(); err != nil {
-					logger.Warnw("failed to close private bucket file", zap.String("file", file), zap.Error(err))
-				}
-			}()
-
-			_, err = io.CopyBuffer(f, o, make([]byte, 1024*8))
-			if err != nil {
-				return fmt.Errorf("failed to copy object to file: %w", err)
-			}
-
-			return o.Close()
-		})
+		err := downloader.DownloadBucket(ctx,
+			totalDownloadWorkers/2,
+			processDownloadObject(routeFilePath, logger))
 		if err != nil {
-			logger.Errorw("Private bucket backup failed", zap.Error(err))
+			logger.Errorw("bucket backup failed", zap.Error(err))
 			errChan <- fmt.Errorf("private bucket backup: %w", err)
 		}
 
-		logger.Info("Done S3 private bucket read")
+		logger.Info("Done S3 bucket read")
 	}()
 
 	// Start loading public bucket
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		var err error
-		logger.Info("Starting S3 public bucket read")
+
+		logger := logger.With(zap.String("bucket", "public"))
+		logger.Info("Starting S3 bucket read")
+
+		// make sure to create the directory for the public bucket backup, even if the bucket is empty
+		rootDirPath := filepath.Join(snapshotCtx.TempArchiveDir, "public")
+		if err := os.MkdirAll(rootDirPath, 0755); err != nil {
+			logger.Errorw("failed to create directory for bucket backup", zap.String("path", rootDirPath), zap.Error(err))
+			errChan <- fmt.Errorf("failed to create directory for public bucket backup: %w", err)
+			return
+		}
+
 		downloader := util.NewS3Downloader(minioClient, cfg.S3.PublicBucket)
-		err = downloader.DownloadBucket(ctx, parallelDownloads, func(i minio.ObjectInfo, o *minio.Object) error {
-			var err error
-
-			file := filepath.Join(snapshotCtx.TempArchiveDir, "public", i.Key)
-			if err := os.MkdirAll(filepath.Dir(file), 0755); err != nil {
-				return fmt.Errorf("failed to create directory: %w", err)
-			}
-
-			f, err := os.Create(file)
-			if err != nil {
-				return fmt.Errorf("failed to create file: %w", err)
-			}
-			defer func() {
-				if err := f.Close(); err != nil {
-					logger.Warnw("failed to close public bucket file", zap.String("file", file), zap.Error(err))
-				}
-			}()
-
-			_, err = io.CopyBuffer(f, o, make([]byte, 1024*8))
-			if err != nil {
-				return fmt.Errorf("failed to copy object to file: %w", err)
-			}
-			return o.Close()
-		})
+		err := downloader.DownloadBucket(ctx,
+			totalDownloadWorkers/2,
+			processDownloadObject(rootDirPath, logger))
 		if err != nil {
-			logger.Errorw("Public bucket backup failed", zap.Error(err))
+			logger.Errorw("bucket backup failed", zap.Error(err))
 			errChan <- fmt.Errorf("public bucket backup: %w", err)
 		}
 
-		logger.Info("Done S3 public bucket read")
+		logger.Info("Done S3 bucket read")
 	}()
 
 	wg.Wait()
 	close(errChan)
 
-	if err, ok := <-errChan; ok {
-		return fmt.Errorf("snapshot creation failed errChan: %w", err)
+	// nolint: prealloc
+	var errs []error
+	for err := range errChan {
+		logger.Errorw("snapshot creation failed", zap.Error(err))
+		errs = append(errs, err)
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("snapshot creation failed: %w", errors.Join(errs...))
 	}
 
 	return nil
+}
+
+func processDownloadObject(archiveDirPath string, logger *zap.SugaredLogger) func(i minio.ObjectInfo, o *minio.Object) error {
+	return func(i minio.ObjectInfo, o *minio.Object) error {
+		//nolint: errcheck
+		defer o.Close()
+
+		file := filepath.Join(archiveDirPath, i.Key)
+		if err := os.MkdirAll(filepath.Dir(file), 0755); err != nil {
+			return fmt.Errorf("failed to create directory: %w", err)
+		}
+
+		if strings.HasSuffix(i.Key, "/") && i.Size == 0 {
+			return nil
+		}
+
+		f, err := os.Create(file)
+		if err != nil {
+			return fmt.Errorf("failed to create file: %w", err)
+		}
+		defer func() {
+			if err := f.Close(); err != nil {
+				logger.Warnw("failed to close bucket file", zap.String("file", file), zap.Error(err))
+			}
+		}()
+
+		_, err = io.CopyBuffer(f, o, make([]byte, 1024*8))
+		if err != nil {
+			return fmt.Errorf("failed to copy object to file: %w", err)
+		}
+
+		return nil
+	}
 }
 
 func (s *SnapshotService) createDatabaseBackup(
@@ -315,13 +346,14 @@ func (s *SnapshotService) restoreAssetBackup(
 	return nil
 }
 
-func (s *SnapshotService) uploadToS3(ctx context.Context, cfg *config.SnapshotConfig, s3Url string, contentType string, reader io.ReadCloser) error {
+func (s *SnapshotService) uploadToS3(ctx context.Context, cfg *config.SnapshotConfig, snapshotCtx *SnapshotContext, contentType string, reader io.ReadCloser) error {
 	defer func() {
 		if err := reader.Close(); err != nil {
 			logging.FromContext(ctx).Warnw("failed to close S3 upload reader", zap.Error(err))
 		}
 	}()
-	bucket, objectFile, err := parseS3URL(s3Url)
+
+	bucket, objectFile, err := parseS3URL(snapshotCtx.BackupFile)
 	if err != nil {
 		return fmt.Errorf("failed to parse S3 URL: %w", err)
 	}
@@ -341,12 +373,17 @@ func (s *SnapshotService) uploadToS3(ctx context.Context, cfg *config.SnapshotCo
 		return fmt.Errorf("failed to create minio client: %w", err)
 	}
 
+	userTags := map[string]string{
+		"object-type": "store-snapshot-backup",
+	}
+	for k, v := range snapshotCtx.Labels {
+		userTags[k] = v
+	}
+
 	_, err = minioClient.PutObject(ctx, bucket, objectFile, reader, -1,
 		minio.PutObjectOptions{
 			ContentType: contentType,
-			UserTags: map[string]string{
-				"object-type": "store-snapshot-backup",
-			},
+			UserTags:    userTags,
 		})
 	if err != nil {
 		return fmt.Errorf("failed to upload to s3: %w", err)

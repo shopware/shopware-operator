@@ -36,7 +36,7 @@ func SetupJob(store v1.Store) *batchv1.Job {
 	backoffLimit := int32(3)
 
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.MigrationJobContainer.Labels)
-	labels["shop.shopware.com/store.type"] = "setup"
+	labels[util.ShopwareKey("store.type")] = "setup"
 
 	// Use util function for annotations
 	annotations := util.GetDefaultContainerAnnotations(CONTAINER_NAME_SETUP_JOB, store, store.Spec.SetupJobContainer.Annotations)
@@ -62,11 +62,12 @@ func SetupJob(store v1.Store) *batchv1.Job {
 	// Merge containerSpec.ExtraEnvs to override with merged values from SetupJobContainer
 	envs = util.MergeEnv(envs, containerSpec.ExtraEnvs)
 
-	containers := append(containerSpec.ExtraContainers, corev1.Container{
+	containers := append(util.DefaultContainerSecurityContexts(containerSpec.ExtraContainers), corev1.Container{
 		Name:            CONTAINER_NAME_SETUP_JOB,
 		VolumeMounts:    containerSpec.VolumeMounts,
 		ImagePullPolicy: containerSpec.ImagePullPolicy,
 		Image:           containerSpec.Image,
+		SecurityContext: util.RestrictedContainerSecurityContext(),
 		Command:         []string{"sh", "-c"},
 		Args:            []string{store.Spec.SetupScript},
 		Env:             envs,
@@ -99,10 +100,11 @@ func SetupJob(store v1.Store) *batchv1.Job {
 					TopologySpreadConstraints:     containerSpec.TopologySpreadConstraints,
 					NodeSelector:                  containerSpec.NodeSelector,
 					ImagePullSecrets:              containerSpec.ImagePullSecrets,
+					EnableServiceLinks:            containerSpec.EnableServiceLinks,
 					RestartPolicy:                 "Never",
 					Containers:                    containers,
-					SecurityContext:               containerSpec.SecurityContext,
-					InitContainers:                containerSpec.InitContainers,
+					SecurityContext:               util.DefaultPodSecurityContext(containerSpec.SecurityContext),
+					InitContainers:                util.DefaultContainerSecurityContexts(containerSpec.InitContainers),
 				},
 			},
 		},

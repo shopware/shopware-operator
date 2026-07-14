@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/sethvargo/go-envconfig"
 )
@@ -41,6 +42,7 @@ type S3Config struct {
 	Endpoint        string `env:"ENDPOINT, default=s3.eu-central-1.amazonaws.com"`
 	AccessKeyID     string `env:"ACCESS_KEY_ID"`
 	SecretAccessKey string `env:"SECRET_ACCESS_KEY"`
+	SessionToken    string `env:"SESSION_TOKEN"`
 
 	PrivateBucket string `env:"PRIVATE_BUCKET"`
 	PublicBucket  string `env:"PUBLIC_BUCKET"`
@@ -64,6 +66,8 @@ type StoreConfig struct {
 	EnableLeaderElection bool   `env:"LEADER_ELECT, default=true"`
 	DisableChecks        bool   `env:"DISABLE_CHECKS, default=false"`
 	Namespace            string `env:"NAMESPACE, default=default"`
+
+	SuccessfulCRCleanupGracePeriod time.Duration `env:"SUCCESSFUL_CR_CLEANUP_GRACE_PERIOD, default=1h"`
 }
 
 type Config struct {

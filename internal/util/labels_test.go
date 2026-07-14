@@ -34,5 +34,5 @@ func TestLabelMerge(t *testing.T) {
 	require.Equal(t, "selector", labels["app"])
 	require.Equal(t, "overwrite", labels["test"])
 	require.Equal(t, "test2", labels["test2"])
-	require.Equal(t, "name", labels["shop.shopware.com/store.name"])
+	require.Equal(t, "name", labels[util.ShopwareKey("store.name")])
 }

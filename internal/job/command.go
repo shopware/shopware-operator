@@ -50,8 +50,7 @@ func GetCommandCronJob(
 }
 
 func CommandCronJob(store v1.Store, ex v1.StoreExec) *batchv1.CronJob {
-	labels := util.GetDefaultStoreExecLabels(store, ex)
-	labels["shop.shopware.com/storeexec.type"] = "command"
+	labels := util.GetDefaultStoreExecLabels(store, ex.Labels, ex.Name, "cron_command")
 	annotations := util.GetDefaultContainerExecAnnotations(CONTAINER_NAME_COMMAND, ex)
 
 	job := &batchv1.CronJob{
@@ -87,8 +86,7 @@ func CommandJob(store v1.Store, ex v1.StoreExec) *batchv1.Job {
 	// Copy container spec from store to exec
 	store.Spec.Container.DeepCopyInto(&ex.Spec.Container)
 
-	labels := util.GetDefaultStoreExecLabels(store, ex)
-	labels["shop.shopware.com/storeexec.type"] = "cron_command"
+	labels := util.GetDefaultStoreExecLabels(store, ex.Labels, ex.Name, "command")
 	annotations := util.GetDefaultContainerExecAnnotations(CONTAINER_NAME_COMMAND, ex)
 
 	job := &batchv1.Job{
@@ -118,11 +116,12 @@ func getJobSpec(store v1.Store, ex v1.StoreExec, labels map[string]string) batch
 
 	envs := util.MergeEnv(store.GetEnv(), ex.Spec.ExtraEnvs)
 
-	containers := append(containerSpec.ExtraContainers, corev1.Container{
+	containers := append(util.DefaultContainerSecurityContexts(containerSpec.ExtraContainers), corev1.Container{
 		Name:            CONTAINER_NAME_COMMAND,
 		VolumeMounts:    containerSpec.VolumeMounts,
 		ImagePullPolicy: containerSpec.ImagePullPolicy,
 		Image:           containerSpec.Image,
+		SecurityContext: util.RestrictedContainerSecurityContext(),
 		Command:         []string{"sh", "-c"},
 		Args:            []string{ex.Spec.Script},
 		Env:             envs,
@@ -153,10 +152,11 @@ func getJobSpec(store v1.Store, ex v1.StoreExec, labels map[string]string) batch
 				TerminationGracePeriodSeconds: &containerSpec.TerminationGracePeriodSeconds,
 				NodeSelector:                  containerSpec.NodeSelector,
 				ImagePullSecrets:              containerSpec.ImagePullSecrets,
+				EnableServiceLinks:            containerSpec.EnableServiceLinks,
 				RestartPolicy:                 "Never",
 				Containers:                    containers,
-				SecurityContext:               containerSpec.SecurityContext,
-				InitContainers:                containerSpec.InitContainers,
+				SecurityContext:               util.DefaultPodSecurityContext(containerSpec.SecurityContext),
+				InitContainers:                util.DefaultContainerSecurityContexts(containerSpec.InitContainers),
 			},
 		},
 	}

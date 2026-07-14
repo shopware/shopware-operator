@@ -1,11 +1,12 @@
 # The name of this file is used in the helm charts repo for octo-sts.
 # Please keep that in mind if you want to rename this file.
-name: Release Tag version
+name: Release version
 
 on:
+  workflow_dispatch:
   push:
-    tags:
-      - "*.*.*"
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -14,56 +15,51 @@ permissions:
   id-token: write
   packages: write
 
-env:
-  REGISTRY: ghcr.io
-
 jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release-created: ${{ steps.release.outputs.release_created }}
+      version: ${{ steps.release.outputs.version }}
+      changelog: ${{ steps.release.outputs.body }}
+    steps:
+      - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
+        id: release
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
   goreleaser:
-    runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=8
+    runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=4
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release-created == 'true' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version: stable
-          cache: true
-
-      - name: Cache Go build cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-build-
+          go-version-file: go.mod
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
         with:
           driver-opts: |
-            image=moby/buildkit:v0.12.5
+            image=moby/buildkit:v0.12.5@sha256:449188623c7a8a3bd4f161c5d0ddf5cabbfb828f7eaadf9ed8111864b911a308
             network=host
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create resources for release
-        run: |
-          make resources path=release
-          make licenses path=release
-
       - name: Run goreleaser on release branch
         id: goreleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
         with:
           distribution: goreleaser
           version: "~> v2"
@@ -72,49 +68,95 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update release with kube generated files
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.ref_name }}
+          tag: ${{ needs.release-please.outputs.version }}
           overwrite: true
           file_glob: true
           file: release/*
 
   release-helm-chart:
     runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=1
-    needs: [goreleaser]
+    needs: [release-please, goreleaser]
+    if: ${{ needs.release-please.outputs.release-created == 'true' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: stable
-          cache: true
+          go-version-file: go.mod
 
-      - uses: octo-sts/action@v1.0.0
+      - uses: octo-sts/action@6177b4481c00308b3839969c3eca88c96a91775f # v1.0.0
         id: octo-sts
         with:
           scope: shopware/helm-charts
           identity: shopware-operator
 
       - name: make pr on helm-charts for this release
-        run: |
-          make manifests
-          tag=${{ github.ref_name }}
-          git clone https://oauth2:${GITHUB_TOKEN}@github.com/shopware/helm-charts.git
-          rm -rf helm-charts/charts/shopware-operator
-          make helm version=${tag} path=helm-charts/charts/shopware-operator
-          cd helm-charts
-          git config user.name "$GITHUB_ACTOR"
-          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-          git checkout -b auto-release-${tag}
-          git add .
-          git commit -m "New shopware operator image"
-          git push origin auto-release-${tag}
-          gh pr create --title "Autorelease from shopware operator" --body "Auto pr from shopware operator" --head "auto-release-${tag}" --base main --reviewer shopware/product-paas --label autorelease
         env:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
+        run: |
+          set -euo pipefail
+          make manifests
+          tag=${{ needs.release-please.outputs.version }}
+          branch="auto-release-shopware-${tag}"
+          repo="shopware/helm-charts"
+
+          git clone "https://oauth2:${GITHUB_TOKEN}@github.com/${repo}.git"
+          rm -rf helm-charts/charts/shopware-operator
+          make helm version="${tag}" path=helm-charts/charts/shopware-operator
+
+          cd helm-charts
+          # Head of the default branch the new branch is cut from.
+          head_oid=$(git rev-parse HEAD)
+          git add -A
+
+          # Build the GraphQL fileChanges payload from the staged diff:
+          # additions carry base64 contents, deletions are path-only.
+          additions=$(git diff --cached --name-status --no-renames \
+            | awk -F'\t' '$1!="D"{print $2}' \
+            | while read -r f; do
+                jq -n --arg path "$f" --arg contents "$(base64 -w0 "$f")" \
+                  '{path:$path, contents:$contents}'
+              done | jq -s '.')
+          deletions=$(git diff --cached --name-status --no-renames \
+            | awk -F'\t' '$1=="D"{print $2}' \
+            | jq -R 'select(length>0) | {path:.}' | jq -s '.')
+
+          # Create the branch ref via the API.
+          gh api "repos/${repo}/git/refs" -f ref="refs/heads/${branch}" -f sha="${head_oid}"
+
+          # Create the commit via GraphQL. Commits made through the API with the
+          # octo-sts app token are signed by GitHub -> shows "Verified", authored
+          # by the octo-sts identity (drops the original author by design).
+          jq -n \
+            --arg repo "$repo" \
+            --arg branch "$branch" \
+            --arg oid "$head_oid" \
+            --arg headline "New shopware operator image ${tag}" \
+            --argjson additions "$additions" \
+            --argjson deletions "$deletions" \
+            '{
+              query: "mutation($input: CreateCommitOnBranchInput!){ createCommitOnBranch(input:$input){ commit{ oid url } } }",
+              variables: { input: {
+                branch: { repositoryNameWithOwner: $repo, branchName: $branch },
+                expectedHeadOid: $oid,
+                message: { headline: $headline },
+                fileChanges: { additions: $additions, deletions: $deletions }
+              }}
+            }' | gh api graphql --input -
+
+          gh pr create \
+            --repo "$repo" \
+            --title "Autorelease from shopware operator" \
+            --body "Auto PR from shopware operator" \
+            --head "${branch}" \
+            --base main \
+            --reviewer shopware/product-paas \
+            --label autorelease
+          gh pr merge --repo "$repo" --merge --auto --delete-branch "${branch}"

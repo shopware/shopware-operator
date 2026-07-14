@@ -3,6 +3,7 @@ package cronjob
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
@@ -46,15 +47,24 @@ func ScheduledTaskJob(store v1.Store) *batchv1.CronJob {
 	}
 
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.SetupJobContainer.Labels)
-	labels["shop.shopware.com/store.type"] = "scheduled-task"
+	labels[util.ShopwareKey("store.type")] = "scheduled-task"
+
+	// Hack: The current size of the CRD is at the limit.
+	// The clean way would be to have ScheduledTaskContainer ContainerMergeSpec `json:"scheduledTaskContainer,omitempty"`
+	// in the CRD and merge it like the SetupJobContainer but then the CRD is too big for ETCD
+	// This will be removed once the CRD definition is refactored to consume less space
+	if store.Spec.ScheduledTaskLabels != nil {
+		maps.Copy(labels, store.Spec.ScheduledTaskLabels)
+	}
 
 	annotations := util.GetDefaultContainerAnnotations(CONTAINER_NAME_SCHEDULED_JOB, store, store.Spec.SetupJobContainer.Annotations)
 
-	containers := append(store.Spec.Container.ExtraContainers, corev1.Container{
+	containers := append(util.DefaultContainerSecurityContexts(store.Spec.Container.ExtraContainers), corev1.Container{
 		Name:            CONTAINER_NAME_SCHEDULED_JOB,
 		VolumeMounts:    store.Spec.Container.VolumeMounts,
 		ImagePullPolicy: store.Spec.Container.ImagePullPolicy,
 		Image:           store.Spec.Container.Image,
+		SecurityContext: util.RestrictedContainerSecurityContext(),
 		Command:         []string{"sh", "-c"},
 		Args:            []string{store.Spec.ScheduledTask.Command},
 		Env:             store.GetEnv(),
@@ -99,11 +109,12 @@ func ScheduledTaskJob(store v1.Store) *batchv1.CronJob {
 							TopologySpreadConstraints:     store.Spec.Container.TopologySpreadConstraints,
 							NodeSelector:                  store.Spec.Container.NodeSelector,
 							ImagePullSecrets:              store.Spec.Container.ImagePullSecrets,
+							EnableServiceLinks:            store.Spec.Container.EnableServiceLinks,
 							RestartPolicy:                 "Never",
 							Containers:                    containers,
-							SecurityContext:               store.Spec.Container.SecurityContext,
+							SecurityContext:               util.DefaultPodSecurityContext(store.Spec.Container.SecurityContext),
 							ServiceAccountName:            sa,
-							InitContainers:                store.Spec.Container.InitContainers,
+							InitContainers:                util.DefaultContainerSecurityContexts(store.Spec.Container.InitContainers),
 						},
 					},
 				},

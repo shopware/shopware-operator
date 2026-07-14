@@ -20,9 +20,10 @@ import (
 
 type StoreExecReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
-	Logger   *zap.SugaredLogger
+	Scheme             *runtime.Scheme
+	Recorder           record.EventRecorder
+	Logger             *zap.SugaredLogger
+	CleanupGracePeriod time.Duration
 }
 
 // +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storeexecs,verbs=get;list;watch;create;update;patch;delete
@@ -42,7 +43,11 @@ func (r *StoreExecReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	var ex *v1.StoreExec
 	var store *v1.Store
+	var skipStatusUpdate bool
 	defer func() {
+		if skipStatusUpdate {
+			return
+		}
 		if err := r.reconcileCRStatus(ctx, store, ex, err); err != nil {
 			log.Errorw("failed to update status", zap.Error(err))
 		}
@@ -55,6 +60,16 @@ func (r *StoreExecReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		log.Errorw("get CR exec", zap.Error(err))
 		return rr, nil
+	}
+
+	if result, handled, cleanupErr := r.reconcileSuccessfulStoreExecCleanup(ctx, ex); handled || cleanupErr != nil {
+		if cleanupErr != nil {
+			log.Errorw("failed to cleanup successful store-exec", zap.Error(cleanupErr))
+			skipStatusUpdate = true
+			return rr, nil
+		}
+		skipStatusUpdate = true
+		return result, nil
 	}
 
 	store, err = k8s.GetStore(ctx, r.Client, types.NamespacedName{
@@ -129,6 +144,49 @@ func (r *StoreExecReconciler) reconcileJob(ctx context.Context, store *v1.Store,
 	}
 
 	return nil
+}
+
+func (r *StoreExecReconciler) reconcileSuccessfulStoreExecCleanup(
+	ctx context.Context,
+	ex *v1.StoreExec,
+) (ctrl.Result, bool, error) {
+	if r.CleanupGracePeriod <= 0 ||
+		ex.DeletionTimestamp != nil ||
+		ex.Spec.CronSchedule != "" ||
+		!ex.IsState(v1.ExecStateDone) {
+		return ctrl.Result{}, false, nil
+	}
+
+	deleteAfter := storeExecFinishedAt(ex).Add(r.CleanupGracePeriod)
+	if remaining := time.Until(deleteAfter); remaining > 0 {
+		return ctrl.Result{RequeueAfter: remaining}, true, nil
+	}
+
+	if err := r.Delete(ctx, ex); err != nil && !k8serrors.IsNotFound(err) {
+		return ctrl.Result{}, false, fmt.Errorf("delete successful StoreExec: %w", err)
+	}
+
+	return ctrl.Result{Requeue: false}, true, nil
+}
+
+func storeExecFinishedAt(ex *v1.StoreExec) time.Time {
+	for i := len(ex.Status.Conditions) - 1; i >= 0; i-- {
+		if !ex.Status.Conditions[i].LastTransitionTime.IsZero() {
+			return ex.Status.Conditions[i].LastTransitionTime.Time
+		}
+	}
+
+	for i := len(ex.Status.Conditions) - 1; i >= 0; i-- {
+		if !ex.Status.Conditions[i].LastUpdateTime.IsZero() {
+			return ex.Status.Conditions[i].LastUpdateTime.Time
+		}
+	}
+
+	if !ex.CreationTimestamp.IsZero() {
+		return ex.CreationTimestamp.Time
+	}
+
+	return time.Now()
 }
 
 func (r *StoreExecReconciler) reconcileCronJob(ctx context.Context, store *v1.Store, exec *v1.StoreExec) (err error) {

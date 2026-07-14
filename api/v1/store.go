@@ -71,6 +71,10 @@ type StoreSpec struct {
 	// +kubebuilder:default=false
 	DisableS3Check bool `json:"disableS3Check,omitempty"`
 	// +kubebuilder:default=false
+	DisableFastlyCheck bool `json:"disableFastlyCheck,omitempty"`
+	// +kubebuilder:default=false
+	DisableOpensearchCheck bool `json:"disableOpensearchCheck,omitempty"`
+	// +kubebuilder:default=false
 	DisableDatabaseCheck bool `json:"disableDatabaseCheck,omitempty"`
 	DisableJobDeletion   bool `json:"disableJobDeletion,omitempty"`
 
@@ -101,6 +105,8 @@ type StoreSpec struct {
 
 	// +kubebuilder:default={timeZone: "Etc/UTC", schedule: "0 * * * *", command: "bin/console scheduled-task:run -v -n --no-wait"}
 	ScheduledTask ScheduledTaskSpec `json:"scheduledTask,omitempty"`
+
+	ScheduledTaskLabels map[string]string `json:"scheduledTaskLabels,omitempty"`
 }
 
 func init() {
@@ -190,6 +196,9 @@ type NetworkSpec struct {
 	// +kubebuilder:default=false
 	EnabledIngress bool `json:"enabledIngress"`
 
+	// +kubebuilder:default=false
+	EnabledGateway bool `json:"enabledGateway"`
+
 	// +kubebuilder:validation:deprecatedversion
 	Host string `json:"host,omitempty"`
 
@@ -200,9 +209,22 @@ type NetworkSpec struct {
 	// +kubebuilder:default=8000
 	Port int32 `json:"port,omitempty"`
 
-	IngressClassName string            `json:"ingressClassName,omitempty"`
-	Annotations      map[string]string `json:"annotations,omitempty"`
-	Labels           map[string]string `json:"labels,omitempty"`
+	// +kubebuilder:description="Only for Ingress, but use ingressAnnotations to set annotations"
+	// +kubebuilder:validation:deprecatedversion
+	Annotations map[string]string `json:"annotations,omitempty"`
+	// +kubebuilder:description="Only for Ingress, but use ingressLabels to set labels"
+	// +kubebuilder:validation:deprecatedversion
+	Labels map[string]string `json:"labels,omitempty"`
+
+	IngressClassName   string            `json:"ingressClassName,omitempty"`
+	IngressAnnotations map[string]string `json:"ingressAnnotations,omitempty"`
+	IngressLabels      map[string]string `json:"ingressLabels,omitempty"`
+
+	GatewayName        string            `json:"gatewayName,omitempty"`
+	GatewayNamespace   string            `json:"gatewayNamespace,omitempty"`
+	GatewaySectionName string            `json:"gatewaySectionName,omitempty"`
+	GatewayAnnotations map[string]string `json:"gatewayAnnotations,omitempty"`
+	GatewayLabels      map[string]string `json:"gatewayLabels,omitempty"`
 
 	// +kubebuilder:default=store-tls
 	TLSSecretName string `json:"tlsSecretName,omitempty"`
@@ -222,9 +244,11 @@ type ContainerSpec struct {
 	VolumeMounts     []corev1.VolumeMount          `json:"volumeMounts,omitempty"`
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 	RestartPolicy    corev1.RestartPolicy          `json:"restartPolicy,omitempty"`
-	SecurityContext  *corev1.PodSecurityContext    `json:"podSecurityContext,omitempty"`
-	ExtraContainers  []corev1.Container            `json:"extraContainers,omitempty"`
-	InitContainers   []corev1.Container            `json:"initContainers,omitempty"`
+
+	// +kubebuilder:default={"fsGroup":82,"runAsGroup":82,"runAsNonRoot":true,"runAsUser":82,"seccompProfile":{"type":"RuntimeDefault"}}
+	SecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+	ExtraContainers []corev1.Container         `json:"extraContainers,omitempty"`
+	InitContainers  []corev1.Container         `json:"initContainers,omitempty"`
 
 	// +kubebuilder:default=2
 	Replicas int32 `json:"replicas,omitempty"`
@@ -254,6 +278,8 @@ type ContainerSpec struct {
 	// RuntimeClassName              *string             `json:"runtimeClassName,omitempty"`
 
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+	// +kubebuilder:default=false
+	EnableServiceLinks *bool `json:"enableServiceLinks,omitempty"`
 
 	// Configuration string `json:"configuration,omitempty"`
 	ExtraEnvs []corev1.EnvVar `json:"extraEnvs,omitempty"`
@@ -284,6 +310,7 @@ type ContainerMergeSpec struct {
 	Resources          corev1.ResourceRequirements `json:"resources,omitempty"`
 	ExtraEnvs          []corev1.EnvVar             `json:"extraEnvs,omitempty"`
 	ServiceAccountName string                      `json:"serviceAccountName,omitempty"`
+	EnableServiceLinks *bool                       `json:"enableServiceLinks,omitempty"`
 }
 
 type SessionCacheSpec struct {
@@ -309,6 +336,7 @@ type AppCacheSpec struct {
 }
 
 type RedisSpec struct {
+	RedisDSN  string `json:"redisDsn,omitempty"`
 	RedisHost string `json:"redisHost,omitempty"`
 	// +kubebuilder:default=6379
 	RedisPort int `json:"redisPort,omitempty"`
@@ -317,7 +345,7 @@ type RedisSpec struct {
 }
 
 type FPMSpec struct {
-	// +kubebuilder:validation:Enum=static;dynamic;ondemand
+	// +kubebuilder:validation:Enum=static;dynamic;ondemand;operator
 	// +kubebuilder:default=static
 	ProcessManagement string `json:"processManagement"`
 
@@ -441,6 +469,9 @@ func (c *ContainerSpec) Merge(from ContainerMergeSpec) {
 
 	if from.ServiceAccountName != "" {
 		c.ServiceAccountName = from.ServiceAccountName
+	}
+	if from.EnableServiceLinks != nil {
+		c.EnableServiceLinks = from.EnableServiceLinks
 	}
 
 	// Initialize resources maps if nil

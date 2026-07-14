@@ -1,0 +1,10 @@
+apiVersion: shop.shopware.com/v1
+kind: StoreDebugInstance
+metadata:
+  name: debug
+spec:
+  duration: 1h
+  storeRef: test
+  ignoreStoreStatus: true
+  
+

@@ -59,9 +59,8 @@ func GetStorefrontDeploymentCondition(
 			return v1.DeploymentCondition{
 				State:          v1.DeploymentStateError,
 				LastUpdateTime: metav1.Now(),
-				//nolint:staticcheck
-				Message: fmt.Errorf("Error on client get: %w", err).Error(),
-				Ready:   "0/0",
+				Message:        fmt.Sprintf("error on client get: %s", err),
+				Ready:          "0/0",
 			}
 		}
 	}
@@ -80,10 +79,19 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 
 	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.StorefrontDeploymentContainer.Annotations)
 
-	// Merge containerSpec.ExtraEnvs to override with merged values from StorefrontDeploymentContainer
 	envs := util.MergeEnv(store.GetEnv(), containerSpec.ExtraEnvs)
+	if store.Spec.FPM.ProcessManagement == "operator" {
+		if containerSpec.Resources.Limits.Memory() != nil && containerSpec.Resources.Limits.Memory().Value() != 0 {
+			phpEnvs := GetCalculatedPHPFPMValues(int(containerSpec.Resources.Limits.Memory().Value() / (1024 * 1024)))
+			envs = util.MergeEnv(envs, phpEnvs)
+		} else {
+			phpEnvs := GetCalculatedPHPFPMValues(2048)
+			envs = util.MergeEnv(envs, phpEnvs)
+			fmt.Println("envs: ", phpEnvs)
+		}
+	}
 
-	containers := append(containerSpec.ExtraContainers, corev1.Container{
+	containers := append(util.DefaultContainerSecurityContexts(containerSpec.ExtraContainers), corev1.Container{
 		Name: DEPLOYMENT_STOREFRONT_CONTAINER_NAME,
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
@@ -113,6 +121,7 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 		},
 		Image:           containerSpec.Image,
 		ImagePullPolicy: containerSpec.ImagePullPolicy,
+		SecurityContext: util.RestrictedContainerSecurityContext(),
 		Env:             envs,
 		VolumeMounts:    containerSpec.VolumeMounts,
 		Ports: []corev1.ContainerPort{
@@ -163,10 +172,11 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 					TopologySpreadConstraints: containerSpec.TopologySpreadConstraints,
 					NodeSelector:              containerSpec.NodeSelector,
 					ImagePullSecrets:          containerSpec.ImagePullSecrets,
+					EnableServiceLinks:        containerSpec.EnableServiceLinks,
 					RestartPolicy:             containerSpec.RestartPolicy,
 					Containers:                containers,
-					SecurityContext:           containerSpec.SecurityContext,
-					InitContainers:            containerSpec.InitContainers,
+					SecurityContext:           util.DefaultPodSecurityContext(containerSpec.SecurityContext),
+					InitContainers:            util.DefaultContainerSecurityContexts(containerSpec.InitContainers),
 				},
 			},
 		},

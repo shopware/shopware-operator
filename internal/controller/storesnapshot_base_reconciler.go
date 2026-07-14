@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
+	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/event"
 	"github.com/shopware/shopware-operator/internal/job"
 	"github.com/shopware/shopware-operator/internal/k8s"
@@ -19,8 +20,6 @@ import (
 	k8sretry "k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	v1 "github.com/shopware/shopware-operator/api/v1"
 )
 
 var (
@@ -95,7 +94,7 @@ func (r *StoreSnapshotBaseReconciler) reconcileCRStatus(
 		status.State = v1.SnapshotStatePending
 		status.Message = "Error in getting snapshot job"
 		con.Status = Error
-		con.Reason = fmt.Errorf("InternalError: Error in getting snapshot job: %w", err).Error()
+		con.Reason = fmt.Sprintf("InternalError: Error in getting snapshot job: %s", err)
 		return nil
 	}
 
@@ -114,7 +113,7 @@ func (r *StoreSnapshotBaseReconciler) reconcileCRStatus(
 		status.Message = "Error in getting snapshot state job"
 		status.CompletedAt = metav1.Now()
 		con.Status = Error
-		con.Reason = fmt.Errorf("InternalError: Error in getting snapshot state job: %w", err).Error()
+		con.Reason = fmt.Sprintf("InternalError: Error in getting snapshot state job: %s", err)
 		return fmt.Errorf("get snapshot job state: %w", err)
 	}
 
@@ -124,7 +123,7 @@ func (r *StoreSnapshotBaseReconciler) reconcileCRStatus(
 		status.CompletedAt = metav1.Now()
 		con.Status = Error
 		//nolint:staticcheck
-		con.Reason = fmt.Errorf("Error in Snapshot, exit code: %d", jobState.ExitCode).Error()
+		con.Reason = fmt.Sprintf("error in Snapshot, exit code: %d", jobState.ExitCode)
 		return nil
 	}
 
@@ -161,22 +160,25 @@ func (r *StoreSnapshotBaseReconciler) ReconcileSnapshot(
 ) (ctrl.Result, error) {
 	logger := r.Logger.
 		With(zap.String("namespace", req.Namespace)).
+		With(zap.String("service", "shopware-operator-snapshot")).
+		With(zap.String("type", snapshotType)).
 		With(zap.String("name", req.Name))
 
 	ctx = logging.WithLogger(ctx, logger)
-	logger.Infof("Reconciling %s snapshots", snapshotType)
 
 	snapshot, err := getSnapshot(ctx, r.Client, req.NamespacedName)
-	if err == nil {
-		logger.Infof("Processing %s snapshot", snapshotType)
-		return r.reconcileSnapshotResource(ctx, req, snapshot, snapshotType, getJob, createJob, writeStatus), nil
-	} else if !k8serrors.IsNotFound(err) {
-		logger.Errorw(fmt.Sprintf("get %s snapshot", snapshotType), zap.Error(err))
-		return shortRequeue, nil
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			logger.Warnw("snapshot not found, stop execution", zap.Error(err))
+			return noRequeue, nil
+		} else {
+			logger.Errorw("get snapshot unknown error, stop execution", zap.Error(err))
+			return noRequeue, nil
+		}
 	}
 
-	logger.Infof("No %s snapshot resource found", snapshotType)
-	return shortRequeue, nil
+	logger.Info("Processing snapshot")
+	return r.reconcileSnapshotResource(ctx, req, snapshot, snapshotType, getJob, createJob, writeStatus), nil
 }
 
 func (r *StoreSnapshotBaseReconciler) reconcileSnapshotResource(
@@ -189,10 +191,9 @@ func (r *StoreSnapshotBaseReconciler) reconcileSnapshotResource(
 	writeStatus StatusWriter,
 ) ctrl.Result {
 	logger := logging.FromContext(ctx).With(
-		zap.String("snapshot", snapshot.GetObjectMeta().GetName()),
+		zap.String("name", snapshot.GetObjectMeta().GetName()),
 		zap.String("namespace", snapshot.GetObjectMeta().GetNamespace()),
-		zap.String("store", snapshot.GetSpec().StoreNameRef),
-		zap.String("snapshot_type", snapshotType),
+		zap.String("store-ref", snapshot.GetSpec().StoreNameRef),
 	)
 
 	store, err := k8s.GetStore(ctx, r.Client, client.ObjectKey{
@@ -205,34 +206,40 @@ func (r *StoreSnapshotBaseReconciler) reconcileSnapshotResource(
 			return longRequeue
 		}
 		logger.Errorw("get store", zap.Error(err))
-		return shortRequeue
+		return longRequeue
 	}
 
-	if !snapshot.GetStatus().IsState(v1.SnapshotStateFailed, v1.SnapshotStateSucceeded) {
-		defer func() {
-			if err := r.reconcileCRStatus(ctx, *store, snapshot, getJob); err != nil {
-				logger.Errorw(fmt.Sprintf("reconcile snapshot %s status", snapshotType), zap.Error(err))
-			}
+	// Skip reconciliation for terminal states (failed or succeeded)
+	if snapshot.GetStatus().IsState(v1.SnapshotStateFailed, v1.SnapshotStateSucceeded) {
+		return noRequeue
+	}
 
-			r.sendEvent(ctx, snapshot)
-			err = writeStatus(ctx, r.Client, types.NamespacedName{
-				Namespace: snapshot.GetObjectMeta().GetNamespace(),
-				Name:      snapshot.GetObjectMeta().GetName(),
-			}, *snapshot.GetStatus())
-			if err != nil {
-				logger.Errorw("write snapshot status", zap.Error(err))
-			}
-		}()
+	// Always check status for running or pending snapshots
+	defer func() {
+		if err := r.reconcileCRStatus(ctx, *store, snapshot, getJob); err != nil {
+			logger.Errorw(fmt.Sprintf("reconcile snapshot %s status", snapshotType), zap.Error(err))
+		}
 
+		r.sendEvent(ctx, snapshot)
+		err = writeStatus(ctx, r.Client, types.NamespacedName{
+			Namespace: snapshot.GetObjectMeta().GetNamespace(),
+			Name:      snapshot.GetObjectMeta().GetName(),
+		}, *snapshot.GetStatus())
+		if err != nil {
+			logger.Errorw("write snapshot status", zap.Error(err))
+		}
+	}()
+
+	// Only create/update job if not in running state
+	if !snapshot.GetStatus().IsState(v1.SnapshotStateRunning) {
 		obj := createJob(*store, snapshot)
 		if err := r.reconcileSnapshotJob(ctx, snapshot, snapshot.GetObjectMeta(), obj); err != nil {
 			logger.Errorw(fmt.Sprintf("reconcile snapshot %s job", snapshotType), zap.Error(err))
 			return shortRequeue
 		}
-		return shortRequeue
 	}
 
-	return noRequeue
+	return longRequeue
 }
 
 func (r *StoreSnapshotBaseReconciler) reconcileSnapshotJob(ctx context.Context, snap SnapshotResource, owner metav1.Object, obj *batchv1.Job) (err error) {

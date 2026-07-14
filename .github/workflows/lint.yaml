@@ -13,27 +13,27 @@ jobs:
     name: golangci
     runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: go.mod
           cache: true
 
       - name: Run linter
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa # v7
         with:
-          version: v2.0
+          version: v2.10
           args: --timeout=8m --verbose
 
   go-test:
     name: go test
     runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: go.mod
           cache: true
@@ -44,15 +44,15 @@ jobs:
     name: helm lint
     runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: stable
           cache: true
 
       - name: Set up Helm
-        uses: azure/setup-helm@v4.2.0
+        uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814 # v4.2.0
         with:
           version: v3.16.4
       - name: helm lint
@@ -66,30 +66,31 @@ jobs:
     runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=4
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       # Needed for controler runtime and goreleaser
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: stable
           cache: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
         with:
           driver-opts: |
             image=moby/buildkit:v0.12.5
             network=host
 
-      - name: Remove arm from goreleaser
-        uses: mikefarah/yq@master
+      - name: Configure goreleaser for amd64 linux only
+        uses: mikefarah/yq@8f3291d3165497b360b8ffee3c887624bb6fa1cf # master
         with:
-          cmd: yq -i 'del(.dockers_v2.[].platforms[1])' .goreleaser.yaml
+          cmd: |
+            yq -i '.builds[].goos = ["linux"] | .builds[].goarch = ["amd64"] | .dockers_v2[].platforms = ["linux/amd64"]' .goreleaser.yaml
 
       - name: Create Snapshot
         id: goreleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
         with:
           distribution: goreleaser
           version: "~> v2"
@@ -152,6 +153,12 @@ jobs:
             kubectl get --namespace test cronjob/test-cron -o json && exit 2
           }
 
+          # Test StoreDebugInstances
+          kubectl apply -f examples/storedebuginstance.yaml --namespace test
+          kubectl wait --namespace test --for=jsonpath="{.status.state}"=wait --timeout=2m storedebuginstance/debug || {
+            kubectl get --namespace test storedebuginstance/debug -o json && exit 1
+          }
+
           # Test StoreSnapshotCreate resource
           echo "Testing StoreSnapshotCreate resource..."
           kubectl apply -f examples/snapshot_create.yaml --namespace test
@@ -175,8 +182,27 @@ jobs:
           kubectl get storesnapshotrestore --namespace test
 
           # Check logs for any errors
-          echo "Checking operator logs..."
-          kubectl logs --namespace test deployment/test-shopware-operator --tail=50
+          echo "Checking operator logs for permission errors and unhandled errors..."
+          kubectl logs --namespace test deployment/test-shopware-operator --tail=100 > operator-logs.txt
+          cat operator-logs.txt
+
+          # Check for permission errors (forbidden) and Unhandled Errors
+          if grep -i "forbidden" operator-logs.txt; then
+            echo "ERROR: Found permission errors (forbidden) in operator logs"
+            exit 1
+          fi
+
+          if grep -i "Unhandled Error" operator-logs.txt; then
+            echo "ERROR: Found unhandled errors in operator logs"
+            exit 1
+          fi
+
+          if grep -i "error" operator-logs.txt; then
+            echo "ERROR: Found error in operator logs"
+            exit 1
+          fi
+
+          echo "No permission or unhandled errors found in operator logs"
 
           # Cleanup test resources
           echo "Cleaning up test resources..."

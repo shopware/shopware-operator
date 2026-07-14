@@ -1,0 +1,4 @@
+!.gitignore
+@*
+shopware*
+load-progress*

@@ -12,6 +12,8 @@ before:
   hooks:
     - go mod tidy
     - make licenses path=.
+    - make resources path=release
+    - make licenses path=release
 
 builds:
   - id: manager
@@ -33,10 +35,11 @@ builds:
       - darwin
 
 snapshot:
-  version_template: "{{.Branch}}"
+  version_template: '{{ replace .Branch "/" "-" }}'
 
 dockers_v2:
   - id: operator
+    ids: [manager]
     images:
       - "ghcr.io/shopware/{{.ProjectName}}"
     tags:
@@ -50,6 +53,7 @@ dockers_v2:
     dockerfile: build/Dockerfile
 
   - id: snapshot
+    ids: [snapshot]
     images:
       - "ghcr.io/shopware/{{.ProjectName}}-snapshot"
     tags:

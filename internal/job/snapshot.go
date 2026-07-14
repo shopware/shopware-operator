@@ -3,6 +3,7 @@ package job
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
@@ -61,36 +62,80 @@ func SnapshotRestoreJob(store v1.Store, snapshot v1.StoreSnapshotRestore) *batch
 func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapshotSpec, subCommand string) *batchv1.Job {
 	sharedProcessNamespace := true
 	res := resource.MustParse("20Gi")
+	tempDirMountPath := "/temp"
+	addDefaultTempDir := true
 
-	vm := append(snapshot.Container.VolumeMounts, corev1.VolumeMount{
-		Name:      "tempdir",
-		ReadOnly:  false,
-		MountPath: "/temp",
-	})
-	containers := append(snapshot.Container.ExtraContainers, corev1.Container{
+	for _, volume := range snapshot.Container.Volumes {
+		if volume.Ephemeral == nil {
+			continue
+		}
+
+		for _, mount := range snapshot.Container.VolumeMounts {
+			if mount.Name == volume.Name && mount.MountPath != "" {
+				tempDirMountPath = mount.MountPath
+				addDefaultTempDir = false
+				break
+			}
+		}
+
+		if !addDefaultTempDir {
+			break
+		}
+	}
+
+	vm := snapshot.Container.VolumeMounts
+	if addDefaultTempDir {
+		vm = append(vm, corev1.VolumeMount{
+			Name:      "tempdir",
+			ReadOnly:  false,
+			MountPath: tempDirMountPath,
+		})
+	}
+	// Build args with labels
+	args := []string{
+		subCommand,
+		"--backup-file", snapshot.Path,
+		"--tempdir", tempDirMountPath,
+	}
+	// Add labels from meta
+	// We sort the labels to ensure consistent ordering, so we don't trigger unnecessary job restarts due to label order changes
+	if meta.Labels != nil {
+		labelKeys := make([]string, 0, len(meta.Labels))
+		for key := range meta.Labels {
+			labelKeys = append(labelKeys, key)
+		}
+		sort.Strings(labelKeys)
+
+		for _, key := range labelKeys {
+			value := meta.Labels[key]
+			args = append(args, "--label", fmt.Sprintf("%s=%s", key, value))
+		}
+	}
+
+	containers := append(util.DefaultContainerSecurityContexts(snapshot.Container.ExtraContainers), corev1.Container{
 		Name:            CONTAINER_NAME_SNAPSHOT,
 		VolumeMounts:    vm,
 		ImagePullPolicy: snapshot.Container.ImagePullPolicy,
 		Image:           snapshot.Container.Image,
-		Args: []string{
-			subCommand,
-			"--backup-file", snapshot.Path,
-			"--tempdir", "/temp",
-		},
-		Env: snapshot.GetEnv(store),
+		SecurityContext: util.RestrictedContainerSecurityContext(),
+		Args:            args,
+		Env:             snapshot.GetEnv(store),
+		Resources:       snapshot.Container.Resources,
 	})
 
-	volumes := append(snapshot.Container.Volumes, corev1.Volume{
-		Name: "tempdir",
-		VolumeSource: corev1.VolumeSource{
-			EmptyDir: &corev1.EmptyDirVolumeSource{
-				SizeLimit: &res,
+	volumes := snapshot.Container.Volumes
+	if addDefaultTempDir {
+		volumes = append(volumes, corev1.Volume{
+			Name: "tempdir",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{
+					SizeLimit: &res,
+				},
 			},
-		},
-	})
+		})
+	}
 
-	labels := util.GetDefaultStoreSnapshotLabels(store, meta)
-	labels["shop.shopware.com/storesnapshot.type"] = subCommand
+	labels := util.GetDefaultStoreSnapshotLabels(store, meta.Labels, meta.Name, subCommand)
 	annotations := util.GetDefaultContainerSnapshotAnnotations(CONTAINER_NAME_SNAPSHOT, snapshot)
 
 	job := &batchv1.Job{
@@ -105,7 +150,8 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 			Annotations: annotations,
 		},
 		Spec: batchv1.JobSpec{
-			BackoffLimit: &snapshot.MaxRetries,
+			BackoffLimit:            &snapshot.MaxRetries,
+			TTLSecondsAfterFinished: func(i int32) *int32 { return &i }(60),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
@@ -118,10 +164,11 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 					TerminationGracePeriodSeconds: &snapshot.Container.TerminationGracePeriodSeconds,
 					NodeSelector:                  snapshot.Container.NodeSelector,
 					ImagePullSecrets:              snapshot.Container.ImagePullSecrets,
+					EnableServiceLinks:            snapshot.Container.EnableServiceLinks,
 					RestartPolicy:                 "Never",
 					Containers:                    containers,
-					SecurityContext:               snapshot.Container.SecurityContext,
-					InitContainers:                snapshot.Container.InitContainers,
+					SecurityContext:               util.DefaultPodSecurityContext(snapshot.Container.SecurityContext),
+					InitContainers:                util.DefaultContainerSecurityContexts(snapshot.Container.InitContainers),
 				},
 			},
 		},

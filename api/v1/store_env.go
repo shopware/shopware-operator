@@ -12,6 +12,21 @@ import (
 // redis
 func (s *Store) getAppCache() []corev1.EnvVar {
 	if s.Spec.AppCache.Adapter == "redis" {
+		// If DSN is provided, use it directly
+		if s.Spec.AppCache.RedisDSN != "" {
+			return []corev1.EnvVar{
+				{
+					Name:  "K8S_CACHE_TYPE",
+					Value: "redis",
+				},
+				{
+					Name:  "K8S_REDIS_APP_DSN",
+					Value: s.Spec.AppCache.RedisDSN,
+				},
+			}
+		}
+
+		// Otherwise build from individual fields
 		return []corev1.EnvVar{
 			// TODO: Will be moved to yaml configuration
 			{
@@ -46,21 +61,77 @@ func (s *Store) getAppCache() []corev1.EnvVar {
 }
 
 // Handled by PHP itself
-func (s *Store) getSessionCache() []corev1.EnvVar {
+// DEPRECATED: (6.7) Use symfony cache instead
+func (s *Store) getOldSessionCache() []corev1.EnvVar {
 	if s.Spec.SessionCache.Adapter == "redis" {
+		var savePath string
+		// If DSN is provided, use it directly
+		if s.Spec.SessionCache.RedisDSN != "" {
+			return []corev1.EnvVar{
+				{
+					Name:  "REDIS_SESSION_DSN",
+					Value: s.Spec.SessionCache.RedisDSN,
+				},
+				{
+					Name:  "PHP_SESSION_HANDLER",
+					Value: "redis",
+				},
+				// We need to set this, because if we not add this env the docker image will set this env to empty which leads to a config loading error
+				{
+					Name:  "PHP_SESSION_SAVE_PATH",
+					Value: "tcp://127.0.0.1:6379",
+				},
+			}
+		} else {
+			// Otherwise build from individual fields
+			savePath = fmt.Sprintf(
+				"tcp://%s:%d/%d",
+				s.Spec.SessionCache.RedisHost,
+				s.Spec.SessionCache.RedisPort,
+				s.Spec.SessionCache.RedisIndex,
+			)
+		}
+
 		return []corev1.EnvVar{
 			{
 				Name:  "PHP_SESSION_HANDLER",
 				Value: "redis",
 			},
 			{
-				Name: "PHP_SESSION_SAVE_PATH",
-				Value: fmt.Sprintf(
-					"tcp://%s:%d/%d",
-					s.Spec.SessionCache.RedisHost,
-					s.Spec.SessionCache.RedisPort,
-					s.Spec.SessionCache.RedisIndex,
-				),
+				Name:  "PHP_SESSION_SAVE_PATH",
+				Value: savePath,
+			},
+		}
+	}
+	return []corev1.EnvVar{
+		{
+			Name:  "PHP_SESSION_HANDLER",
+			Value: "files",
+		},
+	}
+}
+
+// Added in 6.7
+func (s *Store) getSessionCache() []corev1.EnvVar {
+	if s.Spec.SessionCache.Adapter == "redis" {
+		var dsn string
+		// If DSN is provided, use it directly
+		if s.Spec.SessionCache.RedisDSN != "" {
+			dsn = s.Spec.SessionCache.RedisDSN
+		} else {
+			// Otherwise build from individual fields
+			dsn = fmt.Sprintf(
+				"redis://%s:%d/%d",
+				s.Spec.SessionCache.RedisHost,
+				s.Spec.SessionCache.RedisPort,
+				s.Spec.SessionCache.RedisIndex,
+			)
+		}
+
+		return []corev1.EnvVar{
+			{
+				Name:  "K8S_REDIS_SESSION_DSN",
+				Value: dsn,
 			},
 		}
 	}
@@ -73,7 +144,7 @@ func (s *Store) getSessionCache() []corev1.EnvVar {
 }
 
 func (f *FPMSpec) getFPMConfiguration() []corev1.EnvVar {
-	if f.ProcessManagement != "dynamic" {
+	if f.ProcessManagement != "dynamic" && f.ProcessManagement != "operator" {
 		return []corev1.EnvVar{
 			{
 				Name:  "FPM_PM",
@@ -121,15 +192,44 @@ func (f *FPMSpec) getFPMConfiguration() []corev1.EnvVar {
 // https://symfony.com/doc/current/messenger.html#transport-configuration
 func (s *Store) getWorker() []corev1.EnvVar {
 	if s.Spec.Worker.Adapter == "redis" {
+		// If DSN is provided, use it directly
+		if s.Spec.Worker.RedisDSN != "" {
+			return []corev1.EnvVar{
+				{
+					Name:  "MESSENGER_TRANSPORT_DSN",
+					Value: s.Spec.Worker.RedisDSN,
+				},
+				{
+					Name: "MESSENGER_CONSUMER_NAME",
+					ValueFrom: &corev1.EnvVarSource{
+						FieldRef: &corev1.ObjectFieldSelector{
+							APIVersion: "v1",
+							FieldPath:  "metadata.name",
+						},
+					},
+				},
+			}
+		}
+
+		// Otherwise build from individual fields
 		return []corev1.EnvVar{
 			{
 				Name: "MESSENGER_TRANSPORT_DSN",
 				Value: fmt.Sprintf(
-					"redis://%s:%d/messages/symfony/consumer?auto_setup=true&serializer=1&stream_max_entries=0&dbindex=%d",
+					"redis://%s:%d/messages/symfony?auto_setup=true&serializer=1&stream_max_entries=0&dbindex=%d",
 					s.Spec.Worker.RedisHost,
 					s.Spec.Worker.RedisPort,
 					s.Spec.Worker.RedisIndex,
 				),
+			},
+			{
+				Name: "MESSENGER_CONSUMER_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						APIVersion: "v1",
+						FieldPath:  "metadata.name",
+					},
+				},
 			},
 		}
 	}
@@ -141,6 +241,17 @@ func (s *Store) getOpensearch() []corev1.EnvVar {
 		return []corev1.EnvVar{
 			{
 				Name: "OPENSEARCH_URL",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: s.Spec.SecretName,
+						},
+						Key: "opensearch-url",
+					},
+				},
+			},
+			{
+				Name: "ADMIN_OPENSEARCH_URL",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -432,6 +543,7 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 		})
 	}
 
+	c = append(c, s.getOldSessionCache()...)
 	c = append(c, s.getSessionCache()...)
 	c = append(c, s.getAppCache()...)
 	c = append(c, s.getOtel()...)

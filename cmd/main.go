@@ -41,6 +41,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/event"
 	"github.com/shopware/shopware-operator/internal/event/nats"
 	"github.com/shopware/shopware-operator/internal/logging"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -56,6 +57,10 @@ func init() {
 
 	utilruntime.Must(shopv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
+	//
+	// Ignore errors because gateway-api is not per default installed
+	// nolint:errcheck
+	gatewayv1.Install(scheme)
 }
 
 func main() {
@@ -149,10 +154,11 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controller.StoreExecReconciler{
-		Client:   nsClient,
-		Logger:   logger,
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
+		Client:             nsClient,
+		Logger:             logger,
+		Scheme:             mgr.GetScheme(),
+		Recorder:           mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
+		CleanupGracePeriod: cfg.SuccessfulCRCleanupGracePeriod,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create exec controller", "controller", "StoreExec")
 		os.Exit(1)
@@ -182,10 +188,11 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controller.StoreDebugInstanceReconciler{
-		Client:   nsClient,
-		Logger:   logger,
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
+		Client:             nsClient,
+		Logger:             logger,
+		Scheme:             mgr.GetScheme(),
+		Recorder:           mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
+		CleanupGracePeriod: cfg.SuccessfulCRCleanupGracePeriod,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create instance controller", "controller", "StoreDebugInstance")
 		os.Exit(1)

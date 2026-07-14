@@ -105,6 +105,39 @@ func TestCommandJob(t *testing.T) {
 		assert.Equal(t, []string{"bin/console cache:clear"}, container.Args)
 		assert.Equal(t, "shopware-command", container.Name)
 	})
+
+	t.Run("test container security context is restricted", func(t *testing.T) {
+		store := v1.Store{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-store",
+				Namespace: "test",
+			},
+			Spec: v1.StoreSpec{
+				Container: v1.ContainerSpec{
+					Image: "shopware:latest",
+				},
+			},
+		}
+
+		exec := v1.StoreExec{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-exec",
+				Namespace: "test",
+			},
+			Spec: v1.StoreExecSpec{
+				Script: "echo test",
+			},
+		}
+
+		result := job.CommandJob(store, exec)
+		container := result.Spec.Template.Spec.Containers[0]
+
+		assert.NotNil(t, container.SecurityContext)
+		assert.NotNil(t, container.SecurityContext.AllowPrivilegeEscalation)
+		assert.False(t, *container.SecurityContext.AllowPrivilegeEscalation)
+		assert.NotNil(t, container.SecurityContext.Capabilities)
+		assert.Equal(t, []corev1.Capability{"ALL"}, container.SecurityContext.Capabilities.Drop)
+	})
 }
 
 func TestCommandCronJob(t *testing.T) {
@@ -143,5 +176,39 @@ func TestCommandCronJob(t *testing.T) {
 		assert.Equal(t, &suspend, result.Spec.Suspend)
 		assert.Equal(t, "test-exec", result.Name)
 		assert.Equal(t, "test", result.Namespace)
+	})
+
+	t.Run("test cron container security context is restricted", func(t *testing.T) {
+		store := v1.Store{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-store",
+				Namespace: "test",
+			},
+			Spec: v1.StoreSpec{
+				Container: v1.ContainerSpec{
+					Image: "shopware:latest",
+				},
+			},
+		}
+
+		exec := v1.StoreExec{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-exec",
+				Namespace: "test",
+			},
+			Spec: v1.StoreExecSpec{
+				Script:       "echo test",
+				CronSchedule: "*/5 * * * *",
+			},
+		}
+
+		result := job.CommandCronJob(store, exec)
+		container := result.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
+
+		assert.NotNil(t, container.SecurityContext)
+		assert.NotNil(t, container.SecurityContext.AllowPrivilegeEscalation)
+		assert.False(t, *container.SecurityContext.AllowPrivilegeEscalation)
+		assert.NotNil(t, container.SecurityContext.Capabilities)
+		assert.Equal(t, []corev1.Capability{"ALL"}, container.SecurityContext.Capabilities.Drop)
 	})
 }

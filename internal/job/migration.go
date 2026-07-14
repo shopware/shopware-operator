@@ -43,8 +43,8 @@ func MigrationJob(store v1.Store) *batchv1.Job {
 	sharedProcessNamespace := true
 
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.MigrationJobContainer.Labels)
-	labels["shop.shopware.com/store.hash"] = GetMigrateHash(store)
-	labels["shop.shopware.com/store.type"] = "migration"
+	labels[util.ShopwareKey("store.hash")] = GetMigrateHash(store)
+	labels[util.ShopwareKey("store.type")] = "migration"
 
 	annotations := util.GetDefaultContainerAnnotations(CONTAINER_NAME_MIGRATION_JOB, store, store.Spec.MigrationJobContainer.Annotations)
 	annotations["shop.shopware.com/store.oldImage"] = store.Status.CurrentImageTag
@@ -53,11 +53,12 @@ func MigrationJob(store v1.Store) *batchv1.Job {
 	// Merge containerSpec.ExtraEnvs to override with merged values from MigrationJobContainer
 	envs := util.MergeEnv(store.GetEnv(), containerSpec.ExtraEnvs)
 
-	containers := append(containerSpec.ExtraContainers, corev1.Container{
+	containers := append(util.DefaultContainerSecurityContexts(containerSpec.ExtraContainers), corev1.Container{
 		Name:            CONTAINER_NAME_MIGRATION_JOB,
 		VolumeMounts:    containerSpec.VolumeMounts,
 		ImagePullPolicy: containerSpec.ImagePullPolicy,
 		Image:           containerSpec.Image,
+		SecurityContext: util.RestrictedContainerSecurityContext(),
 		Command:         []string{"sh", "-c"},
 		Args:            []string{store.Spec.MigrationScript},
 		Env:             envs,
@@ -90,10 +91,11 @@ func MigrationJob(store v1.Store) *batchv1.Job {
 					TerminationGracePeriodSeconds: &containerSpec.TerminationGracePeriodSeconds,
 					NodeSelector:                  containerSpec.NodeSelector,
 					ImagePullSecrets:              containerSpec.ImagePullSecrets,
+					EnableServiceLinks:            containerSpec.EnableServiceLinks,
 					RestartPolicy:                 "Never",
 					Containers:                    containers,
-					SecurityContext:               containerSpec.SecurityContext,
-					InitContainers:                containerSpec.InitContainers,
+					SecurityContext:               util.DefaultPodSecurityContext(containerSpec.SecurityContext),
+					InitContainers:                util.DefaultContainerSecurityContexts(containerSpec.InitContainers),
 				},
 			},
 		},

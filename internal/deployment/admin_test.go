@@ -12,6 +12,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+func boolPtr(v bool) *bool {
+	return &v
+}
+
 func TestAdminDeployment(t *testing.T) {
 	t.Run("test annotation merging", func(t *testing.T) {
 		store := v1.Store{
@@ -195,6 +199,29 @@ func TestAdminDeployment(t *testing.T) {
 
 		// Verify service account is overwritten
 		assert.Equal(t, "admin-sa", result.Spec.Template.Spec.ServiceAccountName)
+	})
+
+	t.Run("test enable service links merge", func(t *testing.T) {
+		store := v1.Store{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-store",
+				Namespace: "test",
+			},
+			Spec: v1.StoreSpec{
+				Container: v1.ContainerSpec{
+					EnableServiceLinks: boolPtr(true),
+				},
+				AdminDeploymentContainer: v1.ContainerMergeSpec{
+					EnableServiceLinks: boolPtr(false),
+				},
+				SecretName: "store-secret",
+			},
+		}
+
+		result := deployment.AdminDeployment(store)
+
+		assert.NotNil(t, result.Spec.Template.Spec.EnableServiceLinks)
+		assert.False(t, *result.Spec.Template.Spec.EnableServiceLinks)
 	})
 
 	t.Run("test probes are configured", func(t *testing.T) {

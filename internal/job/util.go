@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -45,9 +46,10 @@ func IsJobContainerDone(
 	var errorStates []JobState
 	for _, container := range job.Spec.Template.Spec.Containers {
 		if container.Name == containerName {
-			selector, err := labels.ValidatedSelectorFromSet(job.Labels)
+			// Use the job's selector which matches the actual pods
+			selector, err := metav1.LabelSelectorAsSelector(job.Spec.Selector)
 			if err != nil {
-				return JobState{}, fmt.Errorf("get selector: %w", err)
+				return JobState{}, fmt.Errorf("convert selector: %w", err)
 			}
 
 			listOptions := client.ListOptions{
