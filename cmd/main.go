@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/go-logr/zapr"
 	shopv1 "github.com/shopware/shopware-operator/api/v1"
@@ -41,6 +42,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/event"
 	"github.com/shopware/shopware-operator/internal/event/nats"
 	"github.com/shopware/shopware-operator/internal/logging"
+	shopwebhook "github.com/shopware/shopware-operator/internal/webhook"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	//+kubebuilder:scaffold:imports
 )
@@ -113,6 +115,13 @@ func main() {
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
+	}
+
+	if cfg.EnableWebhook {
+		mgr.GetWebhookServer().Register(
+			shopwebhook.StoreValidationPath,
+			&admission.Webhook{Handler: shopwebhook.StoreValidator{}},
+		)
 	}
 
 	nsClient := client.NewNamespacedClient(mgr.GetClient(), cfg.Namespace)

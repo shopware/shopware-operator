@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shopware-operator
+spec:
+  template:
+    spec:
+      containers:
+        - env:
+            - name: ENABLE_WEBHOOK
+              value: "false"
+          name: manager

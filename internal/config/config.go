@@ -68,6 +68,7 @@ type StoreConfig struct {
 	ProbeAddr   string `env:"HEALTH_PROBE_BIND_ADDRESS, default=:8081"`
 
 	EnableLeaderElection bool   `env:"LEADER_ELECT, default=true"`
+	EnableWebhook        bool   `env:"ENABLE_WEBHOOK, default=true"`
 	DisableChecks        bool   `env:"DISABLE_CHECKS, default=false"`
 	Namespace            string `env:"NAMESPACE, default=default"`
 

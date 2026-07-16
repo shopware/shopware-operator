@@ -17,6 +17,11 @@ crds:
   # This will install only the crd's
   installOnly: false
 
+# Validates the schemaless Store container override fields. When enabled,
+# cert-manager must be installed in the cluster.
+webhook:
+  enabled: true
+
 # rbac: settings for deployer RBAC creation
 rbac:
   # rbac.create: if false, RBAC resources should be in place
