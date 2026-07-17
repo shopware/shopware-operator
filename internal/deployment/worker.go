@@ -82,9 +82,10 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 	envs := util.MergeEnv(store.GetEnv(), containerSpec.ExtraEnvs)
 
 	// Set PHP_MEMORY_LIMIT to 90% of the container memory limit
+	phpMemoryLimitMiB := 0
 	if containerSpec.Resources.Limits.Memory() != nil && containerSpec.Resources.Limits.Memory().Value() != 0 {
 		memoryLimitMiB := containerSpec.Resources.Limits.Memory().Value() / (1024 * 1024)
-		phpMemoryLimitMiB := int(math.Floor(float64(memoryLimitMiB) * 0.9))
+		phpMemoryLimitMiB = int(math.Floor(float64(memoryLimitMiB) * 0.9))
 		envs = util.MergeEnv(envs, []corev1.EnvVar{
 			{
 				Name:  "PHP_MEMORY_LIMIT",
@@ -93,6 +94,21 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 		})
 	}
 
+	consume := "bin/console messenger:consume --all --time-limit=300"
+	if phpMemoryLimitMiB > 0 {
+		consume += fmt.Sprintf(" --memory-limit=%dM", phpMemoryLimitMiB)
+	}
+	workerScript := fmt.Sprintf(
+		`trap 'kill -TERM "$child" 2>/dev/null' TERM INT
+while true; do
+  %s &
+  child=$!
+  wait "$child"
+  [ $? -gt 128 ] && exit 0
+done`,
+		consume,
+	)
+
 	containers := append(util.DefaultContainerSecurityContexts(containerSpec.ExtraContainers), corev1.Container{
 		Name:            appName,
 		Image:           containerSpec.Image,
@@ -100,14 +116,11 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 		Env:             envs,
 		SecurityContext: util.RestrictedContainerSecurityContext(),
 		Command: []string{
-			"bin/console",
+			"/bin/sh",
+			"-c",
 		},
 		Args: []string{
-			"messenger:consume",
-			"async",
-			"low_priority",
-			"failed",
-			"scheduler_shopware",
+			workerScript,
 		},
 		VolumeMounts: containerSpec.VolumeMounts,
 		Ports: []corev1.ContainerPort{
