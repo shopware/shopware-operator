@@ -113,7 +113,7 @@ test-chart: install
 
 .PHONY: run
 run: manifests generate zap-pretty ## Run a controller from your host.
-	LEADER_ELECT=false DISABLE_CHECKS=true LOG_LEVEL=debug LOG_FORMAT=zap-pretty go run ./cmd/main.go \
+	ENABLE_WEBHOOK=false LEADER_ELECT=false DISABLE_CHECKS=true LOG_LEVEL=debug LOG_FORMAT=zap-pretty go run ./cmd/main.go \
 		2>&1 | $(ZAP_PRETTY) --all
 
 
