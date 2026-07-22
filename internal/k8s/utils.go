@@ -373,16 +373,78 @@ func EnsureDeployment(
 		if k8serrors.IsNotFound(err) {
 			return EnsureObjectWithHash(ctx, cl, owner, deployment, s)
 		}
-		return errors.Wrap(err, "get object")
+		return errors.Wrap(err, "get deployment")
 	}
 
-	return EnsureObjectWithHash(ctx, cl, owner, deployment, s)
+	autoscaled, err := isDeploymentAutoscaled(ctx, cl, deployment)
+	if err != nil {
+		return errors.Wrap(err, "check deployment autoscaling")
+	}
+	if !autoscaled {
+		return EnsureObjectWithHash(ctx, cl, owner, deployment, s)
+	}
+
+	// The HorizontalPodAutoscaler owns the scale subresource. Keep its current
+	// value while reconciling the rest of the Deployment.
+	deployment.Spec.Replicas = oldDep.Spec.Replicas
+	return ensureObjectWithHash(ctx, cl, owner, deployment, deploymentHashObject(deployment), s)
+}
+
+func isDeploymentAutoscaled(
+	ctx context.Context,
+	cl client.Client,
+	deployment *appsv1.Deployment,
+) (bool, error) {
+	hpas := &autoscalingv2.HorizontalPodAutoscalerList{}
+	if err := cl.List(ctx, hpas, client.InNamespace(deployment.Namespace)); err != nil {
+		return false, errors.Wrap(err, "list horizontal pod autoscalers")
+	}
+
+	for _, hpa := range hpas.Items {
+		target := hpa.Spec.ScaleTargetRef
+		if target.APIVersion == "apps/v1" && target.Kind == "Deployment" && target.Name == deployment.Name {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func HasDeploymentChanged(
+	ctx context.Context,
+	cl client.Client,
+	deployment *appsv1.Deployment,
+) (bool, error) {
+	autoscaled, err := isDeploymentAutoscaled(ctx, cl, deployment)
+	if err != nil {
+		return true, err
+	}
+	if autoscaled {
+		return hasObjectChanged(ctx, cl, deployment, deploymentHashObject(deployment))
+	}
+
+	return HasObjectChanged(ctx, cl, deployment)
+}
+
+func deploymentHashObject(deployment *appsv1.Deployment) *appsv1.Deployment {
+	deploymentCopy := deployment.DeepCopy()
+	deploymentCopy.Spec.Replicas = nil
+	return deploymentCopy
 }
 
 func HasObjectChanged(
 	ctx context.Context,
 	cl client.Client,
 	obj client.Object,
+) (bool, error) {
+	return hasObjectChanged(ctx, cl, obj, obj)
+}
+
+func hasObjectChanged(
+	ctx context.Context,
+	cl client.Client,
+	obj client.Object,
+	hashObject runtime.Object,
 ) (bool, error) {
 	if obj.GetAnnotations() == nil {
 		obj.SetAnnotations(make(map[string]string))
@@ -392,7 +454,7 @@ func HasObjectChanged(
 	delete(objAnnotations, "shopware.com/last-config-hash")
 	obj.SetAnnotations(objAnnotations)
 
-	hash, err := ObjectHash(obj)
+	hash, err := ObjectHash(hashObject)
 	if err != nil {
 		return true, errors.Wrap(err, "calculate object hash")
 	}
@@ -442,6 +504,17 @@ func EnsureObjectWithHash(
 	obj client.Object,
 	s *runtime.Scheme,
 ) error {
+	return ensureObjectWithHash(ctx, cl, owner, obj, obj, s)
+}
+
+func ensureObjectWithHash(
+	ctx context.Context,
+	cl client.Client,
+	owner metav1.Object,
+	obj client.Object,
+	hashObject runtime.Object,
+	s *runtime.Scheme,
+) error {
 	if owner != nil {
 		if err := controllerutil.SetControllerReference(owner, obj, s); err != nil {
 			return errors.Wrapf(err, "set controller reference to %s/%s",
@@ -458,7 +531,7 @@ func EnsureObjectWithHash(
 	delete(objAnnotations, "shopware.com/last-config-hash")
 	obj.SetAnnotations(objAnnotations)
 
-	hash, err := ObjectHash(obj)
+	hash, err := ObjectHash(hashObject)
 	if err != nil {
 		return errors.Wrap(err, "calculate object hash")
 	}

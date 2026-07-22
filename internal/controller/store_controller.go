@@ -142,6 +142,7 @@ func (r *StoreReconciler) findStoreForReconcile(
 //+kubebuilder:rbac:groups="",namespace=default,resources=services,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="",namespace=default,resources=pods,verbs=get;list;watch;
 //+kubebuilder:rbac:groups="apps",namespace=default,resources=deployments,verbs=get;list;watch;create;patch
+//+kubebuilder:rbac:groups="autoscaling",namespace=default,resources=horizontalpodautoscalers,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="batch",namespace=default,resources=jobs,verbs=get;list;watch;create;delete
 //+kubebuilder:rbac:groups="networking.k8s.io",namespace=default,resources=ingresses,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="gateway.networking.k8s.io",namespace=default,resources=httproutes,verbs=get;list;watch;create;patch
@@ -489,7 +490,7 @@ func (r *StoreReconciler) reconcileDeployment(ctx context.Context, store *v1.Sto
 	}
 
 	for _, obj := range objs {
-		if changed, err = k8s.HasObjectChanged(ctx, r.Client, obj); err != nil {
+		if changed, err = k8s.HasDeploymentChanged(ctx, r.Client, obj); err != nil {
 			return fmt.Errorf("reconcile unready deployment: %w", err)
 		}
 
