@@ -216,14 +216,35 @@ func TestWorkerDeployment(t *testing.T) {
 		container := result.Spec.Template.Spec.Containers[0]
 
 		// Verify worker command and args
-		assert.Equal(t, []string{"bin/console"}, container.Command)
-		assert.Equal(t, []string{
-			"messenger:consume",
-			"async",
-			"low_priority",
-			"failed",
-			"scheduler_shopware",
-		}, container.Args)
+		assert.Equal(t, []string{"/bin/sh", "-c"}, container.Command)
+		assert.Len(t, container.Args, 1)
+		assert.Contains(t, container.Args[0], "bin/console messenger:consume --all --time-limit=300")
+		assert.NotContains(t, container.Args[0], "--memory-limit")
+		assert.Contains(t, container.Args[0], `trap 'kill -TERM "$child"`)
 		assert.Equal(t, "shopware-worker", container.Name)
+	})
+
+	t.Run("test worker memory limit flag", func(t *testing.T) {
+		store := v1.Store{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-store",
+				Namespace: "test",
+			},
+			Spec: v1.StoreSpec{
+				Container: v1.ContainerSpec{
+					Image: "shopware:latest",
+					Resources: corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceMemory: resource.MustParse("1000Mi"),
+						},
+					},
+				},
+			},
+		}
+
+		result := deployment.WorkerDeployment(store)
+		container := result.Spec.Template.Spec.Containers[0]
+
+		assert.Contains(t, container.Args[0], "--memory-limit=900M")
 	})
 }
