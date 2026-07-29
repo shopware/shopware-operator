@@ -38,7 +38,9 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Run go tests
-        run: go test ./...
+        run: |
+          make manifests
+          go test ./...
 
   helm-lint:
     name: helm lint
@@ -60,6 +62,12 @@ jobs:
           make helm path=test version=99.99.98
           cd test
           helm lint .
+          helm template no-webhook . --set crds.install=false --set webhook.enabled=false > /tmp/no-webhook.yaml
+          if grep -Eq 'kind: (Certificate|Issuer|ValidatingWebhookConfiguration)|cert-manager.io|webhook-certs|containerPort: 9443' /tmp/no-webhook.yaml; then
+            echo "Webhook resources were rendered while webhook.enabled=false"
+            exit 1
+          fi
+          grep -A1 'name: ENABLE_WEBHOOK' /tmp/no-webhook.yaml | grep -q 'value: "false"'
 
   test-on-cluster:
     name: Cluster E2E Test
@@ -121,6 +129,11 @@ jobs:
           registry_port: 5001
           registry_enable_delete: true
 
+      - name: Install cert-manager
+        run: |
+          kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.21.0/cert-manager.yaml
+          kubectl wait --namespace cert-manager --for=condition=Available --timeout=2m deployment/cert-manager deployment/cert-manager-cainjector deployment/cert-manager-webhook
+
       - name: Run chart-testing (install)
         run: |
           version="${{ fromJSON(steps.goreleaser.outputs.metadata).version }}-amd64"
@@ -133,7 +146,36 @@ jobs:
 
           helm template test --namespace test test --set image.tag="$version" > rendered.yaml
           kubectl apply --server-side -f rendered.yaml --namespace test
-          kubectl wait --namespace test --for=condition=Available --timeout=20s deployment/test-shopware-operator
+          kubectl wait --namespace test --for=condition=Ready --timeout=60s certificate/test-serving-cert
+          kubectl wait --namespace test --for=condition=Available --timeout=60s deployment/test-shopware-operator
+
+          for _ in {1..30}; do
+            ca_bundle="$(kubectl get validatingwebhookconfiguration test-shopware-operator-validating-webhook -o jsonpath='{.webhooks[0].clientConfig.caBundle}')"
+            if [ -n "$ca_bundle" ]; then
+              break
+            fi
+            sleep 2
+          done
+          test -n "$ca_bundle"
+
+          webhook_validated=false
+          for _ in {1..30}; do
+            if kubectl apply --namespace test -f .github/testdata/invalid_store_override.yaml >/tmp/invalid-store.log 2>&1; then
+              echo "Store with an unknown container override field was accepted"
+              kubectl delete --namespace test -f .github/testdata/invalid_store_override.yaml --ignore-not-found=true
+              exit 1
+            fi
+            if grep -q "unknown field" /tmp/invalid-store.log; then
+              webhook_validated=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$webhook_validated" != "true" ]; then
+            echo "Webhook did not return the expected validation response"
+            cat /tmp/invalid-store.log
+            exit 1
+          fi
 
           kubectl get deployment --namespace test -o wide
           kubectl rollout status --namespace test deployment/test-shopware-operator --timeout=60s

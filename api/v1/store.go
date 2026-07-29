@@ -39,14 +39,24 @@ type StoreSpec struct {
 
 	Container ContainerSpec `json:"container"`
 
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:pruning:PreserveUnknownFields
 	// +kubebuilder:default={}
 	AdminDeploymentContainer ContainerMergeSpec `json:"adminDeploymentContainer,omitempty"`
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:pruning:PreserveUnknownFields
 	// +kubebuilder:default={}
 	WorkerDeploymentContainer ContainerMergeSpec `json:"workerDeploymentContainer,omitempty"`
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:pruning:PreserveUnknownFields
 	// +kubebuilder:default={}
 	StorefrontDeploymentContainer ContainerMergeSpec `json:"storefrontDeploymentContainer,omitempty"`
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:pruning:PreserveUnknownFields
 	// +kubebuilder:default={}
 	SetupJobContainer ContainerMergeSpec `json:"setupJobContainer,omitempty"`
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:pruning:PreserveUnknownFields
 	// +kubebuilder:default={}
 	MigrationJobContainer ContainerMergeSpec `json:"migrationJobContainer,omitempty"`
 

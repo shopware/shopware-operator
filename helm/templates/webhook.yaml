@@ -1,0 +1,65 @@
+{{- if and (not .Values.crds.installOnly) .Values.webhook.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: '{{ .Release.Name }}-webhook-service'
+  namespace: {{ .Release.Namespace }}
+spec:
+  ports:
+  - name: https
+    port: 443
+    protocol: TCP
+    targetPort: 9443
+  selector:
+    control-plane: shopware-operator
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: '{{ .Release.Name }}-selfsigned-issuer'
+  namespace: {{ .Release.Namespace }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: '{{ .Release.Name }}-serving-cert'
+  namespace: {{ .Release.Namespace }}
+spec:
+  dnsNames:
+  - '{{ .Release.Name }}-webhook-service.{{ .Release.Namespace }}.svc'
+  - '{{ .Release.Name }}-webhook-service.{{ .Release.Namespace }}.svc.cluster.local'
+  issuerRef:
+    kind: Issuer
+    name: '{{ .Release.Name }}-selfsigned-issuer'
+  secretName: '{{ .Release.Name }}-webhook-server-cert'
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: '{{ .Release.Namespace }}/{{ .Release.Name }}-serving-cert'
+  name: '{{ .Release.Name }}-shopware-operator-validating-webhook'
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: '{{ .Release.Name }}-webhook-service'
+      namespace: {{ .Release.Namespace }}
+      path: /validate-shop-shopware-com-v1-store
+  failurePolicy: Fail
+  name: 'vstore.{{ .Release.Name }}.shopware.com'
+  rules:
+  - apiGroups:
+    - shop.shopware.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - stores
+  sideEffects: None
+{{- end }}

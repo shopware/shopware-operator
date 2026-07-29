@@ -1,0 +1,26 @@
+apiVersion: shop.shopware.com/v1
+kind: Store
+metadata:
+  name: invalid-container-override
+spec:
+  adminCredentials:
+    username: admin
+  appCache:
+    adapter: builtin
+  cdnURL: ""
+  container:
+    image: example.com/shopware:test
+  database:
+    host: mysql
+    passwordSecretRef:
+      key: password
+      name: database
+    user: shopware
+    version: "8.0"
+  secretName: store-secret
+  sessionCache:
+    adapter: builtin
+  worker:
+    adapter: builtin
+  workerDeploymentContainer:
+    unexpectedField: true

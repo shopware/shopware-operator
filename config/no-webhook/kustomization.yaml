@@ -1,0 +1,14 @@
+namespace: default
+
+resources:
+  - ../rbac
+  - ../manager
+
+patches:
+  - path: disable_webhook_patch.yaml
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/imagePullSecrets
+        value: [{ name: regcred }]
