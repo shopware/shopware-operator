@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.4.0](https://github.com/shopware/shopware-operator/compare/1.3.0...v1.4.0) (2026-07-29)
+
+
+### Features
+
+* add validating webhook ([cd01631](https://github.com/shopware/shopware-operator/commit/cd016315a7de777453a18bbed92205586f25b41a))
+* add validating webhook ([d09d517](https://github.com/shopware/shopware-operator/commit/d09d517e1f1a6e73a853fc2aab9a8975de6fce5f))
+
+
+### Bug Fixes
+
+* disable webhooks locally ([fb3bfa8](https://github.com/shopware/shopware-operator/commit/fb3bfa8f8271f23b665c926fa4c3e32fee24247f))
+* worker restart after 5 minutes ([6ae4f0b](https://github.com/shopware/shopware-operator/commit/6ae4f0b88541f6248801095fcf0710c254848201))
+* worker restart after 5 minutes ([cc37a4b](https://github.com/shopware/shopware-operator/commit/cc37a4bac04de0999fbfbb7af848181014026879))
+
 ## [1.3.0](https://github.com/shopware/shopware-operator/compare/1.2.0...v1.3.0) (2026-07-14)
 
 
