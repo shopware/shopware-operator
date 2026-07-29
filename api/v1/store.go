@@ -96,6 +96,9 @@ type StoreSpec struct {
 	AppCache AppCacheSpec `json:"appCache"`
 
 	// +kubebuilder:default={adapter: "builtin"}
+	Lock LockSpec `json:"lock"`
+
+	// +kubebuilder:default={adapter: "builtin"}
 	Worker WorkerSpec `json:"worker"`
 
 	// +kubebuilder:default=store-secret
@@ -346,6 +349,16 @@ type AppCacheSpec struct {
 	Adapter string `json:"adapter"`
 }
 
+// LockSpec configures Symfony's lock store. With adapter "redis" the operator
+// sets LOCK_DSN so locks are shared across pods; "builtin" leaves the image
+// default (per-pod flock, unsafe with >1 replica).
+type LockSpec struct {
+	RedisSpec `json:",inline"`
+
+	// +kubebuilder:validation:Enum=builtin;redis
+	Adapter string `json:"adapter"`
+}
+
 type RedisSpec struct {
 	RedisDSN  string `json:"redisDsn,omitempty"`
 	RedisHost string `json:"redisHost,omitempty"`
@@ -486,13 +499,13 @@ func (c *ContainerSpec) Merge(from ContainerMergeSpec) {
 		c.ExtraEnvs = from.ExtraEnvs
 	}
 	if from.VolumeMounts != nil {
-		c.VolumeMounts = from.VolumeMounts
+		c.VolumeMounts = append(c.VolumeMounts, from.VolumeMounts...)
 	}
 	if from.ImagePullSecrets != nil {
 		c.ImagePullSecrets = from.ImagePullSecrets
 	}
 	if from.Volumes != nil {
-		c.Volumes = from.Volumes
+		c.Volumes = append(c.Volumes, from.Volumes...)
 	}
 
 	if from.ServiceAccountName != "" {

@@ -176,6 +176,30 @@ func (s *Store) getSessionCache() []corev1.EnvVar {
 	}
 }
 
+// getLock sets LOCK_DSN from the Lock spec so Symfony's lock store uses shared
+// Redis/Valkey instead of the image default (per-pod flock, unsafe with >1
+// replica). Only emitted for adapter "redis".
+func (s *Store) getLock() []corev1.EnvVar {
+	if s.Spec.Lock.Adapter != "redis" {
+		return nil
+	}
+	dsn := s.Spec.Lock.RedisDSN
+	if dsn == "" {
+		dsn = fmt.Sprintf(
+			"redis://%s:%d/%d",
+			s.Spec.Lock.RedisHost,
+			s.Spec.Lock.RedisPort,
+			s.Spec.Lock.RedisIndex,
+		)
+	}
+	return []corev1.EnvVar{
+		{
+			Name:  "LOCK_DSN",
+			Value: dsn,
+		},
+	}
+}
+
 func (f *FPMSpec) getFPMConfiguration() []corev1.EnvVar {
 	if f.ProcessManagement != "dynamic" && f.ProcessManagement != "operator" {
 		return []corev1.EnvVar{
@@ -358,6 +382,14 @@ func (s *Store) getOtel() []corev1.EnvVar {
 			{
 				Name:  "OTEL_EXPORTER_OTLP_ENDPOINT",
 				Value: s.Spec.Otel.ExporterEndpoint,
+			},
+			// Skip tracing probe/monitoring requests entirely (no span, no export).
+			// The readiness probe (/api/_info/health-check) and the fpm-admin
+			// endpoints hit workers frequently; tracing them stalls workers on span
+			// export, inflating php-fpm active_processes and breaking autoscaling.
+			{
+				Name:  "OTEL_PHP_EXCLUDED_URLS",
+				Value: "/api/_info/health-check,/-/fpm/",
 			},
 		}
 	}
@@ -543,9 +575,21 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 			Name:  "SHOPWARE_DBAL_TIMEZONE_SUPPORT_ENABLED",
 			Value: "1",
 		},
+		// opcache sizing: Shopware ships ~16k PHP files. The PHP image defaults
+		// (10000 files / 128MB / 20 interned) overflow the cache, forcing constant
+		// recompilation. These fit the whole class map. Overridable per-shop via
+		// extraEnvs (MergeEnv lets container ExtraEnvs win).
 		{
-			Name:  "SQL_SET_DEFAULT_SESSION_VARIABLES",
-			Value: "0",
+			Name:  "PHP_OPCACHE_MAX_ACCELERATED_FILES",
+			Value: "20000",
+		},
+		{
+			Name:  "PHP_OPCACHE_MEMORY_CONSUMPTION",
+			Value: "256",
+		},
+		{
+			Name:  "PHP_OPCACHE_INTERNED_STRINGS_BUFFER",
+			Value: "64",
 		},
 		{
 			Name:  "INSTALL_LOCALE",
@@ -559,9 +603,13 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 			Name:  "APP_URL",
 			Value: appUrl,
 		},
+		// Non-persistent by default: storefront/admin serve many short-lived
+		// requests, and persistent connections there hoard DB connections (caused
+		// [1040] Too many connections under load). The worker deployment overrides
+		// this to "1" (few long-lived processes benefit from persistent conns).
 		{
 			Name:  "DATABASE_PERSISTENT_CONNECTION",
-			Value: "1",
+			Value: "0",
 		},
 	}
 
@@ -588,6 +636,7 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 	c = append(c, s.getOldSessionCache()...)
 	c = append(c, s.getSessionCache()...)
 	c = append(c, s.getAppCache()...)
+	c = append(c, s.getLock()...)
 	c = append(c, s.getOtel()...)
 	c = append(c, s.getBlackfire()...)
 	c = append(c, s.getStorage()...)

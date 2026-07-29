@@ -123,10 +123,11 @@ func TestStorefrontDeployment(t *testing.T) {
 		assert.Equal(t, resource.MustParse("1"), container.Resources.Limits["cpu"])
 		assert.Equal(t, resource.MustParse("1Gi"), container.Resources.Limits["memory"])
 
-		// Verify volume mounts are replaced
-		assert.Len(t, container.VolumeMounts, 1)
-		assert.Equal(t, "storefront-volume", container.VolumeMounts[0].Name)
-		assert.Equal(t, "/storefront", container.VolumeMounts[0].MountPath)
+		// Verify volume mounts are merged
+		assert.Len(t, container.VolumeMounts, 2)
+		assert.Equal(t, "container-volume", container.VolumeMounts[0].Name)
+		assert.Equal(t, "storefront-volume", container.VolumeMounts[1].Name)
+		assert.Equal(t, "/storefront", container.VolumeMounts[1].MountPath)
 
 		// Verify env vars are merged
 		hasStorefrontEnv := false
@@ -241,11 +242,19 @@ func TestStorefrontDeployment(t *testing.T) {
 		container := result.Spec.Template.Spec.Containers[0]
 
 		// Verify probes are configured
+		assert.NotNil(t, container.StartupProbe)
 		assert.NotNil(t, container.LivenessProbe)
 		assert.NotNil(t, container.ReadinessProbe)
-		assert.Equal(t, "/api/_info/health-check", container.LivenessProbe.HTTPGet.Path)
+		assert.Equal(t, "/-/fpm/ping", container.StartupProbe.HTTPGet.Path)
+		assert.Equal(t, int32(8001), container.StartupProbe.HTTPGet.Port.IntVal)
+		assert.Equal(t, "/-/fpm/ping", container.LivenessProbe.HTTPGet.Path)
+		assert.Equal(t, int32(8001), container.LivenessProbe.HTTPGet.Port.IntVal)
 		assert.Equal(t, "/api/_info/health-check", container.ReadinessProbe.HTTPGet.Path)
-		assert.Equal(t, int32(8000), container.LivenessProbe.HTTPGet.Port.IntVal)
 		assert.Equal(t, int32(8000), container.ReadinessProbe.HTTPGet.Port.IntVal)
+
+		assert.Equal(t, int32(5), container.StartupProbe.PeriodSeconds)
+		assert.Equal(t, int32(18), container.StartupProbe.FailureThreshold)
+		assert.Equal(t, int32(10), container.LivenessProbe.PeriodSeconds)
+		assert.Equal(t, int32(3), container.LivenessProbe.FailureThreshold)
 	})
 }
