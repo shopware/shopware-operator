@@ -21,6 +21,12 @@ crds:
 # cert-manager must be installed in the cluster.
 webhook:
   enabled: true
+  # An empty map ({}) uses the operator's release namespace by default.
+  # To validate Stores in all namespaces, use:
+  # namespaceSelector:
+  #   matchExpressions: []
+  # Or set this to a Kubernetes namespaceSelector to manage a custom set of namespaces.
+  namespaceSelector: {}
 
 # rbac: settings for deployer RBAC creation
 rbac:

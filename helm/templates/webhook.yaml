@@ -12,6 +12,7 @@ spec:
     targetPort: 9443
   selector:
     control-plane: shopware-operator
+    shopware.com/operator-release: '{{ .Release.Name }}'
 ---
 apiVersion: cert-manager.io/v1
 kind: Issuer
@@ -40,7 +41,7 @@ kind: ValidatingWebhookConfiguration
 metadata:
   annotations:
     cert-manager.io/inject-ca-from: '{{ .Release.Namespace }}/{{ .Release.Name }}-serving-cert'
-  name: '{{ .Release.Name }}-shopware-operator-validating-webhook'
+  name: '{{ .Release.Name }}-{{ .Release.Namespace }}-shopware-operator-validating-webhook'
 webhooks:
 - admissionReviewVersions:
   - v1
@@ -50,7 +51,7 @@ webhooks:
       namespace: {{ .Release.Namespace }}
       path: /validate-shop-shopware-com-v1-store
   failurePolicy: Fail
-  name: 'vstore.{{ .Release.Name }}.shopware.com'
+  name: 'vstore.{{ .Release.Name }}.{{ .Release.Namespace }}.shopware.com'
   rules:
   - apiGroups:
     - shop.shopware.com
@@ -61,5 +62,13 @@ webhooks:
     - UPDATE
     resources:
     - stores
+  {{- if .Values.webhook.namespaceSelector }}
+  namespaceSelector:
+    {{- toYaml .Values.webhook.namespaceSelector | nindent 4 }}
+  {{- else }}
+  namespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: '{{ .Release.Namespace }}'
+  {{- end }}
   sideEffects: None
 {{- end }}

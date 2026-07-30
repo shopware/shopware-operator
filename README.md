@@ -17,6 +17,14 @@ Below you find a descriptions how to deploy the Operator using `helm` or `kubect
 
 The validating webhook is enabled by default and requires [cert-manager](https://cert-manager.io/) to issue and rotate its certificate. Helm installations can disable it with `--set webhook.enabled=false`; this also removes the cert-manager dependency, but container overrides will no longer receive webhook validation.
 
+For Helm installations, the webhook validates `Store` resources only in the
+operator's release namespace by default. This allows multiple operator versions
+to be installed in separate namespaces without their webhooks affecting one
+another. A custom `webhook.namespaceSelector` can be configured when an operator
+needs to manage additional namespaces. The default value `{}` means “use the
+operator's release namespace”; to select all namespaces explicitly, configure
+`namespaceSelector.matchExpressions: []`.
+
 ### Helm
 
 For a helm installation check out our [charts repository](https://github.com/shopware/helm-charts/tree/main/charts/shopware-operator)

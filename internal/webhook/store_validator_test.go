@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -33,6 +34,41 @@ func TestStoreValidatorAcceptsContainerOverrides(t *testing.T) {
 	}
 }
 
+func TestStoreValidatorAllowsUnknownTopLevelStoreFields(t *testing.T) {
+	t.Parallel()
+
+	response := validateStore(t, admissionv1.Create, `{
+	"apiVersion":"shop.shopware.com/v1",
+	"kind":"Store",
+	"metadata":{"name":"test","namespace":"default"},
+  "spec": {
+    "unknownField": "bar",
+    "lock": {"adapter":"builtin"},
+    "futureField": {"value":true}
+  }
+}`)
+	require.True(t, response.Allowed, response.Result.Message)
+}
+
+func TestStoreValidatorRejectsUnknownAdminDeploymentContainerField(t *testing.T) {
+	t.Parallel()
+
+	response := validateStore(t, admissionv1.Update, `{
+  "apiVersion":"shop.shopware.com/v1",
+  "kind":"Store",
+  "metadata":{"name":"test","namespace":"default"},
+  "spec": {
+    "adminDeploymentContainer": {
+      "unknownField": "bar"
+    }
+  }
+}`)
+
+	require.False(t, response.Allowed)
+	require.NotNil(t, response.Result)
+	assert.Contains(t, strings.ToLower(response.Result.Message), "unknown field")
+}
+
 func TestStoreValidatorRejectsInvalidOverrides(t *testing.T) {
 	t.Parallel()
 
@@ -41,7 +77,7 @@ func TestStoreValidatorRejectsInvalidOverrides(t *testing.T) {
 		message string
 	}{
 		"unknown field": {
-			raw:     `{"spec":{"workerDeploymentContainer":{"unknownField":true}}}`,
+			raw:     `{"spec":{"adminDeploymentContainer":{"unknownField":"bar"}}}`,
 			message: "unknown field",
 		},
 		"unknown nested field": {
@@ -50,6 +86,10 @@ func TestStoreValidatorRejectsInvalidOverrides(t *testing.T) {
 		},
 		"duplicate field": {
 			raw:     `{"spec":{"workerDeploymentContainer":{"replicas":1,"replicas":2}}}`,
+			message: "duplicate field",
+		},
+		"duplicate container override": {
+			raw:     `{"spec":{"adminDeploymentContainer":{},"adminDeploymentContainer":{}}}`,
 			message: "duplicate field",
 		},
 		"wrong field type": {
@@ -87,7 +127,7 @@ func TestStoreValidatorIgnoresOtherOperations(t *testing.T) {
 func validateStore(t *testing.T, operation admissionv1.Operation, raw string) admission.Response {
 	t.Helper()
 
-	return (StoreValidator{}).Handle(context.Background(), admission.Request{
+	return (StoreValidator{Logger: zap.NewNop().Sugar()}).Handle(context.Background(), admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
 			Operation: operation,
 			Object: runtime.RawExtension{
