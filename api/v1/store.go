@@ -478,6 +478,42 @@ func (s *Store) GetSecretName() string {
 	return s.Spec.SecretName
 }
 
+// mergeVolumeMountsByName appends from onto base, replacing any entry whose
+// Name already exists so the merged Pod spec stays free of duplicate mounts.
+func mergeVolumeMountsByName(base, from []corev1.VolumeMount) []corev1.VolumeMount {
+	idx := make(map[string]int, len(base))
+	for i, m := range base {
+		idx[m.Name] = i
+	}
+	for _, m := range from {
+		if i, ok := idx[m.Name]; ok {
+			base[i] = m
+			continue
+		}
+		idx[m.Name] = len(base)
+		base = append(base, m)
+	}
+	return base
+}
+
+// mergeVolumesByName appends from onto base, replacing any entry whose Name
+// already exists so the merged Pod spec stays free of duplicate volumes.
+func mergeVolumesByName(base, from []corev1.Volume) []corev1.Volume {
+	idx := make(map[string]int, len(base))
+	for i, v := range base {
+		idx[v.Name] = i
+	}
+	for _, v := range from {
+		if i, ok := idx[v.Name]; ok {
+			base[i] = v
+			continue
+		}
+		idx[v.Name] = len(base)
+		base = append(base, v)
+	}
+	return base
+}
+
 //nolint:gocyclo
 func (c *ContainerSpec) Merge(from ContainerMergeSpec) {
 	if from.Image != "" {
@@ -499,13 +535,13 @@ func (c *ContainerSpec) Merge(from ContainerMergeSpec) {
 		c.ExtraEnvs = from.ExtraEnvs
 	}
 	if from.VolumeMounts != nil {
-		c.VolumeMounts = append(c.VolumeMounts, from.VolumeMounts...)
+		c.VolumeMounts = mergeVolumeMountsByName(c.VolumeMounts, from.VolumeMounts)
 	}
 	if from.ImagePullSecrets != nil {
 		c.ImagePullSecrets = from.ImagePullSecrets
 	}
 	if from.Volumes != nil {
-		c.Volumes = append(c.Volumes, from.Volumes...)
+		c.Volumes = mergeVolumesByName(c.Volumes, from.Volumes)
 	}
 
 	if from.ServiceAccountName != "" {
