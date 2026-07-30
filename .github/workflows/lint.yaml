@@ -150,7 +150,7 @@ jobs:
           kubectl wait --namespace test --for=condition=Available --timeout=60s deployment/test-shopware-operator
 
           for _ in {1..30}; do
-            ca_bundle="$(kubectl get validatingwebhookconfiguration test-shopware-operator-validating-webhook -o jsonpath='{.webhooks[0].clientConfig.caBundle}')"
+            ca_bundle="$(kubectl get validatingwebhookconfiguration test-test-shopware-operator-validating-webhook -o jsonpath='{.webhooks[0].clientConfig.caBundle}')"
             if [ -n "$ca_bundle" ]; then
               break
             fi

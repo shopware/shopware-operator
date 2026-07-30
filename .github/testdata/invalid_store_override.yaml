@@ -22,5 +22,5 @@ spec:
     adapter: builtin
   worker:
     adapter: builtin
-  workerDeploymentContainer:
-    unexpectedField: true
+  adminDeploymentContainer:
+    unknownField: bar

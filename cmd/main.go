@@ -120,7 +120,7 @@ func main() {
 	if cfg.EnableWebhook {
 		mgr.GetWebhookServer().Register(
 			shopwebhook.StoreValidationPath,
-			&admission.Webhook{Handler: shopwebhook.StoreValidator{}},
+			&admission.Webhook{Handler: shopwebhook.StoreValidator{Logger: logger}},
 		)
 	}
 
