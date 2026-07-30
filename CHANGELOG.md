@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/shopware/shopware-operator/compare/1.4.0...v1.4.1) (2026-07-30)
+
+
+### Bug Fixes
+
+* support multiple operator installations with webhook ([bc4764f](https://github.com/shopware/shopware-operator/commit/bc4764fb2d449ba429272a1a8875440606864e8a))
+
 ## [1.4.0](https://github.com/shopware/shopware-operator/compare/1.3.0...v1.4.0) (2026-07-29)
 
 
