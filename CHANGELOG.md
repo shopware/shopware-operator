@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.2](https://github.com/shopware/shopware-operator/compare/1.5.1...v1.5.2) (2026-07-31)
+
+
+### Bug Fixes
+
+* **release:** avoid jq ARG_MAX on CRD payload; self-heal release branch ([eaa86c0](https://github.com/shopware/shopware-operator/commit/eaa86c021754e27ea5a3d4eea8429a04a5b207c0))
+* **release:** avoid jq ARG_MAX on CRD payload; self-heal release branch ([f0ebdc0](https://github.com/shopware/shopware-operator/commit/f0ebdc0ec7235d30a4b2e09f1d1fd8216916258a))
+
 ## [1.5.1](https://github.com/shopware/shopware-operator/compare/1.5.0...v1.5.1) (2026-07-31)
 
 
