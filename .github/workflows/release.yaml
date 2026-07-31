@@ -121,8 +121,8 @@ jobs:
           additions=$(git diff --cached --name-status --no-renames \
             | awk -F'\t' '$1!="D"{print $2}' \
             | while read -r f; do
-                jq -n --arg path "$f" --arg contents "$(base64 -w0 "$f")" \
-                  '{path:$path, contents:$contents}'
+                base64 -w0 "$f" \
+                  | jq -Rs --arg path "$f" '{path:$path, contents:.}'
               done | jq -s '.')
           deletions=$(git diff --cached --name-status --no-renames \
             | awk -F'\t' '$1=="D"{print $2}' \
