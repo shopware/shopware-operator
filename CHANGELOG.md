@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.5.0](https://github.com/shopware/shopware-operator/compare/1.4.1...v1.5.0) (2026-07-31)
+
+
+### Features
+
+* add LOCK_DSN support and optimized php settings ([b97d376](https://github.com/shopware/shopware-operator/commit/b97d3760cd01a81e1caa568a1b3a6f2272b97dc9))
+* add LOCK_DSN support, rework probes & optimize php settings ([80d7946](https://github.com/shopware/shopware-operator/commit/80d79468f8a5fe77a5066850eb9526a59c0bcf1a))
+* add LOCK_DSN support, rework probes & optimize php settings ([b97d376](https://github.com/shopware/shopware-operator/commit/b97d3760cd01a81e1caa568a1b3a6f2272b97dc9))
+
+
+### Bug Fixes
+
+* merge volumeMounts ([b97d376](https://github.com/shopware/shopware-operator/commit/b97d3760cd01a81e1caa568a1b3a6f2272b97dc9))
+* only merge volume / volumeMounts by name ([a40cefe](https://github.com/shopware/shopware-operator/commit/a40cefe47d771ccabde37b572ae704cdcf201f7f))
+
 ## [1.4.1](https://github.com/shopware/shopware-operator/compare/1.4.0...v1.4.1) (2026-07-30)
 
 
