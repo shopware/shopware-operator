@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.1](https://github.com/shopware/shopware-operator/compare/1.5.0...v1.5.1) (2026-07-31)
+
+
+### Bug Fixes
+
+* **release:** avoid jq ARG_MAX limit encoding CRD files ([02e2400](https://github.com/shopware/shopware-operator/commit/02e24003f61a99924696ee685fcdaa50a578354e))
+* **release:** avoid jq ARG_MAX limit when encoding CRD files ([b7c0378](https://github.com/shopware/shopware-operator/commit/b7c03789cdbe1fa7267318ed51c232c98a955b1c))
+
 ## [1.5.0](https://github.com/shopware/shopware-operator/compare/1.4.1...v1.5.0) (2026-07-31)
 
 
