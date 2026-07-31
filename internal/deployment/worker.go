@@ -78,8 +78,14 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 
 	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.WorkerDeploymentContainer.Annotations)
 
-	// Merge containerSpec.ExtraEnvs to override with merged values from WorkerDeploymentContainer
-	envs := util.MergeEnv(store.GetEnv(), containerSpec.ExtraEnvs)
+	// Worker-specific defaults layered over the shared env, still overridable by
+	// ExtraEnvs. The worker runs a few long-lived processes, so persistent DB
+	// connections are beneficial here (storefront/admin default to 0 in GetEnv to
+	// avoid hoarding connections across many short-lived requests).
+	workerDefaults := []corev1.EnvVar{
+		{Name: "DATABASE_PERSISTENT_CONNECTION", Value: "1"},
+	}
+	envs := util.MergeEnv(util.MergeEnv(store.GetEnv(), workerDefaults), containerSpec.ExtraEnvs)
 
 	// Set PHP_MEMORY_LIMIT to 90% of the container memory limit
 	phpMemoryLimitMiB := 0
