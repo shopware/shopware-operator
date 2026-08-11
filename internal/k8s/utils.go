@@ -398,7 +398,7 @@ func HasObjectChanged(
 	}
 
 	val := reflect.ValueOf(obj)
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		val = reflect.Indirect(val)
 	}
 	oldObject := reflect.New(val.Type()).Interface().(client.Object)
@@ -468,7 +468,7 @@ func EnsureObjectWithHash(
 	obj.SetAnnotations(objAnnotations)
 
 	val := reflect.ValueOf(obj)
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		val = reflect.Indirect(val)
 	}
 	oldObject := reflect.New(val.Type()).Interface().(client.Object)

@@ -45,7 +45,7 @@ func (t TypedSkipStatusPredicate[object]) Update(e event.TypedUpdateEvent[object
 	kind := "unknown"
 	objType := reflect.TypeOf(e.ObjectNew)
 	if objType != nil {
-		if objType.Kind() == reflect.Ptr {
+		if objType.Kind() == reflect.Pointer {
 			objType = objType.Elem()
 		}
 		kind = objType.Name()
@@ -176,7 +176,7 @@ func isNil(arg any) bool {
 	}
 	v := reflect.ValueOf(arg)
 	switch v.Kind() {
-	case reflect.Ptr, reflect.Interface, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func:
+	case reflect.Pointer, reflect.Interface, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func:
 		return v.IsNil()
 	default:
 		return false
@@ -188,7 +188,7 @@ func (t TypedSkipStatusPredicate[object]) isInAllowList(kind string) bool {
 	for _, allowedObj := range t.AllowList {
 		objType := reflect.TypeOf(allowedObj)
 		if objType != nil {
-			if objType.Kind() == reflect.Ptr {
+			if objType.Kind() == reflect.Pointer {
 				objType = objType.Elem()
 			}
 			if objType.Name() == kind {
