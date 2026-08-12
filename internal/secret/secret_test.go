@@ -134,6 +134,35 @@ func TestEnsureStoreSecret_AdminCredentialsSecretRefs(t *testing.T) {
 	}
 }
 
+func TestEnsureStoreSecret_AdminCredentialsPasswordSecretRefUpdatesExistingSecret(t *testing.T) {
+	ctx := context.Background()
+	store := createTestStore()
+	store.Spec.AdminCredentials.Password = ""
+	store.Spec.AdminCredentials.PasswordSecretRef = v1.SecretRef{Name: "admin-credentials", Key: "password"}
+	dbSecret := createDBSecret()
+	adminSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "admin-credentials", Namespace: "default"},
+		Data:       map[string][]byte{"password": []byte("rotated-password")},
+	}
+	storeSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: store.GetSecretName(), Namespace: store.Namespace},
+		Data:       map[string][]byte{"admin-password": []byte("old-password")},
+	}
+
+	scheme := runtime.NewScheme()
+	_ = v1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(store, dbSecret, adminSecret, storeSecret).Build()
+
+	result, err := EnsureStoreSecret(ctx, fakeClient, &mockEventRecorder{}, store)
+	if err != nil {
+		t.Fatalf("EnsureStoreSecret failed: %v", err)
+	}
+	if got := string(result.Data["admin-password"]); got != "rotated-password" {
+		t.Fatalf("expected referenced admin password to replace existing value, got %q", got)
+	}
+}
+
 func TestEnsureStoreSecret_WithOpensearch(t *testing.T) {
 	ctx := context.Background()
 	store := createTestStore()

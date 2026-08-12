@@ -151,6 +151,9 @@ func validateStoreSecret(store *v1.Store) error {
 	if invalidSecretRef(store.Spec.AdminCredentials.UsernameSecretRef) {
 		return fmt.Errorf("admin usernameSecretRef key or name is empty for store %s", store.Name)
 	}
+	if store.Spec.AdminCredentials.Username == "" && !secretRefComplete(store.Spec.AdminCredentials.UsernameSecretRef) {
+		return fmt.Errorf("admin username or a complete usernameSecretRef is required for store %s", store.Name)
+	}
 	if invalidSecretRef(store.Spec.AdminCredentials.PasswordSecretRef) {
 		return fmt.Errorf("admin passwordSecretRef key or name is empty for store %s", store.Name)
 	}
@@ -189,10 +192,10 @@ func GenerateStoreSecret(ctx context.Context, store *v1.Store, secret *corev1.Se
 		secret.Data["app-secret"] = pass
 	}
 
-	if _, ok := secret.Data["admin-password"]; !ok {
-		if len(adminPassword) > 0 {
-			secret.Data["admin-password"] = adminPassword
-		} else if store.Spec.AdminCredentials.Password != "" {
+	if secretRefComplete(store.Spec.AdminCredentials.PasswordSecretRef) {
+		secret.Data["admin-password"] = adminPassword
+	} else if _, ok := secret.Data["admin-password"]; !ok {
+		if store.Spec.AdminCredentials.Password != "" {
 			secret.Data["admin-password"] = []byte(store.Spec.AdminCredentials.Password)
 		} else {
 			admin, err := generatePass(20)

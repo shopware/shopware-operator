@@ -142,7 +142,7 @@ type FastlySpec struct {
 }
 
 type Credentials struct {
-	Username          string    `json:"username"`
+	Username          string    `json:"username,omitempty"`
 	Password          string    `json:"password,omitempty"`
 	UsernameSecretRef SecretRef `json:"usernameSecretRef,omitempty"`
 	PasswordSecretRef SecretRef `json:"passwordSecretRef,omitempty"`
