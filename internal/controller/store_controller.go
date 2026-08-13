@@ -115,7 +115,9 @@ func (r *StoreReconciler) findStoreForReconcile(
 		if store.Spec.Database.PasswordSecretRef.Name == secret.GetName() ||
 			store.Spec.Database.TLS.SecretName == secret.GetName() ||
 			store.Spec.OpensearchSpec.PasswordSecretRef.Name == secret.GetName() ||
-			store.Spec.ShopConfiguration.Fastly.TokenRef.Name == secret.GetName() {
+			store.Spec.ShopConfiguration.Fastly.TokenRef.Name == secret.GetName() ||
+			store.Spec.AdminCredentials.UsernameSecretRef.Name == secret.GetName() ||
+			store.Spec.AdminCredentials.PasswordSecretRef.Name == secret.GetName() {
 			logging.FromContext(ctx).
 				Infow(
 					"Do reconcile on store because db/opensearch/fastly secret has changed",
