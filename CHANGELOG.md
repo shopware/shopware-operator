@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.0](https://github.com/shopware/shopware-operator/compare/1.5.2...v1.6.0) (2026-08-13)
+
+
+### Features
+
+* support secret ref for admin credentials ([3f578f6](https://github.com/shopware/shopware-operator/commit/3f578f6b0dc4e1850cbd5b7b50bbb715d17e2cec))
+* support secret ref for admin credentials ([8ac32b9](https://github.com/shopware/shopware-operator/commit/8ac32b9433d9b8e89b44f87e25cbd172ea51c2d4))
+
 ## [1.5.2](https://github.com/shopware/shopware-operator/compare/1.5.1...v1.5.2) (2026-07-31)
 
 
