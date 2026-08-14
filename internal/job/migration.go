@@ -38,6 +38,8 @@ func GetMigrationJob(
 func MigrationJob(store v1.Store) *batchv1.Job {
 	containerSpec := store.Spec.Container.DeepCopy()
 	containerSpec.Merge(store.Spec.MigrationJobContainer)
+	containerSpec.Volumes = append(containerSpec.Volumes, store.GetDatabaseTLSVolumes()...)
+	containerSpec.VolumeMounts = append(containerSpec.VolumeMounts, store.GetDatabaseTLSVolumeMounts()...)
 
 	backoffLimit := int32(3)
 	sharedProcessNamespace := true

@@ -33,6 +33,7 @@ spec:
         {{- end }}
       labels:
         control-plane: shopware-operator
+        shopware.com/operator-release: '{{ .Release.Name }}'
         {{- with .Values.podLabels }}
             {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -79,8 +80,16 @@ spec:
           value: "{{ .Values.logFormat | default "json" }}"
         - name: DISABLE_CHECKS
           value: "{{ .Values.disableChecks | default "false" }}"
+        - name: ENABLE_WEBHOOK
+          value: "{{ .Values.webhook.enabled }}"
         - name: SUCCESSFUL_CR_CLEANUP_GRACE_PERIOD
           value: "{{ .Values.successfulCRCleanupGracePeriod | default "1h" }}"
+        {{- if .Values.metrics.enabled }}
+        - name: METRICS_BIND_ADDRESS
+          value: ":{{ .Values.metrics.port | default 8080 }}"
+        - name: OPERATOR_SERVICE_URL
+          value: "{{ .Values.metrics.shopwareOperatorUrl | default (printf "http://shopware-operator.%s.svc.cluster.local:%d" .Release.Namespace (.Values.metrics.port | default 8080 | int)) }}"
+        {{- end }}
         {{- if and (hasKey .Values "events") (hasKey .Values.events "nats") (.Values.events.nats.enable) }}
         - name: NATS_ENABLE
           value: "true"
@@ -108,6 +117,19 @@ spec:
           initialDelaySeconds: 15
           periodSeconds: 20
         name: operator
+
+        {{- if or .Values.metrics.enabled .Values.webhook.enabled }}
+        ports:
+        {{- if .Values.metrics.enabled }}
+          - containerPort: {{ .Values.metrics.port | default 8080 }}
+            name: http-metrics
+        {{- end }}
+        {{- if .Values.webhook.enabled }}
+          - containerPort: 9443
+            name: webhook-server
+            protocol: TCP
+        {{- end }}
+        {{- end }}
         readinessProbe:
           httpGet:
             path: /readyz
@@ -124,6 +146,11 @@ spec:
             drop:
             - ALL
         volumeMounts:
+          {{- if .Values.webhook.enabled }}
+          - mountPath: /tmp/k8s-webhook-server/serving-certs
+            name: webhook-certs
+            readOnly: true
+          {{- end }}
           {{- if and (hasKey .Values "events") (hasKey .Values.events "nats") (.Values.events.nats.enable) (hasKey .Values.events.nats "nkeyRef") }}
           - mountPath: /secrets
             name: nkey
@@ -139,6 +166,11 @@ spec:
       serviceAccountName: '{{ .Release.Name }}-shopware-operator'
       terminationGracePeriodSeconds: 10
       volumes:
+        {{- if .Values.webhook.enabled }}
+        - name: webhook-certs
+          secret:
+            secretName: '{{ .Release.Name }}-webhook-server-cert'
+        {{- end }}
         {{- if and (hasKey .Values "events") (hasKey .Values.events "nats") (.Values.events.nats.enable) (hasKey .Values.events.nats "nkeyRef") }}
         - name: nkey
           secret:

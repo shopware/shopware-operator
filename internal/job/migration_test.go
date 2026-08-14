@@ -126,10 +126,11 @@ func TestMigrationJob(t *testing.T) {
 		assert.Equal(t, resource.MustParse("1"), container.Resources.Limits["cpu"])
 		assert.Equal(t, resource.MustParse("1Gi"), container.Resources.Limits["memory"])
 
-		// Verify volume mounts are replaced
-		assert.Len(t, container.VolumeMounts, 1)
-		assert.Equal(t, "migration-volume", container.VolumeMounts[0].Name)
-		assert.Equal(t, "/migration", container.VolumeMounts[0].MountPath)
+		// Verify volume mounts are merged
+		assert.Len(t, container.VolumeMounts, 2)
+		assert.Equal(t, "container-volume", container.VolumeMounts[0].Name)
+		assert.Equal(t, "migration-volume", container.VolumeMounts[1].Name)
+		assert.Equal(t, "/migration", container.VolumeMounts[1].MountPath)
 
 		// Verify env vars are merged
 		hasMigrationEnv := false

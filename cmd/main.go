@@ -33,6 +33,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/go-logr/zapr"
 	shopv1 "github.com/shopware/shopware-operator/api/v1"
@@ -41,6 +43,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/event"
 	"github.com/shopware/shopware-operator/internal/event/nats"
 	"github.com/shopware/shopware-operator/internal/logging"
+	shopwebhook "github.com/shopware/shopware-operator/internal/webhook"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	//+kubebuilder:scaffold:imports
 )
@@ -56,8 +59,11 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(shopv1.AddToScheme(scheme))
-	utilruntime.Must(gatewayv1.Install(scheme))
 	//+kubebuilder:scaffold:scheme
+	//
+	// Ignore errors because gateway-api is not per default installed
+	// nolint:errcheck
+	gatewayv1.Install(scheme)
 }
 
 func main() {
@@ -67,6 +73,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
 		os.Exit(1)
 	}
+
+	shopv1.SetOperatorServiceURL(cfg.OperatorServiceURL)
 
 	logger := logging.NewLogger(cfg.LogLevel, cfg.LogFormat).
 		With(zapz.String("service", "shopware-operator")).
@@ -84,8 +92,8 @@ func main() {
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme: scheme,
-		// Metrics:                 metricsserver.Options{BindAddress: cfg.MetricsAddr},
+		Scheme:                 scheme,
+		Metrics:                metricsserver.Options{BindAddress: cfg.MetricsAddr, SecureServing: false},
 		HealthProbeBindAddress: cfg.ProbeAddr,
 		Cache: cache.Options{
 			DefaultNamespaces: map[string]cache.Config{
@@ -110,6 +118,13 @@ func main() {
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
+	}
+
+	if cfg.EnableWebhook {
+		mgr.GetWebhookServer().Register(
+			shopwebhook.StoreValidationPath,
+			&admission.Webhook{Handler: shopwebhook.StoreValidator{Logger: logger}},
+		)
 	}
 
 	nsClient := client.NewNamespacedClient(mgr.GetClient(), cfg.Namespace)

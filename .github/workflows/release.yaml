@@ -118,18 +118,29 @@ jobs:
 
           # Build the GraphQL fileChanges payload from the staged diff:
           # additions carry base64 contents, deletions are path-only.
-          additions=$(git diff --cached --name-status --no-renames \
+          # Write to files (not shell vars) so the multi-MB payload never
+          # lands on jq's argv -> avoids "Argument list too long".
+          additions_file="$(mktemp)"
+          deletions_file="$(mktemp)"
+          git diff --cached --name-status --no-renames \
             | awk -F'\t' '$1!="D"{print $2}' \
             | while read -r f; do
-                jq -n --arg path "$f" --arg contents "$(base64 -w0 "$f")" \
-                  '{path:$path, contents:$contents}'
-              done | jq -s '.')
-          deletions=$(git diff --cached --name-status --no-renames \
+                base64 -w0 "$f" \
+                  | jq -Rs --arg path "$f" '{path:$path, contents:.}'
+              done | jq -s '.' > "$additions_file"
+          git diff --cached --name-status --no-renames \
             | awk -F'\t' '$1=="D"{print $2}' \
-            | jq -R 'select(length>0) | {path:.}' | jq -s '.')
+            | jq -R 'select(length>0) | {path:.}' | jq -s '.' > "$deletions_file"
 
-          # Create the branch ref via the API.
+          # Create the branch ref via the API. createCommitOnBranch requires
+          # the branch to exist first, so the ref must be created before the
+          # commit. Make it idempotent (a previous failed run may have left the
+          # ref behind) and delete it again if any later step fails, so we never
+          # leave a dangling branch that blocks the next run.
+          gh api "repos/${repo}/git/refs/heads/${branch}" >/dev/null 2>&1 \
+            && gh api -X DELETE "repos/${repo}/git/refs/heads/${branch}"
           gh api "repos/${repo}/git/refs" -f ref="refs/heads/${branch}" -f sha="${head_oid}"
+          trap 'gh api -X DELETE "repos/'"${repo}"'/git/refs/heads/'"${branch}"'" >/dev/null 2>&1 || true' ERR
 
           # Create the commit via GraphQL. Commits made through the API with the
           # octo-sts app token are signed by GitHub -> shows "Verified", authored
@@ -139,15 +150,15 @@ jobs:
             --arg branch "$branch" \
             --arg oid "$head_oid" \
             --arg headline "New shopware operator image ${tag}" \
-            --argjson additions "$additions" \
-            --argjson deletions "$deletions" \
+            --slurpfile additions "$additions_file" \
+            --slurpfile deletions "$deletions_file" \
             '{
               query: "mutation($input: CreateCommitOnBranchInput!){ createCommitOnBranch(input:$input){ commit{ oid url } } }",
               variables: { input: {
                 branch: { repositoryNameWithOwner: $repo, branchName: $branch },
                 expectedHeadOid: $oid,
                 message: { headline: $headline },
-                fileChanges: { additions: $additions, deletions: $deletions }
+                fileChanges: { additions: $additions[0], deletions: $deletions[0] }
               }}
             }' | gh api graphql --input -
 
@@ -159,4 +170,6 @@ jobs:
             --base main \
             --reviewer shopware/product-paas \
             --label autorelease
+          # PR now owns the branch; don't let the cleanup trap delete it.
+          trap - ERR
           gh pr merge --repo "$repo" --merge --auto --delete-branch "${branch}"

@@ -1,6 +1,7 @@
 package util
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,4 +35,15 @@ func TestBuildMySQLShellEnvOverridesHomeAndConfig(t *testing.T) {
 
 	require.Equal(t, 1, homeCount)
 	require.Equal(t, 1, configCount)
+}
+
+func TestMySQLShellRejectsIncompleteClientCertificateConfiguration(t *testing.T) {
+	shell := NewMySQLShell("mysqlsh")
+
+	_, err := shell.run(context.Background(), DatabaseSpec{
+		TLSClientCertificate: true,
+		TLSCert:              []byte("/tls/tls.crt"),
+	}, nil)
+
+	require.EqualError(t, err, "database TLS client certificate and key are required when client certificate authentication is enabled")
 }

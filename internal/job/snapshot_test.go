@@ -20,6 +20,7 @@ func TestSnapshotCreateJobUsesRestrictedContainerSecurityContext(t *testing.T) {
 			SecretName: "store-secret",
 			Database: v1.DatabaseSpec{
 				Name: "shopware",
+				TLS:  v1.DatabaseTLS{SecretName: "database-tls"},
 			},
 			S3Storage: v1.S3Storage{
 				EndpointURL:       "https://s3.example.com",
@@ -50,4 +51,8 @@ func TestSnapshotCreateJobUsesRestrictedContainerSecurityContext(t *testing.T) {
 	assert.False(t, *container.SecurityContext.AllowPrivilegeEscalation)
 	assert.NotNil(t, container.SecurityContext.Capabilities)
 	assert.Equal(t, []corev1.Capability{"ALL"}, container.SecurityContext.Capabilities.Drop)
+	assert.Contains(t, container.Env, corev1.EnvVar{Name: "DB_SSL_CA", Value: "/etc/shopware/database-tls/ca.crt"})
+	assert.Contains(t, container.VolumeMounts, corev1.VolumeMount{Name: "shopware-database-tls", MountPath: "/etc/shopware/database-tls", ReadOnly: true})
+	assert.Len(t, result.Spec.Template.Spec.Volumes, 2)
+	assert.Equal(t, "database-tls", result.Spec.Template.Spec.Volumes[0].Secret.SecretName)
 }

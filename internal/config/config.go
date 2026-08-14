@@ -19,16 +19,20 @@ type NatsHandler struct {
 }
 
 type DatabaseConfig struct {
-	MysqlShellBinaryPath string `env:"MYSQL_SHELL_BINARY_PATH, default=/opt/mysqlsh/bin/mysqlsh"`
-	MysqlDumpBinaryPath  string `env:"MYSQL_DUMP_BINARY_PATH, default=mysqldump"`
-	Host                 string `env:"HOST"`
-	Port                 int32  `env:"PORT, default=3306"`
-	User                 string `env:"USER"`
-	Password             string `env:"PASSWORD"`
-	Database             string `env:"DATABASE"`
-	Version              string `env:"VERSION"`
-	Options              string `env:"OPTIONS"`
-	SSLMode              string `env:"SSL_MODE, default=disable"`
+	MysqlShellBinaryPath    string `env:"MYSQL_SHELL_BINARY_PATH, default=/opt/mysqlsh/bin/mysqlsh"`
+	MysqlDumpBinaryPath     string `env:"MYSQL_DUMP_BINARY_PATH, default=mysqldump"`
+	Host                    string `env:"HOST"`
+	Port                    int32  `env:"PORT, default=3306"`
+	User                    string `env:"USER"`
+	Password                string `env:"PASSWORD"`
+	Database                string `env:"DATABASE"`
+	Version                 string `env:"VERSION"`
+	Options                 string `env:"OPTIONS"`
+	SSLMode                 string `env:"SSL_MODE, default=disable"`
+	SSLCA                   string `env:"SSL_CA"`
+	SSLCert                 string `env:"SSL_CERT"`
+	SSLKey                  string `env:"SSL_KEY"`
+	SSLDontVerifyServerCert bool   `env:"SSL_DONT_VERIFY_SERVER_CERT, default=false"`
 }
 
 type S3Config struct {
@@ -63,7 +67,12 @@ type StoreConfig struct {
 	MetricsAddr string `env:"METRICS_BIND_ADDRESS, default=0"`
 	ProbeAddr   string `env:"HEALTH_PROBE_BIND_ADDRESS, default=:8081"`
 
+	// OperatorServiceURL is exposed to store containers as SHOPWARE_OPERATOR_URL so
+	// the Shopware consumer knows how to reach the operator service.
+	OperatorServiceURL string `env:"OPERATOR_SERVICE_URL"`
+
 	EnableLeaderElection bool   `env:"LEADER_ELECT, default=true"`
+	EnableWebhook        bool   `env:"ENABLE_WEBHOOK, default=true"`
 	DisableChecks        bool   `env:"DISABLE_CHECKS, default=false"`
 	Namespace            string `env:"NAMESPACE, default=default"`
 

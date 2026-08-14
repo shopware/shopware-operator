@@ -356,7 +356,6 @@ func (tc testConfig) databaseSpec(dbName string) DatabaseSpec {
 		User:     tc.dbUser,
 		Password: []byte(tc.dbPassword),
 		Name:     dbName,
-		SSLMode:  tc.dbSSLMode,
 	}
 }
 

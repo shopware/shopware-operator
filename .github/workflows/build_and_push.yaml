@@ -6,14 +6,19 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - "main"
+      - "**"
 
 permissions:
   contents: write
   packages: write
 
+concurrency:
+  group: build-and-push-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
+  PREVIEW_CHART_REGISTRY: oci://ghcr.io/shopware/shopware-operator-preview
 
 jobs:
   goreleaser:
@@ -71,3 +76,68 @@ jobs:
           repoSnapshot='ghcr.io/shopware/shopware-operator-snapshot:${{ fromJSON(steps.goreleaser.outputs.metadata).version }}'
           docker manifest create $repoSnapshot ${repoSnapshot}-arm64 ${repoSnapshot}-amd64
           docker manifest push $repoSnapshot
+
+      - name: Expose image tag
+        id: get_tag
+        run: echo "tag=${{ fromJSON(steps.goreleaser.outputs.metadata).version }}" >> "$GITHUB_OUTPUT"
+
+  preview-helm-chart:
+    if: github.ref != 'refs/heads/main'
+    runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=1
+    needs: goreleaser
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Helm
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.1
+
+      - name: Login to GitHub Container Registry
+        run: |
+          echo '${{ secrets.GITHUB_TOKEN }}' \
+            | helm registry login ghcr.io --username '${{ github.actor }}' --password-stdin
+
+      - name: Build and push preview chart
+        id: chart
+        env:
+          IMAGE_TAG: ${{ needs.goreleaser.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          # Chart versions must be semver, branch names are not. Encode the
+          # branch as a prerelease so every preview sorts below any release.
+          slug=$(echo "$IMAGE_TAG" \
+            | tr '[:upper:]' '[:lower:]' \
+            | tr -c '[:alnum:]' '-' \
+            | sed 's/-\{1,\}/-/g; s/^-//; s/-$//')
+          chart_version="0.0.0-${slug}.g${GITHUB_SHA::7}"
+
+          # version drives appVersion and the snapshot image refs inside the
+          # CRD templates, so it has to stay the branch-named image tag.
+          make helm path=preview-chart version="$IMAGE_TAG" chartVersion="$chart_version"
+
+          helm package preview-chart --destination dist
+          helm push "dist/operator-${chart_version}.tgz" "$PREVIEW_CHART_REGISTRY"
+
+          echo "version=${chart_version}" >> "$GITHUB_OUTPUT"
+
+      - name: Job summary
+        env:
+          CHART_VERSION: ${{ steps.chart.outputs.version }}
+        run: |
+          {
+            echo "### Preview helm chart"
+            echo
+            echo '```sh'
+            echo "helm upgrade --install shopware-operator \\"
+            echo "  ${PREVIEW_CHART_REGISTRY}/operator \\"
+            echo "  --version ${CHART_VERSION}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

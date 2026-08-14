@@ -189,6 +189,19 @@ func (s StoreSnapshotSpec) GetEnv(store Store) []corev1.EnvVar {
 		})
 	}
 
+	if store.Spec.Database.TLS.SecretName != "" {
+		env = append(env, corev1.EnvVar{Name: "DB_SSL_CA", Value: DatabaseTLSCAFile})
+		if store.Spec.Database.TLS.ClientCertificate {
+			env = append(env,
+				corev1.EnvVar{Name: "DB_SSL_CERT", Value: DatabaseTLSCertFile},
+				corev1.EnvVar{Name: "DB_SSL_KEY", Value: DatabaseTLSKeyFile},
+			)
+		}
+		if store.Spec.Database.TLS.DontVerifyServerCertificate {
+			env = append(env, corev1.EnvVar{Name: "DB_SSL_DONT_VERIFY_SERVER_CERT", Value: "true"})
+		}
+	}
+
 	if s.S3BucketAuth.AccessKeyRef.Name != "" {
 		env = append(env, corev1.EnvVar{
 			Name: "AWS_SECRET_ACCESS_KEY",

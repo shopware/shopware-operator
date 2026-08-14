@@ -34,6 +34,8 @@ func DebugPod(store v1.Store, storeDebugInstance v1.StoreDebugInstance) *corev1.
 	}
 
 	store.Spec.Container.Merge(store.Spec.StorefrontDeploymentContainer)
+	store.Spec.Container.Volumes = append(store.Spec.Container.Volumes, store.GetDatabaseTLSVolumes()...)
+	store.Spec.Container.VolumeMounts = append(store.Spec.Container.VolumeMounts, store.GetDatabaseTLSVolumeMounts()...)
 
 	// Use custom image if provided, otherwise use store's image
 	containerImage := store.Spec.Container.Image

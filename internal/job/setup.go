@@ -31,6 +31,8 @@ func GetSetupJob(ctx context.Context, client client.Client, store v1.Store) (*ba
 func SetupJob(store v1.Store) *batchv1.Job {
 	containerSpec := store.Spec.Container.DeepCopy()
 	containerSpec.Merge(store.Spec.SetupJobContainer)
+	containerSpec.Volumes = append(containerSpec.Volumes, store.GetDatabaseTLSVolumes()...)
+	containerSpec.VolumeMounts = append(containerSpec.VolumeMounts, store.GetDatabaseTLSVolumeMounts()...)
 
 	sharedProcessNamespace := true
 	backoffLimit := int32(3)
@@ -40,6 +42,20 @@ func SetupJob(store v1.Store) *batchv1.Job {
 
 	// Use util function for annotations
 	annotations := util.GetDefaultContainerAnnotations(CONTAINER_NAME_SETUP_JOB, store, store.Spec.SetupJobContainer.Annotations)
+
+	adminUsername := corev1.EnvVar{
+		Name:  "INSTALL_ADMIN_USERNAME",
+		Value: store.Spec.AdminCredentials.Username,
+	}
+	if store.Spec.AdminCredentials.UsernameSecretRef.Name != "" {
+		adminUsername.Value = ""
+		adminUsername.ValueFrom = &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: store.Spec.AdminCredentials.UsernameSecretRef.Name},
+				Key:                  store.Spec.AdminCredentials.UsernameSecretRef.Key,
+			},
+		}
+	}
 
 	envs := append(store.GetEnv(),
 		corev1.EnvVar{
@@ -53,10 +69,7 @@ func SetupJob(store v1.Store) *batchv1.Job {
 				},
 			},
 		},
-		corev1.EnvVar{
-			Name:  "INSTALL_ADMIN_USERNAME",
-			Value: store.Spec.AdminCredentials.Username,
-		},
+		adminUsername,
 	)
 
 	// Merge containerSpec.ExtraEnvs to override with merged values from SetupJobContainer
