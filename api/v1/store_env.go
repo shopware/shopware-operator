@@ -485,7 +485,8 @@ func (s *Store) getFastly() []corev1.EnvVar {
 		s.Spec.ShopConfiguration.Fastly.ServiceRef.Key != "" &&
 		s.Spec.ShopConfiguration.Fastly.TokenRef.Name != "" &&
 		s.Spec.ShopConfiguration.Fastly.TokenRef.Key != "" {
-		envVars = append(envVars,
+		envVars = append(
+			envVars,
 			corev1.EnvVar{
 				Name: "FASTLY_SERVICE_ID",
 				ValueFrom: &corev1.EnvVarSource{
@@ -509,6 +510,18 @@ func (s *Store) getFastly() []corev1.EnvVar {
 				},
 			},
 		)
+
+		// Disable snippet sync from deployment-helper
+		if s.Spec.ShopConfiguration.Fastly.DisableOnSetupMigration {
+			envVars = append(
+				envVars,
+				corev1.EnvVar{
+					Name:  "FASTLY_DISABLE_SNIPPET_UPDATE",
+					Value: "1",
+				},
+			)
+		}
+
 	}
 	return envVars
 }
