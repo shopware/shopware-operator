@@ -1,0 +1,80 @@
+# Removes the branch scoped preview artifacts that "Build and push" creates
+# for every non main branch: the snapshot images and the preview helm chart.
+name: Cleanup preview artifacts
+
+on:
+  pull_request:
+    types:
+      - closed
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch whose preview artifacts should be removed
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  cleanup:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete preview packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.event.pull_request.head.ref }}
+          ORG: shopware
+        run: |
+          set -euo pipefail
+
+          if [ "$BRANCH" = "main" ]; then
+            echo "Refusing to clean up main"
+            exit 1
+          fi
+
+          # Mirrors goreleaser's snapshot.version_template.
+          image_tag="${BRANCH//\//-}"
+          # Mirrors the chart version slug from build_and_push.yaml.
+          slug=$(echo "$image_tag" \
+            | tr '[:upper:]' '[:lower:]' \
+            | tr -c '[:alnum:]' '-' \
+            | sed 's/-\{1,\}/-/g; s/^-//; s/-$//')
+
+          # $1 = package name (path separators must be percent encoded)
+          # $2 = jq filter over the tag list, true keeps the version
+          delete_versions() {
+            local package="$1" filter="$2" versions
+
+            versions=$(gh api --paginate \
+              "/orgs/${ORG}/packages/container/${package}/versions" \
+              --jq ".[] | select(any(.metadata.container.tags[]; ${filter})) | .id" \
+              2>/dev/null) || {
+                echo "::warning::Cannot read package ${package}, skipping"
+                return 0
+              }
+
+            if [ -z "$versions" ]; then
+              echo "Nothing to delete in ${package}"
+              return 0
+            fi
+
+            for id in $versions; do
+              echo "Deleting ${package} version ${id}"
+              gh api -X DELETE \
+                "/orgs/${ORG}/packages/container/${package}/versions/${id}" \
+                || echo "::warning::Failed to delete ${package} version ${id}"
+            done
+          }
+
+          # The multi arch manifest list has to go before the per arch tags it
+          # references, otherwise the registry refuses to delete the children.
+          for package in shopware-operator shopware-operator-snapshot; do
+            delete_versions "$package" ". == \"${image_tag}\""
+            delete_versions "$package" ". == \"${image_tag}-amd64\" or . == \"${image_tag}-arm64\""
+          done
+
+          # One chart version per commit, so match the whole branch prefix.
+          delete_versions "shopware-operator-preview%2Foperator" \
+            "startswith(\"0.0.0-${slug}.\")"

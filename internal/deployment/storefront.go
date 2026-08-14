@@ -17,6 +17,7 @@ import (
 )
 
 const DEPLOYMENT_STOREFRONT_CONTAINER_NAME = "shopware-storefront"
+const FPM_ADMIN_PORT int32 = 8001
 
 func GetStorefrontDeployment(
 	ctx context.Context,
@@ -95,18 +96,33 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 
 	containers := append(util.DefaultContainerSecurityContexts(containerSpec.ExtraContainers), corev1.Container{
 		Name: DEPLOYMENT_STOREFRONT_CONTAINER_NAME,
-		LivenessProbe: &corev1.Probe{
+		StartupProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/api/_info/health-check",
+					Path: "/-/fpm/ping",
 					Port: intstr.IntOrString{
 						Type:   intstr.Int,
-						IntVal: containerSpec.Port,
+						IntVal: FPM_ADMIN_PORT,
 					},
 				},
 			},
-			TimeoutSeconds:      2,
-			InitialDelaySeconds: 5,
+			PeriodSeconds:    5,
+			TimeoutSeconds:   5,
+			FailureThreshold: 18,
+		},
+		LivenessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/-/fpm/ping",
+					Port: intstr.IntOrString{
+						Type:   intstr.Int,
+						IntVal: FPM_ADMIN_PORT,
+					},
+				},
+			},
+			PeriodSeconds:    10,
+			TimeoutSeconds:   5,
+			FailureThreshold: 3,
 		},
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{

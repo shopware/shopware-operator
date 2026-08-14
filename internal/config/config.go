@@ -67,7 +67,12 @@ type StoreConfig struct {
 	MetricsAddr string `env:"METRICS_BIND_ADDRESS, default=0"`
 	ProbeAddr   string `env:"HEALTH_PROBE_BIND_ADDRESS, default=:8081"`
 
+	// OperatorServiceURL is exposed to store containers as SHOPWARE_OPERATOR_URL so
+	// the Shopware consumer knows how to reach the operator service.
+	OperatorServiceURL string `env:"OPERATOR_SERVICE_URL"`
+
 	EnableLeaderElection bool   `env:"LEADER_ELECT, default=true"`
+	EnableWebhook        bool   `env:"ENABLE_WEBHOOK, default=true"`
 	DisableChecks        bool   `env:"DISABLE_CHECKS, default=false"`
 	Namespace            string `env:"NAMESPACE, default=default"`
 

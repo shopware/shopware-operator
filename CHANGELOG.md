@@ -1,5 +1,66 @@
 # Changelog
 
+## [1.6.0](https://github.com/shopware/shopware-operator/compare/1.5.2...v1.6.0) (2026-08-13)
+
+
+### Features
+
+* support secret ref for admin credentials ([3f578f6](https://github.com/shopware/shopware-operator/commit/3f578f6b0dc4e1850cbd5b7b50bbb715d17e2cec))
+* support secret ref for admin credentials ([8ac32b9](https://github.com/shopware/shopware-operator/commit/8ac32b9433d9b8e89b44f87e25cbd172ea51c2d4))
+
+## [1.5.2](https://github.com/shopware/shopware-operator/compare/1.5.1...v1.5.2) (2026-07-31)
+
+
+### Bug Fixes
+
+* **release:** avoid jq ARG_MAX on CRD payload; self-heal release branch ([eaa86c0](https://github.com/shopware/shopware-operator/commit/eaa86c021754e27ea5a3d4eea8429a04a5b207c0))
+* **release:** avoid jq ARG_MAX on CRD payload; self-heal release branch ([f0ebdc0](https://github.com/shopware/shopware-operator/commit/f0ebdc0ec7235d30a4b2e09f1d1fd8216916258a))
+
+## [1.5.1](https://github.com/shopware/shopware-operator/compare/1.5.0...v1.5.1) (2026-07-31)
+
+
+### Bug Fixes
+
+* **release:** avoid jq ARG_MAX limit encoding CRD files ([02e2400](https://github.com/shopware/shopware-operator/commit/02e24003f61a99924696ee685fcdaa50a578354e))
+* **release:** avoid jq ARG_MAX limit when encoding CRD files ([b7c0378](https://github.com/shopware/shopware-operator/commit/b7c03789cdbe1fa7267318ed51c232c98a955b1c))
+
+## [1.5.0](https://github.com/shopware/shopware-operator/compare/1.4.1...v1.5.0) (2026-07-31)
+
+
+### Features
+
+* add LOCK_DSN support and optimized php settings ([b97d376](https://github.com/shopware/shopware-operator/commit/b97d3760cd01a81e1caa568a1b3a6f2272b97dc9))
+* add LOCK_DSN support, rework probes & optimize php settings ([80d7946](https://github.com/shopware/shopware-operator/commit/80d79468f8a5fe77a5066850eb9526a59c0bcf1a))
+* add LOCK_DSN support, rework probes & optimize php settings ([b97d376](https://github.com/shopware/shopware-operator/commit/b97d3760cd01a81e1caa568a1b3a6f2272b97dc9))
+
+
+### Bug Fixes
+
+* merge volumeMounts ([b97d376](https://github.com/shopware/shopware-operator/commit/b97d3760cd01a81e1caa568a1b3a6f2272b97dc9))
+* only merge volume / volumeMounts by name ([a40cefe](https://github.com/shopware/shopware-operator/commit/a40cefe47d771ccabde37b572ae704cdcf201f7f))
+
+## [1.4.1](https://github.com/shopware/shopware-operator/compare/1.4.0...v1.4.1) (2026-07-30)
+
+
+### Bug Fixes
+
+* support multiple operator installations with webhook ([bc4764f](https://github.com/shopware/shopware-operator/commit/bc4764fb2d449ba429272a1a8875440606864e8a))
+
+## [1.4.0](https://github.com/shopware/shopware-operator/compare/1.3.0...v1.4.0) (2026-07-29)
+
+
+### Features
+
+* add validating webhook ([cd01631](https://github.com/shopware/shopware-operator/commit/cd016315a7de777453a18bbed92205586f25b41a))
+* add validating webhook ([d09d517](https://github.com/shopware/shopware-operator/commit/d09d517e1f1a6e73a853fc2aab9a8975de6fce5f))
+
+
+### Bug Fixes
+
+* disable webhooks locally ([fb3bfa8](https://github.com/shopware/shopware-operator/commit/fb3bfa8f8271f23b665c926fa4c3e32fee24247f))
+* worker restart after 5 minutes ([6ae4f0b](https://github.com/shopware/shopware-operator/commit/6ae4f0b88541f6248801095fcf0710c254848201))
+* worker restart after 5 minutes ([cc37a4b](https://github.com/shopware/shopware-operator/commit/cc37a4bac04de0999fbfbb7af848181014026879))
+
 ## [1.3.0](https://github.com/shopware/shopware-operator/compare/1.2.0...v1.3.0) (2026-07-14)
 
 

@@ -6,6 +6,7 @@ Useful links
 ## Pre-requisites
 * Kubernetes 1.28+
 * Helm v3
+* cert-manager, unless the validating webhook is disabled
 
 # Disclaimer
 
@@ -37,6 +38,12 @@ To install the chart using a dedicated namespace is recommended:
 ```sh
 helm repo add shopware https://shopware.github.io/helm-charts/
 helm install my-operator shopware/operator --namespace my-namespace --create-namespace
+```
+
+To install without cert-manager, disable container-override validation:
+
+```sh
+helm install my-operator shopware/operator --namespace my-namespace --create-namespace --set webhook.enabled=false
 ```
 
 Checkout the [values.yaml](values.yaml) file to modify the operator deployment.

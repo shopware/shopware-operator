@@ -1,0 +1,6 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: default/serving-cert
+  name: validating-webhook-configuration

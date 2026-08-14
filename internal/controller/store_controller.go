@@ -15,6 +15,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/job"
 	"github.com/shopware/shopware-operator/internal/k8s"
 	"github.com/shopware/shopware-operator/internal/logging"
+	"github.com/shopware/shopware-operator/internal/metrics"
 	"github.com/shopware/shopware-operator/internal/pdb"
 	"github.com/shopware/shopware-operator/internal/secret"
 	"github.com/shopware/shopware-operator/internal/service"
@@ -115,7 +116,9 @@ func (r *StoreReconciler) findStoreForReconcile(
 		if store.Spec.Database.PasswordSecretRef.Name == secret.GetName() ||
 			store.Spec.Database.TLS.SecretName == secret.GetName() ||
 			store.Spec.OpensearchSpec.PasswordSecretRef.Name == secret.GetName() ||
-			store.Spec.ShopConfiguration.Fastly.TokenRef.Name == secret.GetName() {
+			store.Spec.ShopConfiguration.Fastly.TokenRef.Name == secret.GetName() ||
+			store.Spec.AdminCredentials.UsernameSecretRef.Name == secret.GetName() ||
+			store.Spec.AdminCredentials.PasswordSecretRef.Name == secret.GetName() {
 			logging.FromContext(ctx).
 				Infow(
 					"Do reconcile on store because db/opensearch/fastly secret has changed",
@@ -176,6 +179,7 @@ func (r *StoreReconciler) Reconcile(
 	// }
 
 	if !store.DeletionTimestamp.IsZero() {
+		metrics.RemoveStoreMetrics(store)
 		return shortRequeue, nil
 	}
 
