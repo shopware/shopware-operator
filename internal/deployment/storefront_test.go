@@ -331,4 +331,41 @@ func TestStorefrontDeployment(t *testing.T) {
 			assert.NotEqual(t, "FPM_LISTEN", env.Name, "FPM_LISTEN should not be set")
 		}
 	})
+
+	t.Run("test frankenphp uses caddy admin probes instead of fpm ping", func(t *testing.T) {
+		store := v1.Store{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-store",
+				Namespace: "test",
+			},
+			Spec: v1.StoreSpec{
+				Container: v1.ContainerSpec{
+					Image:           "shopware:frankenphp",
+					ImagePullPolicy: "IfNotPresent",
+					Port:            8000,
+					Resources: corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							"memory": resource.MustParse("2Gi"),
+						},
+					},
+				},
+				FPM: v1.FPMSpec{
+					ProcessManagement: "frankenphp",
+				},
+				SecretName: "store-secret",
+			},
+		}
+
+		result := deployment.StorefrontDeployment(store)
+		container := result.Spec.Template.Spec.Containers[0]
+
+		// FrankenPHP should use Caddy admin API (port 2019) for startup/liveness
+		assert.Equal(t, "/config/", container.StartupProbe.HTTPGet.Path)
+		assert.Equal(t, int32(2019), container.StartupProbe.HTTPGet.Port.IntVal)
+		assert.Equal(t, "/config/", container.LivenessProbe.HTTPGet.Path)
+		assert.Equal(t, int32(2019), container.LivenessProbe.HTTPGet.Port.IntVal)
+		// Readiness still uses the app health check
+		assert.Equal(t, "/api/_info/health-check", container.ReadinessProbe.HTTPGet.Path)
+		assert.Equal(t, int32(8000), container.ReadinessProbe.HTTPGet.Port.IntVal)
+	})
 }
