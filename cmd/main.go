@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/go-logr/zapr"
@@ -73,6 +74,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	shopv1.SetOperatorServiceURL(cfg.OperatorServiceURL)
+
 	logger := logging.NewLogger(cfg.LogLevel, cfg.LogFormat).
 		With(zapz.String("service", "shopware-operator")).
 		With(zapz.String("operator_version", version)).
@@ -89,8 +92,8 @@ func main() {
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme: scheme,
-		// Metrics:                 metricsserver.Options{BindAddress: cfg.MetricsAddr},
+		Scheme:                 scheme,
+		Metrics:                metricsserver.Options{BindAddress: cfg.MetricsAddr, SecureServing: false},
 		HealthProbeBindAddress: cfg.ProbeAddr,
 		Cache: cache.Options{
 			DefaultNamespaces: map[string]cache.Config{

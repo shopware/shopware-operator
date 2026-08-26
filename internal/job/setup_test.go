@@ -21,6 +21,30 @@ func TestStoreContainer(t *testing.T) {
 }
 
 func TestSetupJob(t *testing.T) {
+	t.Run("uses admin username secret ref", func(t *testing.T) {
+		store := v1.Store{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-store", Namespace: "test"},
+			Spec: v1.StoreSpec{
+				Container:   v1.ContainerSpec{Image: "shopware:latest"},
+				SetupScript: "/setup.sh",
+				AdminCredentials: v1.Credentials{
+					UsernameSecretRef: v1.SecretRef{Name: "admin-credentials", Key: "username"},
+				},
+			},
+		}
+
+		container := job.SetupJob(store).Spec.Template.Spec.Containers[0]
+		var username corev1.EnvVar
+		for _, env := range container.Env {
+			if env.Name == "INSTALL_ADMIN_USERNAME" {
+				username = env
+			}
+		}
+		assert.Equal(t, "admin-credentials", username.ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, "username", username.ValueFrom.SecretKeyRef.Key)
+		assert.Empty(t, username.Value)
+	})
+
 	t.Run("test annotation merging", func(t *testing.T) {
 		store := v1.Store{
 			ObjectMeta: metav1.ObjectMeta{

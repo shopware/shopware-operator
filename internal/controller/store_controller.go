@@ -15,6 +15,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/job"
 	"github.com/shopware/shopware-operator/internal/k8s"
 	"github.com/shopware/shopware-operator/internal/logging"
+	"github.com/shopware/shopware-operator/internal/metrics"
 	"github.com/shopware/shopware-operator/internal/pdb"
 	"github.com/shopware/shopware-operator/internal/secret"
 	"github.com/shopware/shopware-operator/internal/service"
@@ -115,7 +116,9 @@ func (r *StoreReconciler) findStoreForReconcile(
 		if store.Spec.Database.PasswordSecretRef.Name == secret.GetName() ||
 			store.Spec.Database.TLS.SecretName == secret.GetName() ||
 			store.Spec.OpensearchSpec.PasswordSecretRef.Name == secret.GetName() ||
-			store.Spec.ShopConfiguration.Fastly.TokenRef.Name == secret.GetName() {
+			store.Spec.ShopConfiguration.Fastly.TokenRef.Name == secret.GetName() ||
+			store.Spec.AdminCredentials.UsernameSecretRef.Name == secret.GetName() ||
+			store.Spec.AdminCredentials.PasswordSecretRef.Name == secret.GetName() {
 			logging.FromContext(ctx).
 				Infow(
 					"Do reconcile on store because db/opensearch/fastly secret has changed",
@@ -143,8 +146,8 @@ func (r *StoreReconciler) findStoreForReconcile(
 //+kubebuilder:rbac:groups="",namespace=default,resources=pods,verbs=get;list;watch;
 //+kubebuilder:rbac:groups="apps",namespace=default,resources=deployments,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="batch",namespace=default,resources=jobs,verbs=get;list;watch;create;delete
-//+kubebuilder:rbac:groups="networking.k8s.io",namespace=default,resources=ingresses,verbs=get;list;watch;create;patch
-//+kubebuilder:rbac:groups="gateway.networking.k8s.io",namespace=default,resources=httproutes,verbs=get;list;watch;create;patch
+//+kubebuilder:rbac:groups="networking.k8s.io",namespace=default,resources=ingresses,verbs=get;list;watch;create;patch;delete
+//+kubebuilder:rbac:groups="gateway.networking.k8s.io",namespace=default,resources=httproutes,verbs=get;list;watch;create;patch;delete
 //+kubebuilder:rbac:groups="policy",namespace=default,resources=poddisruptionbudgets,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="batch",namespace=default,resources=cronjobs,verbs=get;patch;list;watch;create;delete
 
@@ -176,6 +179,7 @@ func (r *StoreReconciler) Reconcile(
 	// }
 
 	if !store.DeletionTimestamp.IsZero() {
+		metrics.RemoveStoreMetrics(store)
 		return shortRequeue, nil
 	}
 

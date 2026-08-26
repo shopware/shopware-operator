@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.7.0](https://github.com/shopware/shopware-operator/compare/1.6.0...v1.7.0) (2026-08-14)
+
+
+### Features
+
+* add disable snippet sync for deployment helper ([32efea9](https://github.com/shopware/shopware-operator/commit/32efea9b0b484f6dca0069e96549bd9ceff3f71d))
+* add helm-chart push ([7faf3fb](https://github.com/shopware/shopware-operator/commit/7faf3fb15c4b399c898265769ce54abf5b2f2fed))
+* add metrics support ([59e8b09](https://github.com/shopware/shopware-operator/commit/59e8b09694c0887fd9a16781333e25f04512cf77))
+* add prometheus metrics ([0221393](https://github.com/shopware/shopware-operator/commit/02213930ff8d9fc16265496fc66bebc5a938e44f))
+
+
+### Bug Fixes
+
+* make shop config optional ([c18fa76](https://github.com/shopware/shopware-operator/commit/c18fa7647f56c2de463263887fc880acf26cc5bc))
+
+## [1.6.0](https://github.com/shopware/shopware-operator/compare/1.5.2...v1.6.0) (2026-08-13)
+
+
+### Features
+
+* support secret ref for admin credentials ([3f578f6](https://github.com/shopware/shopware-operator/commit/3f578f6b0dc4e1850cbd5b7b50bbb715d17e2cec))
+* support secret ref for admin credentials ([8ac32b9](https://github.com/shopware/shopware-operator/commit/8ac32b9433d9b8e89b44f87e25cbd172ea51c2d4))
+
 ## [1.5.2](https://github.com/shopware/shopware-operator/compare/1.5.1...v1.5.2) (2026-07-31)
 
 

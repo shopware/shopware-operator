@@ -35,18 +35,8 @@ type EventRecorder interface {
 }
 
 func EnsureStoreSecret(ctx context.Context, r client.Client, recorder EventRecorder, store *v1.Store) (*corev1.Secret, error) {
-	if store.Spec.Database.Host == "" && store.Spec.Database.HostRef.Name == "" {
-		return nil, fmt.Errorf("database host is empty for store %s. Either set host or a hostRef", store.Name)
-	}
-
-	if store.Spec.OpensearchSpec.Enabled && (store.Spec.OpensearchSpec.PasswordSecretRef.Name == "" || store.Spec.OpensearchSpec.PasswordSecretRef.Key == "") {
-		return nil, fmt.Errorf("opensearch is enabled but passwordSecretRef key or name is empty for store %s", store.Name)
-	}
-
-	// Validate Fastly configuration: if ServiceRef is provided, TokenRef must also be provided
-	if (store.Spec.ShopConfiguration.Fastly.ServiceRef.Name != "" || store.Spec.ShopConfiguration.Fastly.ServiceRef.Key != "") &&
-		(store.Spec.ShopConfiguration.Fastly.TokenRef.Name == "" || store.Spec.ShopConfiguration.Fastly.TokenRef.Key == "") {
-		return nil, fmt.Errorf("fastly apiTokenSecretRef key or name is empty for store %s. Unset the fastlyServiceID or provide a secret", store.Name)
+	if err := validateStoreSecret(store); err != nil {
+		return nil, err
 	}
 
 	var opensearchPassword []byte
@@ -66,6 +56,17 @@ func EnsureStoreSecret(ctx context.Context, r client.Client, recorder EventRecor
 			return nil, fmt.Errorf("can't read opensearch secret: %w", err)
 		}
 		opensearchPassword = es.Data[store.Spec.OpensearchSpec.PasswordSecretRef.Key]
+	}
+
+	var (
+		adminPassword []byte
+		err           error
+	)
+	if store.Spec.AdminCredentials.PasswordSecretRef.Name != "" {
+		adminPassword, err = getSecretValue(ctx, r, store, store.Spec.AdminCredentials.PasswordSecretRef, "Admin credentials")
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var fastlyToken []byte
@@ -129,7 +130,7 @@ func EnsureStoreSecret(ctx context.Context, r client.Client, recorder EventRecor
 		return nil, fmt.Errorf("get store secret: %w", err)
 	}
 
-	if err = GenerateStoreSecret(ctx, store, storeSecret, dbSpec, opensearchPassword, fastlyServiceID, fastlyToken); err != nil {
+	if err = GenerateStoreSecret(ctx, store, storeSecret, dbSpec, opensearchPassword, fastlyServiceID, fastlyToken, adminPassword); err != nil {
 		return nil, fmt.Errorf("fill store secret: %w", err)
 	}
 	storeSecret.Name = store.GetSecretName()
@@ -138,7 +139,47 @@ func EnsureStoreSecret(ctx context.Context, r client.Client, recorder EventRecor
 	return storeSecret, nil
 }
 
-func GenerateStoreSecret(ctx context.Context, store *v1.Store, secret *corev1.Secret, dbSpec *util.DatabaseSpec, opensearchPassword []byte, fastlyServiceID []byte, fastlyToken []byte) error {
+func validateStoreSecret(store *v1.Store) error {
+	if store.Spec.Database.Host == "" && store.Spec.Database.HostRef.Name == "" {
+		return fmt.Errorf("database host is empty for store %s. Either set host or a hostRef", store.Name)
+	}
+
+	if store.Spec.OpensearchSpec.Enabled && (store.Spec.OpensearchSpec.PasswordSecretRef.Name == "" || store.Spec.OpensearchSpec.PasswordSecretRef.Key == "") {
+		return fmt.Errorf("opensearch is enabled but passwordSecretRef key or name is empty for store %s", store.Name)
+	}
+
+	if invalidSecretRef(store.Spec.AdminCredentials.UsernameSecretRef) {
+		return fmt.Errorf("admin usernameSecretRef key or name is empty for store %s", store.Name)
+	}
+	if store.Spec.AdminCredentials.Username == "" && !secretRefComplete(store.Spec.AdminCredentials.UsernameSecretRef) {
+		return fmt.Errorf("admin username or a complete usernameSecretRef is required for store %s", store.Name)
+	}
+	if invalidSecretRef(store.Spec.AdminCredentials.PasswordSecretRef) {
+		return fmt.Errorf("admin passwordSecretRef key or name is empty for store %s", store.Name)
+	}
+
+	// Validate Fastly configuration: if ServiceRef is provided, TokenRef must also be provided.
+	if secretRefProvided(store.Spec.ShopConfiguration.Fastly.ServiceRef) &&
+		!secretRefComplete(store.Spec.ShopConfiguration.Fastly.TokenRef) {
+		return fmt.Errorf("fastly apiTokenSecretRef key or name is empty for store %s. Unset the fastlyServiceID or provide a secret", store.Name)
+	}
+
+	return nil
+}
+
+func invalidSecretRef(ref v1.SecretRef) bool {
+	return secretRefProvided(ref) && !secretRefComplete(ref)
+}
+
+func secretRefProvided(ref v1.SecretRef) bool {
+	return ref.Name != "" || ref.Key != ""
+}
+
+func secretRefComplete(ref v1.SecretRef) bool {
+	return ref.Name != "" && ref.Key != ""
+}
+
+func GenerateStoreSecret(ctx context.Context, store *v1.Store, secret *corev1.Secret, dbSpec *util.DatabaseSpec, opensearchPassword []byte, fastlyServiceID []byte, fastlyToken []byte, adminPassword []byte) error {
 	if secret.Data == nil {
 		secret.Data = make(map[string][]byte)
 	}
@@ -151,7 +192,9 @@ func GenerateStoreSecret(ctx context.Context, store *v1.Store, secret *corev1.Se
 		secret.Data["app-secret"] = pass
 	}
 
-	if _, ok := secret.Data["admin-password"]; !ok {
+	if secretRefComplete(store.Spec.AdminCredentials.PasswordSecretRef) {
+		secret.Data["admin-password"] = adminPassword
+	} else if _, ok := secret.Data["admin-password"]; !ok {
 		if store.Spec.AdminCredentials.Password != "" {
 			secret.Data["admin-password"] = []byte(store.Spec.AdminCredentials.Password)
 		} else {
@@ -189,6 +232,22 @@ func GenerateStoreSecret(ctx context.Context, store *v1.Store, secret *corev1.Se
 	}
 
 	return nil
+}
+
+func getSecretValue(ctx context.Context, r client.Client, store *v1.Store, ref v1.SecretRef, description string) ([]byte, error) {
+	secret := new(corev1.Secret)
+	if err := r.Get(ctx, types.NamespacedName{Namespace: store.Namespace, Name: ref.Name}, secret); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil, fmt.Errorf("can't find %s secret %s: %w", description, ref.Name, err)
+		}
+		return nil, fmt.Errorf("can't read %s secret %s: %w", description, ref.Name, err)
+	}
+
+	value, ok := secret.Data[ref.Key]
+	if !ok {
+		return nil, fmt.Errorf("%s secret %s does not contain key %s", description, ref.Name, ref.Key)
+	}
+	return value, nil
 }
 
 func generatePass(long int) ([]byte, error) {

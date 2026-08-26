@@ -84,6 +84,12 @@ spec:
           value: "{{ .Values.webhook.enabled }}"
         - name: SUCCESSFUL_CR_CLEANUP_GRACE_PERIOD
           value: "{{ .Values.successfulCRCleanupGracePeriod | default "1h" }}"
+        {{- if .Values.metrics.enabled }}
+        - name: METRICS_BIND_ADDRESS
+          value: ":{{ .Values.metrics.port | default 8080 }}"
+        - name: OPERATOR_SERVICE_URL
+          value: "{{ .Values.metrics.shopwareOperatorUrl | default (printf "http://shopware-operator.%s.svc.cluster.local:%d" .Release.Namespace (.Values.metrics.port | default 8080 | int)) }}"
+        {{- end }}
         {{- if and (hasKey .Values "events") (hasKey .Values.events "nats") (.Values.events.nats.enable) }}
         - name: NATS_ENABLE
           value: "true"
@@ -111,18 +117,25 @@ spec:
           initialDelaySeconds: 15
           periodSeconds: 20
         name: operator
+
+        {{- if or .Values.metrics.enabled .Values.webhook.enabled }}
+        ports:
+        {{- if .Values.metrics.enabled }}
+          - containerPort: {{ .Values.metrics.port | default 8080 }}
+            name: http-metrics
+        {{- end }}
+        {{- if .Values.webhook.enabled }}
+          - containerPort: 9443
+            name: webhook-server
+            protocol: TCP
+        {{- end }}
+        {{- end }}
         readinessProbe:
           httpGet:
             path: /readyz
             port: 8081
           initialDelaySeconds: 5
           periodSeconds: 10
-        {{- if .Values.webhook.enabled }}
-        ports:
-        - containerPort: 9443
-          name: webhook-server
-          protocol: TCP
-        {{- end }}
         resources:
           {{- with .Values.resources }}
               {{- toYaml . | nindent 10 }}

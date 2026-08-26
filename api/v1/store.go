@@ -129,22 +129,28 @@ func init() {
 }
 
 type Configuration struct {
-	Currency string     `json:"currency"`
-	Locale   string     `json:"locale"`
-	Fastly   FastlySpec `json:"fastly,omitempty"`
+	// +kubebuilder:default="EUR"
+	Currency string `json:"currency"`
+	// +kubebuilder:default="en-GB"
+	Locale string     `json:"locale"`
+	Fastly FastlySpec `json:"fastly,omitempty"`
 
 	// +kubebuilder:validation:Enum=revoked;allowed
-	UsageDataConsent string `json:"usageDataConsent"`
+	// +kubebuilder:default=allowed
+	UsageDataConsent string `json:"usageDataConsent,omitempty"`
 }
 
 type FastlySpec struct {
-	TokenRef   SecretRef `json:"tokenRef,omitempty"`
-	ServiceRef SecretRef `json:"serviceRef,omitempty"`
+	DisableOnSetupMigration bool      `json:"disableOnSetupMigration,omitempty"`
+	TokenRef                SecretRef `json:"tokenRef,omitempty"`
+	ServiceRef              SecretRef `json:"serviceRef,omitempty"`
 }
 
 type Credentials struct {
-	Username string `json:"username"`
-	Password string `json:"password,omitempty"`
+	Username          string    `json:"username,omitempty"`
+	Password          string    `json:"password,omitempty"`
+	UsernameSecretRef SecretRef `json:"usernameSecretRef,omitempty"`
+	PasswordSecretRef SecretRef `json:"passwordSecretRef,omitempty"`
 }
 
 type Hook struct {

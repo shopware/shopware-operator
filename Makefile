@@ -233,7 +233,7 @@ helm: path version manifests kustomize yq ## Undeploy controller from the K8s cl
 	$(KUSTOMIZE) build config/crd > $(path)/templates/crds/all.yaml
 	$(KUSTOMIZE) build config/helm > $(path)/templates/operator.yaml
 	$(YQ) e -i '.appVersion = "$(version)"' $(path)/Chart.yaml
-	$(YQ) e -i '.version = "$(version)"' $(path)/Chart.yaml
+	$(YQ) e -i '.version = "$(if $(chartVersion),$(chartVersion),$(version))"' $(path)/Chart.yaml
 	sed -i 's|image: ghcr.io/shopware/shopware-operator-snapshot:main|image: ghcr.io/shopware/shopware-operator-snapshot:'${version}'|g' $(path)/templates/crds/all.yaml
 	$(YQ) $(path)/templates/crds/all.yaml -s '"$(path)/templates/crds/" + .spec.names.kind' --no-doc
 	rm $(path)/templates/crds/all.yaml
