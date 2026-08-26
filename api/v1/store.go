@@ -64,6 +64,7 @@ type StoreSpec struct {
 	S3Storage               S3Storage     `json:"s3Storage,omitempty"`
 	CDNURL                  string        `json:"cdnURL"`
 	Blackfire               BlackfireSpec `json:"blackfire,omitempty"`
+	Tideways                TidewaysSpec  `json:"tideways,omitempty"`
 	Otel                    OtelSpec      `json:"otel,omitempty"`
 	FPM                     FPMSpec       `json:"fpm,omitempty"`
 	HorizontalPodAutoscaler HPASpec       `json:"horizontalPodAutoscaler,omitempty"`
@@ -398,6 +399,21 @@ type BlackfireSpec struct {
 	Host string `json:"host,omitempty"`
 	// +kubebuilder:default=8307
 	Port int `json:"port,omitempty"`
+}
+
+type TidewaysSpec struct {
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+
+	// +kubebuilder:default=tideways
+	Host string `json:"host,omitempty"`
+	// +kubebuilder:default=9135
+	Port int `json:"port,omitempty"`
+
+	// +kubebuilder:default=shopware
+	Service string `json:"service,omitempty"`
+
+	APIKeyRef SecretRef `json:"apiKeyRef,omitempty"`
 }
 
 type OtelSpec struct {
