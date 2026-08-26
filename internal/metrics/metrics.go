@@ -75,6 +75,7 @@ var (
 		v1.StateInitializing,
 		v1.StateMigration,
 		v1.StateMigrationError,
+		v1.StateCrashLoop,
 		v1.StateReady,
 	}
 

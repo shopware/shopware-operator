@@ -40,7 +40,7 @@ func TestWorkerDeployment(t *testing.T) {
 			},
 		}
 
-		result := deployment.WorkerDeployment(store)
+		result := deployment.WorkerDeployment(store, "async")
 
 		// Verify annotations are merged correctly
 		assert.Equal(t, "worker-value", result.Annotations["shared.key"], "Shared key should be overwritten by worker")
@@ -109,7 +109,7 @@ func TestWorkerDeployment(t *testing.T) {
 			},
 		}
 
-		result := deployment.WorkerDeployment(store)
+		result := deployment.WorkerDeployment(store, "async")
 		container := result.Spec.Template.Spec.Containers[0]
 
 		// Verify image and policy are overwritten
@@ -167,7 +167,7 @@ func TestWorkerDeployment(t *testing.T) {
 			},
 		}
 
-		result := deployment.WorkerDeployment(store)
+		result := deployment.WorkerDeployment(store, "async")
 
 		// Verify security context is overwritten
 		assert.NotNil(t, result.Spec.Template.Spec.SecurityContext)
@@ -192,7 +192,7 @@ func TestWorkerDeployment(t *testing.T) {
 			},
 		}
 
-		result := deployment.WorkerDeployment(store)
+		result := deployment.WorkerDeployment(store, "async")
 
 		// Verify service account is overwritten
 		assert.Equal(t, "worker-sa", result.Spec.Template.Spec.ServiceAccountName)
@@ -213,15 +213,16 @@ func TestWorkerDeployment(t *testing.T) {
 			},
 		}
 
-		result := deployment.WorkerDeployment(store)
+		result := deployment.WorkerDeployment(store, "async")
 		container := result.Spec.Template.Spec.Containers[0]
 
 		// Verify worker command and args
 		assert.Equal(t, []string{"/bin/sh", "-c"}, container.Command)
 		assert.Len(t, container.Args, 1)
-		assert.Contains(t, container.Args[0], "bin/console messenger:consume failed async low_priority --time-limit=300")
+		assert.Contains(t, container.Args[0], "bin/console messenger:consume async --time-limit=300")
 		assert.NotContains(t, container.Args[0], "--memory-limit")
-		assert.Contains(t, container.Args[0], `trap 'kill -TERM "$child"`)
+		assert.Contains(t, container.Args[0], `trap term TERM INT`)
+		assert.Contains(t, container.Args[0], `kill -TERM "$child"`)
 		assert.Equal(t, "shopware-worker", container.Name)
 	})
 
@@ -243,7 +244,7 @@ func TestWorkerDeployment(t *testing.T) {
 			},
 		}
 
-		result := deployment.WorkerDeployment(store)
+		result := deployment.WorkerDeployment(store, "async")
 		container := result.Spec.Template.Spec.Containers[0]
 
 		assert.Contains(t, container.Args[0], "--memory-limit=900M")

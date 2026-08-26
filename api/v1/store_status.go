@@ -14,14 +14,15 @@ type (
 )
 
 const (
-	StateEmpty          StatefulAppState = ""
-	StateWait           StatefulAppState = "waiting"
-	StateSetup          StatefulAppState = "setup"
-	StateSetupError     StatefulAppState = "setup_error"
-	StateInitializing   StatefulAppState = "initializing"
-	StateMigration      StatefulAppState = "migrating"
-	StateMigrationError StatefulAppState = "migrating_error"
-	StateReady          StatefulAppState = "ready"
+	StateEmpty                StatefulAppState = ""
+	StateWait                 StatefulAppState = "waiting"
+	StateSetup                StatefulAppState = "setup"
+	StateSetupError           StatefulAppState = "setup_error"
+	StateInitializing         StatefulAppState = "initializing"
+	StateMigration            StatefulAppState = "migrating"
+	StateMigrationError       StatefulAppState = "migrating_error"
+	StateCrashLoop            StatefulAppState = "crash_loop_backoff"
+	StateReady                StatefulAppState = "ready"
 )
 
 const (
@@ -53,6 +54,18 @@ type DeploymentCondition struct {
 	StoreReplicas  int32           `json:"storeReplicas,omitempty"`
 }
 
+type QueueTransportStats struct {
+	Name  string `json:"name"`
+	Count int64  `json:"count"`
+}
+
+type QueueCondition struct {
+	LastUpdateTime        metav1.Time           `json:"lastUpdatedTime,omitempty"`
+	Error                 string                `json:"error,omitempty"`
+	Transports            []QueueTransportStats `json:"transports,omitempty"`
+	UncountableTransports []string              `json:"uncountableTransports,omitempty"`
+}
+
 type StoreStatus struct {
 	State           StatefulAppState `json:"state,omitempty"`
 	Message         string           `json:"message,omitempty"`
@@ -61,6 +74,8 @@ type StoreStatus struct {
 	WorkerState     DeploymentCondition `json:"workerState,omitempty"`
 	AdminState      DeploymentCondition `json:"adminState,omitempty"`
 	StorefrontState DeploymentCondition `json:"storefrontState,omitempty"`
+
+	QueueState QueueCondition `json:"queueState,omitempty"`
 
 	StoreConditionsList `json:",inline"`
 }

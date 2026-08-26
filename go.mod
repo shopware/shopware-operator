@@ -2,8 +2,6 @@ module github.com/shopware/shopware-operator
 
 go 1.26.0
 
-toolchain go1.26
-
 require (
 	github.com/aws/aws-sdk-go-v2 v1.37.2
 	github.com/aws/aws-sdk-go-v2/config v1.27.36
@@ -43,11 +41,14 @@ require (
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/google/btree v1.1.3 // indirect
+	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/minio/crc64nvme v1.0.1 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
+	github.com/moby/spdystream v0.5.0 // indirect
+	github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f // indirect
 	github.com/nats-io/nkeys v0.4.11 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/rs/xid v1.6.0 // indirect

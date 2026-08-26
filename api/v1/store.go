@@ -342,7 +342,8 @@ type SessionCacheSpec struct {
 }
 
 type WorkerSpec struct {
-	RedisSpec `json:",inline"`
+	RedisSpec         `json:",inline"`
+	EnableKedaScaling bool `json:"enableKedaScaling,omitempty"`
 
 	// +kubebuilder:validation:Enum=builtin;redis
 	Adapter string `json:"adapter"`

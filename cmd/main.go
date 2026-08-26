@@ -28,6 +28,7 @@ import (
 	zapz "go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -157,6 +158,8 @@ func main() {
 	if err = (&controller.StoreReconciler{
 		Logger:               logger,
 		Client:               nsClient,
+		Clientset:            kubernetes.NewForConfigOrDie(mgr.GetConfig()),
+		RestConfig:           mgr.GetConfig(),
 		EventHandlers:        handlers,
 		Scheme:               mgr.GetScheme(),
 		Recorder:             mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),

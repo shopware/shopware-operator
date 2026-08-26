@@ -609,6 +609,8 @@ func extractRelevantData(obj runtime.Object) interface{} {
 		return object.Spec
 	case *corev1.Secret:
 		return object.Data
+	case *corev1.ConfigMap:
+		return object.Data
 	case *cm.Certificate:
 		return object.Spec
 	case *cm.Issuer:
