@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.7.2](https://github.com/shopware/shopware-operator/compare/1.7.1...v1.7.2) (2026-08-27)
+
+
+### Bug Fixes
+
+* make pipeline faster but more expensive ([4f89cb2](https://github.com/shopware/shopware-operator/commit/4f89cb2fceda4c28358b1fcccfec1545cf1f244f))
+* remove webhook from consume ([391940a](https://github.com/shopware/shopware-operator/commit/391940ac2458ed652916f1d8f7ac9f61d9edfa94))
+
 ## [1.7.1](https://github.com/shopware/shopware-operator/compare/1.7.0...v1.7.1) (2026-08-26)
 
 
