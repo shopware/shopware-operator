@@ -5,11 +5,13 @@ import (
 	"testing"
 	"time"
 
+	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/cronjob"
 	"github.com/shopware/shopware-operator/internal/deployment"
 	"github.com/shopware/shopware-operator/internal/job"
 	"github.com/shopware/shopware-operator/internal/manager"
+	"github.com/shopware/shopware-operator/internal/manager/base"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -33,6 +35,7 @@ func testScheme(t *testing.T) *runtime.Scheme {
 	require.NoError(t, clientgoscheme.AddToScheme(scheme))
 	require.NoError(t, v1.AddToScheme(scheme))
 	require.NoError(t, gatewayv1.Install(scheme))
+	require.NoError(t, kedav1alpha1.AddToScheme(scheme))
 	return scheme
 }
 
@@ -84,26 +87,20 @@ func newTestManager(t *testing.T, objs ...client.Object) (*manager.StoreStateMan
 		WithScheme(scheme).
 		WithObjects(objs...).
 		Build()
-	m := manager.NewStoreStateManager(
-		c,
-		nil,
-		nil,
-		scheme,
-		record.NewFakeRecorder(100),
-		nil,
-		false,
-	)
+	m := manager.NewStoreStateManager(&base.Base{
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(100),
+	})
 	return m, c
 }
 
 func runningDeployments(store *v1.Store) []client.Object {
-	objs := []client.Object{}
-	workers, _ := deployment.WorkerDeployments(*store)
-	all := []*appsv1.Deployment{
-		deployment.StorefrontDeployment(*store),
-		deployment.AdminDeployment(*store),
-	}
+	workers, _ := deployment.WorkerDeployments(*store, false)
+	all := make([]*appsv1.Deployment, 0, 2+len(workers))
+	all = append(all, deployment.StorefrontDeployment(*store), deployment.AdminDeployment(*store))
 	all = append(all, workers...)
+	objs := make([]client.Object, 0, len(all))
 	for _, d := range all {
 		d.Status = appsv1.DeploymentStatus{
 			Replicas:          1,
@@ -219,43 +216,6 @@ func TestReconcileStateReadyDetectsImageChange(t *testing.T) {
 	assert.Equal(t, "shopware:6.6.0", store.Status.CurrentImageTag)
 }
 
-func TestReconcileStateReadyDetectsCrashLoop(t *testing.T) {
-	store := testStore()
-	store.Status.State = v1.StateReady
-	store.Status.CurrentImageTag = store.Spec.Container.Image
-
-	objs := runningDeployments(store)
-	storefront := deployment.StorefrontDeployment(*store)
-	crashingPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "storefront-crashing",
-			Namespace: store.Namespace,
-			Labels:    storefront.Spec.Selector.MatchLabels,
-		},
-		Status: corev1.PodStatus{
-			Phase: corev1.PodRunning,
-			ContainerStatuses: []corev1.ContainerStatus{
-				{
-					Name: "shopware-storefront",
-					State: corev1.ContainerState{
-						Waiting: &corev1.ContainerStateWaiting{
-							Reason: "CrashLoopBackOff",
-						},
-					},
-				},
-			},
-		},
-	}
-	objs = append(objs, crashingPod)
-
-	m, _ := newTestManager(t, objs...)
-
-	m.ReconcileState(context.Background(), store)
-
-	assert.Equal(t, v1.StateCrashLoop, store.Status.State)
-	assert.Contains(t, store.Status.GetLastCondition().Message, "storefront-crashing")
-}
-
 func TestReconcileStateMigrationFinishedWithDuration(t *testing.T) {
 	store := testStore()
 	store.Status.State = v1.StateMigration
@@ -289,30 +249,6 @@ func TestReconcileStateMigrationFinishedWithDuration(t *testing.T) {
 		}
 	}
 	assert.Contains(t, migrationCondition.Message, "Migration finished. (Duration 1m30s)")
-}
-
-func TestReconcileStateCrashLoopRecovers(t *testing.T) {
-	store := testStore()
-	store.Status.State = v1.StateCrashLoop
-	store.Status.CurrentImageTag = store.Spec.Container.Image
-
-	m, _ := newTestManager(t, runningDeployments(store)...)
-
-	m.ReconcileState(context.Background(), store)
-
-	assert.Equal(t, v1.StateReady, store.Status.State)
-}
-
-func TestReconcileStateCrashLoopWithNewImageStartsMigration(t *testing.T) {
-	store := testStore()
-	store.Status.State = v1.StateCrashLoop
-	store.Status.CurrentImageTag = "shopware:6.6.0"
-
-	m, _ := newTestManager(t)
-
-	m.ReconcileState(context.Background(), store)
-
-	assert.Equal(t, v1.StateMigration, store.Status.State)
 }
 
 func TestReconcileResourcesWaitOnlyCreatesInitResources(t *testing.T) {
@@ -365,7 +301,7 @@ func TestReconcileResourcesInitializingCreatesDeployments(t *testing.T) {
 
 	deployments := &appsv1.DeploymentList{}
 	require.NoError(t, c.List(context.Background(), deployments, client.InNamespace("test")))
-	assert.Len(t, deployments.Items, 5)
+	assert.Len(t, deployments.Items, 3)
 }
 
 func TestReconcileResourcesMigrationCreatesJobAndSuspendsCron(t *testing.T) {
@@ -414,7 +350,18 @@ func TestReconcileResourcesCreatesWorkerPerQueue(t *testing.T) {
 	}
 
 	staleWorker := deployment.WorkerDeployment(*store, "mail")
-	m, c := newTestManager(t, dbSecret(), staleWorker)
+	scheme := testScheme(t)
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(dbSecret(), staleWorker).
+		Build()
+	m := manager.NewStoreStateManager(&base.Base{
+		Client:             c,
+		Scheme:             scheme,
+		Recorder:           record.NewFakeRecorder(100),
+		EnableKeda:         true,
+		OperatorMetricsURL: "http://shopware-operator.operator.svc.cluster.local:8080",
+	})
 
 	require.NoError(t, m.ReconcileResources(context.Background(), store))
 
@@ -444,24 +391,71 @@ func TestReconcileResourcesCreatesWorkerPerQueue(t *testing.T) {
 	}
 }
 
-func TestReconcileResourcesDefaultWorkersWithoutQueueStats(t *testing.T) {
+func TestReconcileResourcesCombinedWorkerWithoutKeda(t *testing.T) {
 	store := testStore()
 	store.Status.State = v1.StateInitializing
 	m, c := newTestManager(t, dbSecret())
 
 	require.NoError(t, m.ReconcileResources(context.Background(), store))
 
-	for queue, name := range map[string]string{
-		"failed":       "test-store-store-worker-failed",
-		"async":        "test-store-store-worker-async",
-		"low_priority": "test-store-store-worker-low-priority",
-	} {
-		worker := &appsv1.Deployment{}
-		require.NoError(t, c.Get(context.Background(),
-			types.NamespacedName{Namespace: "test", Name: name}, worker))
-		assert.Contains(t, worker.Spec.Template.Spec.Containers[0].Args[0],
-			"messenger:consume "+queue+" --time-limit=300")
+	worker := &appsv1.Deployment{}
+	require.NoError(t, c.Get(context.Background(),
+		types.NamespacedName{Namespace: "test", Name: "test-store-store-worker"}, worker))
+	assert.Contains(t, worker.Spec.Template.Spec.Containers[0].Args[0],
+		"messenger:consume failed async low_priority --time-limit=300")
+}
+
+func TestReconcileResourcesCreatesScaledObjectsWhenKedaEnabled(t *testing.T) {
+	store := testStore()
+	store.Status.State = v1.StateReady
+	store.Status.CurrentImageTag = store.Spec.Container.Image
+	store.Status.QueueState.Transports = []v1.QueueTransportStats{
+		{Name: "async", Count: 5},
+		{Name: "low_priority", Count: 0},
 	}
+
+	scheme := testScheme(t)
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(dbSecret()).
+		Build()
+	m := manager.NewStoreStateManager(&base.Base{
+		Client:             c,
+		Scheme:             scheme,
+		Recorder:           record.NewFakeRecorder(100),
+		EnableKeda:         true,
+		OperatorMetricsURL: "http://shopware-operator.operator.svc.cluster.local:8080",
+	})
+
+	require.NoError(t, m.ReconcileResources(context.Background(), store))
+
+	so := &kedav1alpha1.ScaledObject{}
+	require.NoError(t, c.Get(context.Background(),
+		types.NamespacedName{Namespace: "test", Name: "test-store-store-worker-async"}, so))
+	assert.Equal(t, "test-store-store-worker-async", so.Spec.ScaleTargetRef.Name)
+	require.Len(t, so.Spec.Triggers, 1)
+	assert.Equal(t, "metrics-api", so.Spec.Triggers[0].Type)
+	assert.Equal(t,
+		"http://shopware-operator.operator.svc.cluster.local:8080/api/queue/test/test-store/async",
+		so.Spec.Triggers[0].Metadata["url"])
+	assert.Equal(t, "count", so.Spec.Triggers[0].Metadata["valueLocation"])
+
+	list := &kedav1alpha1.ScaledObjectList{}
+	require.NoError(t, c.List(context.Background(), list, client.InNamespace("test")))
+	assert.Len(t, list.Items, 2)
+}
+
+func TestReconcileResourcesNoScaledObjectsWhenKedaDisabled(t *testing.T) {
+	store := testStore()
+	store.Status.State = v1.StateReady
+	store.Status.CurrentImageTag = store.Spec.Container.Image
+	m, c := newTestManager(t, dbSecret())
+
+	require.NoError(t, m.ReconcileResources(context.Background(), store))
+
+	list := &kedav1alpha1.ScaledObjectList{}
+	require.NoError(t, c.List(context.Background(), list, client.InNamespace("test")))
+	assert.Empty(t, list.Items)
 }
 
 func TestReconcileResourcesReadyCreatesAllResources(t *testing.T) {
@@ -474,7 +468,7 @@ func TestReconcileResourcesReadyCreatesAllResources(t *testing.T) {
 
 	deployments := &appsv1.DeploymentList{}
 	require.NoError(t, c.List(context.Background(), deployments, client.InNamespace("test")))
-	assert.Len(t, deployments.Items, 5)
+	assert.Len(t, deployments.Items, 3)
 
 	services := &corev1.ServiceList{}
 	require.NoError(t, c.List(context.Background(), services, client.InNamespace("test")))

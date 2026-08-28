@@ -27,6 +27,8 @@ type Base struct {
 	Recorder             record.EventRecorder
 	EventHandlers        []event.EventHandler
 	DisableServiceChecks bool
+	EnableKeda           bool
+	OperatorMetricsURL   string
 }
 
 func (b *Base) Eventf(store *v1.Store, reason string, format string, args ...any) {
@@ -37,7 +39,7 @@ func (b *Base) Eventf(store *v1.Store, reason string, format string, args ...any
 
 func (b *Base) AllDeploymentsRunning(ctx context.Context, store *v1.Store) bool {
 	store.Status.AdminState = deployment.GetAdminDeploymentCondition(ctx, *store, b.Client)
-	store.Status.WorkerState = deployment.GetWorkerDeploymentCondition(ctx, *store, b.Client)
+	store.Status.WorkerState = deployment.GetWorkerDeploymentCondition(ctx, *store, b.Client, b.EnableKeda)
 	store.Status.StorefrontState = deployment.GetStorefrontDeploymentCondition(ctx, *store, b.Client)
 
 	return store.Status.AdminState.State == v1.DeploymentStateRunning &&

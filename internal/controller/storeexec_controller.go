@@ -105,7 +105,7 @@ func (r *StoreExecReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	} else {
 		if ex.IsState(v1.ExecStateDone, v1.ExecStateError) {
-			return ctrl.Result{Requeue: false}, nil
+			return ctrl.Result{}, nil
 		}
 		if err := r.reconcileJob(ctx, store, ex); err != nil {
 			log.Errorw("exec error", zap.Error(err))
@@ -166,7 +166,7 @@ func (r *StoreExecReconciler) reconcileSuccessfulStoreExecCleanup(
 		return ctrl.Result{}, false, fmt.Errorf("delete successful StoreExec: %w", err)
 	}
 
-	return ctrl.Result{Requeue: false}, true, nil
+	return ctrl.Result{}, true, nil
 }
 
 func storeExecFinishedAt(ex *v1.StoreExec) time.Time {

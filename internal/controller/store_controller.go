@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"time"
 
+	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/event"
 	"github.com/shopware/shopware-operator/internal/k8s"
 	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/manager"
+	"github.com/shopware/shopware-operator/internal/manager/base"
 	"github.com/shopware/shopware-operator/internal/metrics"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
@@ -47,6 +49,8 @@ type StoreReconciler struct {
 	Scheme               *runtime.Scheme
 	Recorder             record.EventRecorder
 	DisableServiceChecks bool
+	EnableKeda           bool
+	OperatorMetricsURL   string
 	EventHandlers        []event.EventHandler
 	Logger               *zap.SugaredLogger
 	StateManager         *manager.StoreStateManager
@@ -54,15 +58,17 @@ type StoreReconciler struct {
 
 func (r *StoreReconciler) stateManager() *manager.StoreStateManager {
 	if r.StateManager == nil {
-		r.StateManager = manager.NewStoreStateManager(
-			r.Client,
-			r.Clientset,
-			r.RestConfig,
-			r.Scheme,
-			r.Recorder,
-			r.EventHandlers,
-			r.DisableServiceChecks,
-		)
+		r.StateManager = manager.NewStoreStateManager(&base.Base{
+			Client:               r.Client,
+			Clientset:            r.Clientset,
+			RestConfig:           r.RestConfig,
+			Scheme:               r.Scheme,
+			Recorder:             r.Recorder,
+			EventHandlers:        r.EventHandlers,
+			DisableServiceChecks: r.DisableServiceChecks,
+			EnableKeda:           r.EnableKeda,
+			OperatorMetricsURL:   r.OperatorMetricsURL,
+		})
 	}
 	return r.StateManager
 }
@@ -88,6 +94,18 @@ func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager, logger *zap.Sugared
 		controllerBuilder = controllerBuilder.Owns(&gatewayv1.HTTPRoute{})
 	} else if !meta.IsNoMatchError(err) {
 		return fmt.Errorf("resolve HTTPRoute REST mapping: %w", err)
+	}
+
+	if r.EnableKeda {
+		_, err = mgr.GetRESTMapper().RESTMapping(
+			kedav1alpha1.SchemeGroupVersion.WithKind("ScaledObject").GroupKind(),
+			kedav1alpha1.SchemeGroupVersion.Version,
+		)
+		if err == nil {
+			controllerBuilder = controllerBuilder.Owns(&kedav1alpha1.ScaledObject{})
+		} else if !meta.IsNoMatchError(err) {
+			return fmt.Errorf("resolve ScaledObject REST mapping: %w", err)
+		}
 	}
 
 	return controllerBuilder.
@@ -159,6 +177,7 @@ func (r *StoreReconciler) findStoreForReconcile(
 //+kubebuilder:rbac:groups="gateway.networking.k8s.io",namespace=default,resources=httproutes,verbs=get;list;watch;create;patch;delete
 //+kubebuilder:rbac:groups="policy",namespace=default,resources=poddisruptionbudgets,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="batch",namespace=default,resources=cronjobs,verbs=get;patch;list;watch;create;delete
+//+kubebuilder:rbac:groups="keda.sh",namespace=default,resources=scaledobjects,verbs=get;list;watch;create;patch;delete
 
 func (r *StoreReconciler) Reconcile(
 	ctx context.Context,
@@ -176,7 +195,7 @@ func (r *StoreReconciler) Reconcile(
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			log.Info("Don't reconcile anymore, because resource was not found")
-			return ctrl.Result{Requeue: false}, nil
+			return ctrl.Result{}, nil
 		}
 		log.Errorw("get CR", zap.Error(err))
 		return rr, nil

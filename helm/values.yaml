@@ -108,6 +108,13 @@ disableChecks: false
 # Grace period before successful StoreExec and StoreDebugInstance CRs are deleted. Set to "0" to disable cleanup.
 successfulCRCleanupGracePeriod: 1h
 
+# keda: when enabled, the operator creates a KEDA ScaledObject for every store
+# queue worker deployment. The ScaledObject scales the workers based on the
+# queue length served by the operator queue metrics endpoint, so this requires
+# KEDA to be installed in the cluster and metrics.enabled to be true.
+keda:
+  enabled: false
+
 metrics:
   # When enabled, a Service named 'shopware-operator' is created, the metrics
   # endpoint is exposed, and SHOPWARE_OPERATOR_URL is injected into every store

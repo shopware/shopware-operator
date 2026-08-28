@@ -42,14 +42,22 @@ func WorkerQueues(store v1.Store) []string {
 	return queues
 }
 
-// WorkerDeployments returns one deployment per known queue.
-func WorkerDeployments(store v1.Store) ([]*appsv1.Deployment, error) {
+// WorkerDeployments returns one deployment per known queue when perQueue is
+// set (keda scaling), otherwise a single deployment consuming all queues.
+func WorkerDeployments(store v1.Store, perQueue bool) ([]*appsv1.Deployment, error) {
 	queues := WorkerQueues(store)
-	deployments := make([]*appsv1.Deployment, 0, len(queues))
 	for _, queue := range queues {
 		if queue == "" {
 			return nil, fmt.Errorf("empty queue name for store %s/%s", store.Namespace, store.Name)
 		}
+	}
+
+	if !perQueue {
+		return []*appsv1.Deployment{WorkerDeployment(store, "")}, nil
+	}
+
+	deployments := make([]*appsv1.Deployment, 0, len(queues))
+	for _, queue := range queues {
 		deployments = append(deployments, WorkerDeployment(store, queue))
 	}
 	return deployments, nil
@@ -59,8 +67,9 @@ func CleanupObsoleteWorkerDeployments(
 	ctx context.Context,
 	c client.Client,
 	store v1.Store,
+	perQueue bool,
 ) error {
-	workers, err := WorkerDeployments(store)
+	workers, err := WorkerDeployments(store, perQueue)
 	if err != nil {
 		return err
 	}
@@ -94,6 +103,7 @@ func GetWorkerDeploymentCondition(
 	ctx context.Context,
 	store v1.Store,
 	c client.Client,
+	perQueue bool,
 ) v1.DeploymentCondition {
 	stateRank := map[v1.DeploymentState]int{
 		v1.DeploymentStateRunning:  0,
@@ -109,7 +119,7 @@ func GetWorkerDeploymentCondition(
 		Message:        "All worker deployments are running",
 	}
 
-	workers, err := WorkerDeployments(store)
+	workers, err := WorkerDeployments(store, perQueue)
 	if err != nil {
 		return v1.DeploymentCondition{
 			State:          v1.DeploymentStateError,
@@ -165,7 +175,9 @@ func WorkerDeployment(store v1.Store, queue string) *appsv1.Deployment {
 
 	appName := "shopware-worker"
 	matchLabels := util.GetWorkerDeploymentMatchLabel()
-	matchLabels[util.ShopwareKey("worker.queue")] = truncateWithHash(queue, maxLabelValueLength)
+	if queue != "" {
+		matchLabels[util.ShopwareKey("worker.queue")] = truncateWithHash(queue, maxLabelValueLength)
+	}
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.WorkerDeploymentContainer.Labels)
 	maps.Copy(labels, matchLabels)
 
@@ -193,7 +205,11 @@ func WorkerDeployment(store v1.Store, queue string) *appsv1.Deployment {
 		})
 	}
 
-	consume := fmt.Sprintf("bin/console messenger:consume %s --time-limit=300", queue)
+	consumeQueues := queue
+	if consumeQueues == "" {
+		consumeQueues = strings.Join(WorkerQueues(store), " ")
+	}
+	consume := fmt.Sprintf("bin/console messenger:consume %s --time-limit=300", consumeQueues)
 	if phpMemoryLimitMiB > 0 {
 		consume += fmt.Sprintf(" --memory-limit=%dM", phpMemoryLimitMiB)
 	}
@@ -303,6 +319,9 @@ func GetWorkerDeploymentName(store v1.Store) string {
 }
 
 func GetQueueWorkerDeploymentName(store v1.Store, queue string) string {
+	if queue == "" {
+		return GetWorkerDeploymentName(store)
+	}
 	sanitized := strings.ReplaceAll(strings.ToLower(queue), "_", "-")
 	name := fmt.Sprintf("%s-%s", GetWorkerDeploymentName(store), sanitized)
 	return truncateWithHash(name, maxDeploymentNameLength)

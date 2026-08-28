@@ -32,6 +32,7 @@ import (
 	"time"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	"github.com/pkg/errors"
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/logging"
@@ -582,6 +583,10 @@ func EnsureObjectWithHash(
 			// Gateway API resources use MergeFrom instead of StrategicMergeFrom
 			patch = client.MergeFrom(oldObj.DeepCopy())
 			obj.(*gatewayv1.HTTPRoute).TypeMeta = oldObj.DeepCopy().TypeMeta
+		case *kedav1alpha1.ScaledObject:
+			// CRDs don't support strategic merge patch
+			patch = client.MergeFrom(oldObj.DeepCopy())
+			obj.(*kedav1alpha1.ScaledObject).TypeMeta = oldObj.DeepCopy().TypeMeta
 		default:
 			patch = client.StrategicMergeFrom(oldObject)
 		}
@@ -611,6 +616,8 @@ func extractRelevantData(obj runtime.Object) interface{} {
 		return object.Data
 	case *corev1.ConfigMap:
 		return object.Data
+	case *kedav1alpha1.ScaledObject:
+		return object.Spec
 	case *cm.Certificate:
 		return object.Spec
 	case *cm.Issuer:

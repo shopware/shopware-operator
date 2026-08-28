@@ -38,7 +38,7 @@ func TestGetDBSpecRequiresTLSSecretForLegacyRequiredMode(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Namespace: "test"},
 		Spec: v1.StoreSpec{Database: v1.DatabaseSpec{
 			PasswordSecretRef: v1.SecretRef{Name: "database", Key: "password"},
-			SSLMode:           "REQUIRED",
+			SSLMode:           "REQUIRED", //nolint:staticcheck
 		}},
 	}
 	client := fake.NewClientBuilder().WithObjects(

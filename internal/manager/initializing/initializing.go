@@ -3,10 +3,8 @@ package initializing
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
-	"github.com/shopware/shopware-operator/internal/deployment"
 	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/manager/base"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,20 +32,6 @@ func (m *Manager) StateHandler(ctx context.Context, store *v1.Store) v1.Stateful
 	}()
 
 	store.Status.CurrentImageTag = store.Spec.Container.Image
-
-	crashing, err := deployment.GetCrashLoopBackOffPods(ctx, *store, m.Client)
-	if err != nil {
-		con.Reason = err.Error()
-		con.Status = base.Error
-		return v1.StateInitializing
-	}
-	if len(crashing) > 0 {
-		con.Type = string(v1.StateCrashLoop)
-		con.Message = fmt.Sprintf("Pods in CrashLoopBackOff: %s", strings.Join(crashing, ", "))
-		con.Status = base.Error
-		con.LastTransitionTime = metav1.Now()
-		return v1.StateCrashLoop
-	}
 
 	if !m.AllDeploymentsRunning(ctx, store) {
 		return v1.StateInitializing

@@ -19,7 +19,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -38,12 +40,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/go-logr/zapr"
+	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	shopv1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/config"
 	"github.com/shopware/shopware-operator/internal/controller"
 	"github.com/shopware/shopware-operator/internal/event"
 	"github.com/shopware/shopware-operator/internal/event/nats"
 	"github.com/shopware/shopware-operator/internal/logging"
+	"github.com/shopware/shopware-operator/internal/metrics"
 	shopwebhook "github.com/shopware/shopware-operator/internal/webhook"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	//+kubebuilder:scaffold:imports
@@ -65,6 +69,9 @@ func init() {
 	// Ignore errors because gateway-api is not per default installed
 	// nolint:errcheck
 	gatewayv1.Install(scheme)
+	// Ignore errors because keda is not per default installed
+	// nolint:errcheck
+	kedav1alpha1.AddToScheme(scheme)
 }
 
 func main() {
@@ -92,9 +99,32 @@ func main() {
 		os.Exit(3)
 	}
 
+	if cfg.EnableKeda && (cfg.MetricsAddr == "0" || cfg.MetricsAddr == "" || cfg.OperatorServiceURL == "") {
+		setupLog.Error(fmt.Errorf("keda is enabled but metrics are not configured"),
+			"ENABLE_KEDA requires the metrics endpoint: "+
+				"set METRICS_BIND_ADDRESS and OPERATOR_SERVICE_URL (helm: metrics.enabled=true)")
+		os.Exit(3)
+	}
+
+	var queueStats *metrics.QueueStats
+	metricsExtraHandlers := map[string]http.Handler{}
+	if cfg.EnableKeda {
+		metricsExtraHandlers[metrics.QueueHandlerPath] = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if queueStats == nil {
+				http.Error(w, "operator is not ready yet", http.StatusServiceUnavailable)
+				return
+			}
+			queueStats.Handler().ServeHTTP(w, r)
+		})
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                 scheme,
-		Metrics:                metricsserver.Options{BindAddress: cfg.MetricsAddr, SecureServing: false},
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress:   cfg.MetricsAddr,
+			SecureServing: false,
+			ExtraHandlers: metricsExtraHandlers,
+		},
 		HealthProbeBindAddress: cfg.ProbeAddr,
 		Cache: cache.Options{
 			DefaultNamespaces: map[string]cache.Config{
@@ -129,6 +159,12 @@ func main() {
 	}
 
 	nsClient := client.NewNamespacedClient(mgr.GetClient(), cfg.Namespace)
+	queueStats = metrics.NewQueueStats(
+		mgr.GetClient(),
+		kubernetes.NewForConfigOrDie(mgr.GetConfig()),
+		mgr.GetConfig(),
+		10*time.Second,
+	)
 
 	// Event Registration
 	var handlers []event.EventHandler
@@ -164,6 +200,8 @@ func main() {
 		Scheme:               mgr.GetScheme(),
 		Recorder:             mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
 		DisableServiceChecks: cfg.DisableChecks,
+		EnableKeda:           cfg.EnableKeda,
+		OperatorMetricsURL:   cfg.OperatorServiceURL,
 	}).SetupWithManager(mgr, logger); err != nil {
 		setupLog.Error(err, "unable to create store controller", "controller", "Store")
 		os.Exit(1)

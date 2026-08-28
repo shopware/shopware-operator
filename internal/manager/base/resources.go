@@ -147,15 +147,13 @@ func (b *Base) ReconcilePDB(ctx context.Context, store *v1.Store) (err error) {
 func (b *Base) ReconcileDeployment(ctx context.Context, store *v1.Store) (err error) {
 	var changed bool
 
-	workers, err := deployment.WorkerDeployments(*store)
+	workers, err := deployment.WorkerDeployments(*store, b.EnableKeda)
 	if err != nil {
 		return fmt.Errorf("worker deployments: %w", err)
 	}
 
-	objs := []*appsv1.Deployment{
-		deployment.StorefrontDeployment(*store),
-		deployment.AdminDeployment(*store),
-	}
+	objs := make([]*appsv1.Deployment, 0, 2+len(workers))
+	objs = append(objs, deployment.StorefrontDeployment(*store), deployment.AdminDeployment(*store))
 	objs = append(objs, workers...)
 
 	for _, obj := range objs {
@@ -175,11 +173,49 @@ func (b *Base) ReconcileDeployment(ctx context.Context, store *v1.Store) (err er
 		}
 	}
 
-	if err := deployment.CleanupObsoleteWorkerDeployments(ctx, b.Client, *store); err != nil {
+	if err := deployment.CleanupObsoleteWorkerDeployments(ctx, b.Client, *store, b.EnableKeda); err != nil {
 		return fmt.Errorf("cleanup worker deployments: %w", err)
 	}
 
+	if err := b.reconcileWorkerScaledObjects(ctx, store); err != nil {
+		return fmt.Errorf("worker scaledobjects: %w", err)
+	}
+
 	return nil
+}
+
+func (b *Base) reconcileWorkerScaledObjects(ctx context.Context, store *v1.Store) (err error) {
+	if !b.EnableKeda {
+		return nil
+	}
+
+	objs, err := deployment.WorkerScaledObjects(*store, b.OperatorMetricsURL)
+	if err != nil {
+		return err
+	}
+
+	desired := make(map[string]struct{})
+	var changed bool
+	for _, obj := range objs {
+		desired[obj.Name] = struct{}{}
+
+		if changed, err = k8s.HasObjectChanged(ctx, b.Client, obj); err != nil {
+			return fmt.Errorf("reconcile worker scaledobject: %w", err)
+		}
+
+		if changed {
+			b.Eventf(store, "Diff scaledobject hash",
+				"Update Store %s scaledobject in namespace %s for %s. Diff hash",
+				store.Name,
+				store.Namespace,
+				obj.Name)
+			if err := k8s.EnsureObjectWithHash(ctx, b.Client, store, obj, b.Scheme); err != nil {
+				return fmt.Errorf("reconcile worker scaledobject: %w", err)
+			}
+		}
+	}
+
+	return deployment.CleanupObsoleteWorkerScaledObjects(ctx, b.Client, *store, desired)
 }
 
 func (b *Base) ReconcileHorizontalPodAutoscaler(ctx context.Context, store *v1.Store) (err error) {

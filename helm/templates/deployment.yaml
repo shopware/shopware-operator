@@ -82,6 +82,13 @@ spec:
           value: "{{ .Values.disableChecks | default "false" }}"
         - name: ENABLE_WEBHOOK
           value: "{{ .Values.webhook.enabled }}"
+        {{- if .Values.keda.enabled }}
+        {{- if not .Values.metrics.enabled }}
+        {{- fail "keda.enabled requires metrics.enabled=true: the KEDA ScaledObjects query the operator queue metrics endpoint" }}
+        {{- end }}
+        {{- end }}
+        - name: ENABLE_KEDA
+          value: "{{ .Values.keda.enabled | default "false" }}"
         - name: SUCCESSFUL_CR_CLEANUP_GRACE_PERIOD
           value: "{{ .Values.successfulCRCleanupGracePeriod | default "1h" }}"
         {{- if .Values.metrics.enabled }}

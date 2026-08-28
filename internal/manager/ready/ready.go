@@ -3,7 +3,6 @@ package ready
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/deployment"
@@ -55,15 +54,6 @@ func (m *Manager) StateHandler(ctx context.Context, store *v1.Store) v1.Stateful
 		con.Status = base.Ready
 		con.LastTransitionTime = metav1.Now()
 		return v1.StateMigration
-	}
-
-	crashing, err := deployment.GetCrashLoopBackOffPods(ctx, *store, m.Client)
-	if err == nil && len(crashing) > 0 {
-		con.Type = string(v1.StateCrashLoop)
-		con.Message = fmt.Sprintf("Pods in CrashLoopBackOff: %s", strings.Join(crashing, ", "))
-		con.Status = base.Error
-		con.LastTransitionTime = metav1.Now()
-		return v1.StateCrashLoop
 	}
 
 	if !m.AllDeploymentsRunning(ctx, store) {

@@ -5,21 +5,14 @@ import (
 	"fmt"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
-	"github.com/shopware/shopware-operator/internal/event"
 	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/manager/base"
-	"github.com/shopware/shopware-operator/internal/manager/crashloop"
 	"github.com/shopware/shopware-operator/internal/manager/initializing"
 	"github.com/shopware/shopware-operator/internal/manager/migration"
 	"github.com/shopware/shopware-operator/internal/manager/ready"
 	"github.com/shopware/shopware-operator/internal/manager/setup"
 	"github.com/shopware/shopware-operator/internal/manager/wait"
 	"go.uber.org/zap"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/record"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const maxStateTransitionsPerReconcile = 5
@@ -39,44 +32,24 @@ type StoreStateManager struct {
 	managers map[v1.StatefulAppState]StateManager
 }
 
-func NewStoreStateManager(
-	c client.Client,
-	clientset *kubernetes.Clientset,
-	restConfig *rest.Config,
-	scheme *runtime.Scheme,
-	recorder record.EventRecorder,
-	eventHandlers []event.EventHandler,
-	disableServiceChecks bool,
-) *StoreStateManager {
-	b := &base.Base{
-		Client:               c,
-		Clientset:            clientset,
-		RestConfig:           restConfig,
-		Scheme:               scheme,
-		Recorder:             recorder,
-		EventHandlers:        eventHandlers,
-		DisableServiceChecks: disableServiceChecks,
-	}
-
+func NewStoreStateManager(b *base.Base) *StoreStateManager {
 	waitManager := wait.New(b)
 	setupManager := setup.New(b)
 	migrationManager := migration.New(b)
 	initializingManager := initializing.New(b)
-	crashLoopManager := crashloop.New(b)
 	readyManager := ready.New(b)
 
 	return &StoreStateManager{
 		Base: b,
 		managers: map[v1.StatefulAppState]StateManager{
-			v1.StateEmpty:                waitManager,
-			v1.StateWait:                 waitManager,
-			v1.StateSetup:                setupManager,
-			v1.StateSetupError:           setupManager,
-			v1.StateInitializing:         initializingManager,
-			v1.StateMigration:            migrationManager,
-			v1.StateMigrationError:       migrationManager,
-			v1.StateCrashLoop:            crashLoopManager,
-			v1.StateReady:                readyManager,
+			v1.StateEmpty:          waitManager,
+			v1.StateWait:           waitManager,
+			v1.StateSetup:          setupManager,
+			v1.StateSetupError:     setupManager,
+			v1.StateInitializing:   initializingManager,
+			v1.StateMigration:      migrationManager,
+			v1.StateMigrationError: migrationManager,
+			v1.StateReady:          readyManager,
 		},
 	}
 }

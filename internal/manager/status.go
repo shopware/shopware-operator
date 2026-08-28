@@ -50,7 +50,7 @@ func (m *StoreStateManager) ReconcileStatus(
 
 	store.Status.Message = store.Status.GetLastCondition().Message
 	store.Status.AdminState = deployment.GetAdminDeploymentCondition(ctx, *store, m.Client)
-	store.Status.WorkerState = deployment.GetWorkerDeploymentCondition(ctx, *store, m.Client)
+	store.Status.WorkerState = deployment.GetWorkerDeploymentCondition(ctx, *store, m.Client, m.EnableKeda)
 	store.Status.StorefrontState = deployment.GetStorefrontDeploymentCondition(ctx, *store, m.Client)
 
 	m.UpdateQueueState(ctx, store)
