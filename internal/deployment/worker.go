@@ -100,7 +100,7 @@ func WorkerDeployment(store v1.Store) *appsv1.Deployment {
 		})
 	}
 
-	consume := "bin/console messenger:consume --all --time-limit=300"
+	consume := "bin/console messenger:consume failed async low_priority --time-limit=300"
 	if phpMemoryLimitMiB > 0 {
 		consume += fmt.Sprintf(" --memory-limit=%dM", phpMemoryLimitMiB)
 	}

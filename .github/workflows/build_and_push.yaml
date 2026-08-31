@@ -22,7 +22,7 @@ env:
 
 jobs:
   goreleaser:
-    runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=8
+    runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=16
     outputs:
       tag: ${{ steps.get_tag.outputs.tag }}
     steps:
@@ -83,7 +83,7 @@ jobs:
 
   preview-helm-chart:
     if: github.ref != 'refs/heads/main'
-    runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=1
+    runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=8
     needs: goreleaser
     steps:
       - name: Checkout

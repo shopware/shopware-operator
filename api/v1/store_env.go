@@ -672,6 +672,11 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 			Name:  "SHOPWARE_OPERATOR_URL",
 			Value: operatorServiceURL,
 		},
+		// Disable timeout for each command. Many products (9.000) will fail because of dal:refresh:index
+		{
+			Name:  "SHOPWARE_DEPLOYMENT_TIMEOUT",
+			Value: "0",
+		},
 	}
 
 	if s.Spec.Database.TLS.SecretName != "" {

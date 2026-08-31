@@ -219,7 +219,7 @@ func TestWorkerDeployment(t *testing.T) {
 		// Verify worker command and args
 		assert.Equal(t, []string{"/bin/sh", "-c"}, container.Command)
 		assert.Len(t, container.Args, 1)
-		assert.Contains(t, container.Args[0], "bin/console messenger:consume --all --time-limit=300")
+		assert.Contains(t, container.Args[0], "bin/console messenger:consume failed async low_priority --time-limit=300")
 		assert.NotContains(t, container.Args[0], "--memory-limit")
 		assert.Contains(t, container.Args[0], `trap 'kill -TERM "$child"`)
 		assert.Equal(t, "shopware-worker", container.Name)

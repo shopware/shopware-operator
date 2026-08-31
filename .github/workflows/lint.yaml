@@ -11,7 +11,7 @@ permissions:
 jobs:
   golangci:
     name: golangci
-    runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=1
+    runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=4
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -29,7 +29,7 @@ jobs:
 
   go-test:
     name: go test
-    runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=1
+    runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=4
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Setup Go
@@ -44,7 +44,7 @@ jobs:
 
   helm-lint:
     name: helm lint
-    runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=1
+    runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=4
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Setup Go
@@ -71,7 +71,7 @@ jobs:
 
   test-on-cluster:
     name: Cluster E2E Test
-    runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=4
+    runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=8
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

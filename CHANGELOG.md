@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.7.2](https://github.com/shopware/shopware-operator/compare/1.7.1...v1.7.2) (2026-08-27)
+
+
+### Bug Fixes
+
+* make pipeline faster but more expensive ([4f89cb2](https://github.com/shopware/shopware-operator/commit/4f89cb2fceda4c28358b1fcccfec1545cf1f244f))
+* remove webhook from consume ([391940a](https://github.com/shopware/shopware-operator/commit/391940ac2458ed652916f1d8f7ac9f61d9edfa94))
+
+## [1.7.1](https://github.com/shopware/shopware-operator/compare/1.7.0...v1.7.1) (2026-08-26)
+
+
+### Bug Fixes
+
+* consume only default messenges and don't consume scheduled-tasks ([69d9fc9](https://github.com/shopware/shopware-operator/commit/69d9fc9bc5a3d47a4fbaff5a0455f59d4b90e5ef))
+* consume only default messenges and don't consume scheduled-tasks ([c1e7c7e](https://github.com/shopware/shopware-operator/commit/c1e7c7efdaa98c94ce9b24282e762060065ec519))
+* deployment helper timeout to low for dal:refresh:index ([585c9fe](https://github.com/shopware/shopware-operator/commit/585c9fe27f3280b1bc2556fe130fd4b5edef8c2d))
+* deployment helper timeout to low for dal:refresh:index ([dfdd2a0](https://github.com/shopware/shopware-operator/commit/dfdd2a0bb195140fe34197cdcd7b47fefcb24854))
+
 ## [1.7.0](https://github.com/shopware/shopware-operator/compare/1.6.0...v1.7.0) (2026-08-14)
 
 
