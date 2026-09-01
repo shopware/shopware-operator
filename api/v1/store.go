@@ -342,8 +342,31 @@ type SessionCacheSpec struct {
 }
 
 type WorkerSpec struct {
-	RedisSpec         `json:",inline"`
+	RedisSpec `json:",inline"`
+
+	// +kubebuilder:description="This will enable Keda scaling and will create a scaledobject per queue"
 	EnableKedaScaling bool `json:"enableKedaScaling,omitempty"`
+
+	// +kubebuilder:description="MaxReplicas which are spawned per queue"
+	// +kubebuilder:default=3
+	// +kubebuilder:validation:Minimum=1
+	MaxReplicas int32 `json:"maxReplicas,omitempty"`
+	// +kubebuilder:description="MinReplicas which are spawned per queue"
+	// +kubebuilder:default=0
+	// +kubebuilder:validation:Minimum=0
+	MinReplicas int32 `json:"minReplicas,omitempty"`
+	// +kubebuilder:description="Seconds keda waits after the last trigger before scaling down to minReplicas"
+	// +kubebuilder:default=30
+	// +kubebuilder:validation:Minimum=0
+	CooldownPeriod int32 `json:"cooldownPeriod,omitempty"`
+	// +kubebuilder:description="Seconds between keda queue length checks"
+	// +kubebuilder:default=10
+	// +kubebuilder:validation:Minimum=1
+	PollingInterval int32 `json:"pollingInterval,omitempty"`
+	// +kubebuilder:description="Queue length per worker replica keda scales towards"
+	// +kubebuilder:default=100
+	// +kubebuilder:validation:Minimum=1
+	TargetQueueLength int32 `json:"targetQueueLength,omitempty"`
 
 	// +kubebuilder:validation:Enum=builtin;redis
 	Adapter string `json:"adapter"`

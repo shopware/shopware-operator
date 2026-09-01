@@ -394,6 +394,20 @@ func TestReconcileResourcesCreatesWorkerPerQueue(t *testing.T) {
 func TestReconcileResourcesCombinedWorkerWithoutKeda(t *testing.T) {
 	store := testStore()
 	store.Status.State = v1.StateInitializing
+	store.Status.QueueState.Transports = []v1.QueueTransportStats{
+		{
+			Name: "failed", Count: 5,
+		},
+		{
+			Name: "async", Count: 5,
+		},
+		{
+			Name: "low_priority", Count: 5,
+		},
+		{
+			Name: "email", Count: 5,
+		},
+	}
 	m, c := newTestManager(t, dbSecret())
 
 	require.NoError(t, m.ReconcileResources(context.Background(), store))
@@ -402,7 +416,7 @@ func TestReconcileResourcesCombinedWorkerWithoutKeda(t *testing.T) {
 	require.NoError(t, c.Get(context.Background(),
 		types.NamespacedName{Namespace: "test", Name: "test-store-store-worker"}, worker))
 	assert.Contains(t, worker.Spec.Template.Spec.Containers[0].Args[0],
-		"messenger:consume failed async low_priority --time-limit=300")
+		"messenger:consume failed async low_priority email --time-limit=300")
 }
 
 func TestReconcileResourcesCreatesScaledObjectsWhenKedaEnabled(t *testing.T) {

@@ -3,6 +3,7 @@ package deployment
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	v1 "github.com/shopware/shopware-operator/api/v1"
@@ -11,14 +12,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-)
-
-const (
-	workerScaleMinReplicas       = int32(0)
-	workerScaleMaxReplicas       = int32(10)
-	workerScaleCooldownPeriod    = int32(30)
-	workerScalePollingInterval   = int32(10)
-	workerScaleTargetQueueLength = "100"
 )
 
 func WorkerScaledObjects(store v1.Store, metricsURL string) ([]*kedav1alpha1.ScaledObject, error) {
@@ -34,10 +27,7 @@ func WorkerScaledObjects(store v1.Store, metricsURL string) ([]*kedav1alpha1.Sca
 }
 
 func WorkerScaledObject(store v1.Store, queue string, metricsURL string) *kedav1alpha1.ScaledObject {
-	minReplicas := workerScaleMinReplicas
-	maxReplicas := workerScaleMaxReplicas
-	cooldownPeriod := workerScaleCooldownPeriod
-	pollingInterval := workerScalePollingInterval
+	worker := store.Spec.Worker
 
 	labels := util.GetDefaultStoreLabels(store)
 	labels[util.ShopwareKey("store.app")] = "shopware-worker"
@@ -57,10 +47,10 @@ func WorkerScaledObject(store v1.Store, queue string, metricsURL string) *kedav1
 			ScaleTargetRef: &kedav1alpha1.ScaleTarget{
 				Name: GetQueueWorkerDeploymentName(store, queue),
 			},
-			MinReplicaCount: &minReplicas,
-			MaxReplicaCount: &maxReplicas,
-			CooldownPeriod:  &cooldownPeriod,
-			PollingInterval: &pollingInterval,
+			MinReplicaCount: &worker.MinReplicas,
+			MaxReplicaCount: &worker.MaxReplicas,
+			CooldownPeriod:  &worker.CooldownPeriod,
+			PollingInterval: &worker.PollingInterval,
 			Advanced: &kedav1alpha1.AdvancedConfig{
 				HorizontalPodAutoscalerConfig: &kedav1alpha1.HorizontalPodAutoscalerConfig{
 					Behavior: &autoscalingv2.HorizontalPodAutoscalerBehavior{
@@ -79,7 +69,7 @@ func WorkerScaledObject(store v1.Store, queue string, metricsURL string) *kedav1
 						"url": fmt.Sprintf("%s/api/queue/%s/%s/%s",
 							metricsURL, store.Namespace, store.Name, queue),
 						"valueLocation": "count",
-						"targetValue":   workerScaleTargetQueueLength,
+						"targetValue":   strconv.Itoa(int(worker.TargetQueueLength)),
 					},
 				},
 			},

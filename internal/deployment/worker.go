@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"math"
-	"slices"
 	"strings"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
@@ -25,14 +24,9 @@ const (
 	maxLabelValueLength     = 63
 )
 
-var defaultWorkerQueues = []string{"failed", "async", "low_priority"}
-
-// WorkerQueues returns the countable transports from the queue status, which
-// each get their own worker deployment. As long as no queue stats have been
-// collected yet, the shopware default transports are used.
 func WorkerQueues(store v1.Store) []string {
 	if len(store.Status.QueueState.Transports) == 0 {
-		return slices.Clone(defaultWorkerQueues)
+		return []string{}
 	}
 
 	queues := make([]string, 0, len(store.Status.QueueState.Transports))
@@ -53,7 +47,8 @@ func WorkerDeployments(store v1.Store, perQueue bool) ([]*appsv1.Deployment, err
 	}
 
 	if !perQueue {
-		return []*appsv1.Deployment{WorkerDeployment(store, "")}, nil
+		queuesString := strings.Join(queues, " ")
+		return []*appsv1.Deployment{WorkerDeployment(store, queuesString)}, nil
 	}
 
 	deployments := make([]*appsv1.Deployment, 0, len(queues))
@@ -205,11 +200,7 @@ func WorkerDeployment(store v1.Store, queue string) *appsv1.Deployment {
 		})
 	}
 
-	consumeQueues := queue
-	if consumeQueues == "" {
-		consumeQueues = strings.Join(WorkerQueues(store), " ")
-	}
-	consume := fmt.Sprintf("bin/console messenger:consume %s --time-limit=300", consumeQueues)
+	consume := fmt.Sprintf("bin/console messenger:consume %s --time-limit=300", queue)
 	if phpMemoryLimitMiB > 0 {
 		consume += fmt.Sprintf(" --memory-limit=%dM", phpMemoryLimitMiB)
 	}
@@ -313,7 +304,6 @@ done`,
 	return deployment
 }
 
-// Also used as reference for keda in helm-chart, don't change until you also change the helm-chart!
 func GetWorkerDeploymentName(store v1.Store) string {
 	return fmt.Sprintf("%s-store-worker", store.Name)
 }
