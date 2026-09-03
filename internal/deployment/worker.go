@@ -46,14 +46,17 @@ func WorkerDeployments(store v1.Store, perQueue bool) ([]*appsv1.Deployment, err
 		}
 	}
 
+	if len(queues) == 0 {
+		return []*appsv1.Deployment{}, nil
+	}
+
 	if !perQueue {
-		queuesString := strings.Join(queues, " ")
-		return []*appsv1.Deployment{WorkerDeployment(store, queuesString)}, nil
+		return []*appsv1.Deployment{WorkerDeployment(store, queues)}, nil
 	}
 
 	deployments := make([]*appsv1.Deployment, 0, len(queues))
 	for _, queue := range queues {
-		deployments = append(deployments, WorkerDeployment(store, queue))
+		deployments = append(deployments, WorkerDeployment(store, []string{queue}))
 	}
 	return deployments, nil
 }
@@ -162,11 +165,21 @@ func GetWorkerDeploymentCondition(
 	return agg
 }
 
-func WorkerDeployment(store v1.Store, queue string) *appsv1.Deployment {
+func WorkerDeployment(store v1.Store, consumeQueues []string) *appsv1.Deployment {
+	queue := ""
+	if len(consumeQueues) == 1 {
+		queue = consumeQueues[0]
+	}
+
 	containerSpec := store.Spec.Container.DeepCopy()
 	containerSpec.Merge(store.Spec.WorkerDeploymentContainer)
 	containerSpec.Volumes = append(containerSpec.Volumes, store.GetDatabaseTLSVolumes()...)
 	containerSpec.VolumeMounts = append(containerSpec.VolumeMounts, store.GetDatabaseTLSVolumeMounts()...)
+
+	replicas := containerSpec.Replicas
+	if store.Spec.Worker.EnableKedaScaling {
+		replicas = store.Spec.Worker.MinReplicas
+	}
 
 	appName := "shopware-worker"
 	matchLabels := util.GetWorkerDeploymentMatchLabel()
@@ -175,6 +188,7 @@ func WorkerDeployment(store v1.Store, queue string) *appsv1.Deployment {
 	}
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.WorkerDeploymentContainer.Labels)
 	maps.Copy(labels, matchLabels)
+	labels[util.ShopwareKey("worker.queues")] = truncateWithHash(strings.Join(consumeQueues, "."), maxLabelValueLength)
 
 	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.WorkerDeploymentContainer.Annotations)
 
@@ -200,7 +214,7 @@ func WorkerDeployment(store v1.Store, queue string) *appsv1.Deployment {
 		})
 	}
 
-	consume := fmt.Sprintf("bin/console messenger:consume %s --time-limit=300", queue)
+	consume := fmt.Sprintf("bin/console messenger:consume %s --time-limit=300", strings.Join(consumeQueues, " "))
 	if phpMemoryLimitMiB > 0 {
 		consume += fmt.Sprintf(" --memory-limit=%dM", phpMemoryLimitMiB)
 	}
@@ -256,7 +270,7 @@ done`,
 		},
 		Spec: appsv1.DeploymentSpec{
 			ProgressDeadlineSeconds: &containerSpec.ProgressDeadlineSeconds,
-			Replicas:                &containerSpec.Replicas,
+			Replicas:                &replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: matchLabels,
 			},

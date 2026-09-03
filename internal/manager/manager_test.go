@@ -295,6 +295,7 @@ func TestReconcileResourcesSetupCreatesSecretAndJob(t *testing.T) {
 func TestReconcileResourcesInitializingCreatesDeployments(t *testing.T) {
 	store := testStore()
 	store.Status.State = v1.StateInitializing
+	store.Status.QueueState.Transports = []v1.QueueTransportStats{{Name: "async", Count: 1}}
 	m, c := newTestManager(t, dbSecret())
 
 	require.NoError(t, m.ReconcileResources(context.Background(), store))
@@ -302,6 +303,20 @@ func TestReconcileResourcesInitializingCreatesDeployments(t *testing.T) {
 	deployments := &appsv1.DeploymentList{}
 	require.NoError(t, c.List(context.Background(), deployments, client.InNamespace("test")))
 	assert.Len(t, deployments.Items, 3)
+}
+
+func TestReconcileResourcesNoWorkerWithoutQueueStats(t *testing.T) {
+	store := testStore()
+	store.Status.State = v1.StateInitializing
+	m, c := newTestManager(t, dbSecret())
+
+	require.NoError(t, m.ReconcileResources(context.Background(), store))
+
+	workers := &appsv1.DeploymentList{}
+	require.NoError(t, c.List(context.Background(), workers,
+		client.InNamespace("test"),
+		client.MatchingLabels{"shop.shopware.com/store.app": "shopware-worker"}))
+	assert.Empty(t, workers.Items, "no worker deployment until queue stats are known")
 }
 
 func TestReconcileResourcesMigrationCreatesJobAndSuspendsCron(t *testing.T) {
@@ -349,7 +364,7 @@ func TestReconcileResourcesCreatesWorkerPerQueue(t *testing.T) {
 		{Name: "low_priority", Count: 0},
 	}
 
-	staleWorker := deployment.WorkerDeployment(*store, "mail")
+	staleWorker := deployment.WorkerDeployment(*store, []string{"mail"})
 	scheme := testScheme(t)
 	c := fake.NewClientBuilder().
 		WithScheme(scheme).
@@ -476,6 +491,7 @@ func TestReconcileResourcesReadyCreatesAllResources(t *testing.T) {
 	store := testStore()
 	store.Status.State = v1.StateReady
 	store.Status.CurrentImageTag = store.Spec.Container.Image
+	store.Status.QueueState.Transports = []v1.QueueTransportStats{{Name: "async", Count: 1}}
 	m, c := newTestManager(t, dbSecret())
 
 	require.NoError(t, m.ReconcileResources(context.Background(), store))
