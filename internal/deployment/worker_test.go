@@ -1,6 +1,7 @@
 package deployment_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -8,10 +9,66 @@ import (
 	"github.com/shopware/shopware-operator/internal/deployment"
 	"github.com/shopware/shopware-operator/internal/util"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func TestGetWorkerDeploymentConditionScaling(t *testing.T) {
+	store := v1.Store{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-store", Namespace: "test"},
+		Spec:       v1.StoreSpec{SecretName: "store-secret", Container: v1.ContainerSpec{Replicas: 1}},
+	}
+	store.Status.QueueState.Transports = []v1.QueueTransportStats{{Name: "async", Count: 500}}
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, appsv1.AddToScheme(scheme))
+
+	tests := []struct {
+		name     string
+		status   appsv1.DeploymentStatus
+		expected v1.DeploymentState
+	}{
+		{
+			name:     "partially available counts as running",
+			status:   appsv1.DeploymentStatus{Replicas: 3, AvailableReplicas: 1, UnavailableReplicas: 2},
+			expected: v1.DeploymentStateRunning,
+		},
+		{
+			name:     "nothing available is scaling",
+			status:   appsv1.DeploymentStatus{Replicas: 1, AvailableReplicas: 0, UnavailableReplicas: 1},
+			expected: v1.DeploymentStateScaling,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			worker := deployment.WorkerDeployment(store, []string{"async"})
+			worker.Status = tt.status
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(client.Object(worker)).Build()
+
+			con := deployment.GetWorkerDeploymentCondition(context.Background(), store, c, true)
+			assert.Equal(t, tt.expected, con.State)
+		})
+	}
+
+	t.Run("keda scale from zero counts as running", func(t *testing.T) {
+		kedaStore := store
+		kedaStore.Spec.Worker.EnableKedaScaling = true
+		kedaStore.Spec.Worker.MinReplicas = 0
+		worker := deployment.WorkerDeployment(kedaStore, []string{"async"})
+		worker.Status = appsv1.DeploymentStatus{Replicas: 1, AvailableReplicas: 0, UnavailableReplicas: 1}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(client.Object(worker)).Build()
+
+		con := deployment.GetWorkerDeploymentCondition(context.Background(), kedaStore, c, true)
+		assert.Equal(t, v1.DeploymentStateRunning, con.State)
+	})
+}
 
 func TestGetQueueWorkerDeploymentName(t *testing.T) {
 	store := v1.Store{ObjectMeta: metav1.ObjectMeta{Name: "test-store"}}
