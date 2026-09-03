@@ -31,7 +31,7 @@ func WorkerScaledObject(store v1.Store, queue string, metricsURL string) *kedav1
 
 	labels := util.GetDefaultStoreLabels(store)
 	labels[util.ShopwareKey("store.app")] = "shopware-worker"
-	labels[util.ShopwareKey("worker.queue")] = truncateWithHash(queue, maxLabelValueLength)
+	labels[util.ShopwareKey("worker.queue")] = truncateWithHash(queue)
 
 	return &kedav1alpha1.ScaledObject{
 		TypeMeta: metav1.TypeMeta{

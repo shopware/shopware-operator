@@ -19,10 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	maxDeploymentNameLength = 63
-	maxLabelValueLength     = 63
-)
+const maxK8sNameLength = 63
 
 func WorkerQueues(store v1.Store) []string {
 	if len(store.Status.QueueState.Transports) == 0 {
@@ -184,11 +181,11 @@ func WorkerDeployment(store v1.Store, consumeQueues []string) *appsv1.Deployment
 	appName := "shopware-worker"
 	matchLabels := util.GetWorkerDeploymentMatchLabel()
 	if queue != "" {
-		matchLabels[util.ShopwareKey("worker.queue")] = truncateWithHash(queue, maxLabelValueLength)
+		matchLabels[util.ShopwareKey("worker.queue")] = truncateWithHash(queue)
 	}
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.WorkerDeploymentContainer.Labels)
 	maps.Copy(labels, matchLabels)
-	labels[util.ShopwareKey("worker.queues")] = truncateWithHash(strings.Join(consumeQueues, "."), maxLabelValueLength)
+	labels[util.ShopwareKey("worker.queues")] = truncateWithHash(strings.Join(consumeQueues, "."))
 
 	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.WorkerDeploymentContainer.Annotations)
 
@@ -328,15 +325,15 @@ func GetQueueWorkerDeploymentName(store v1.Store, queue string) string {
 	}
 	sanitized := strings.ReplaceAll(strings.ToLower(queue), "_", "-")
 	name := fmt.Sprintf("%s-%s", GetWorkerDeploymentName(store), sanitized)
-	return truncateWithHash(name, maxDeploymentNameLength)
+	return truncateWithHash(name)
 }
 
 // truncateWithHash keeps names within the k8s limit while staying unique and
 // deterministic: the overlong name is cut and suffixed with a hash of itself.
-func truncateWithHash(name string, maxLength int) string {
-	if len(name) <= maxLength {
+func truncateWithHash(name string) string {
+	if len(name) <= maxK8sNameLength {
 		return name
 	}
 	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(name)))[:8]
-	return strings.TrimRight(name[:maxLength-9], "-") + "-" + hash
+	return strings.TrimRight(name[:maxK8sNameLength-9], "-") + "-" + hash
 }
