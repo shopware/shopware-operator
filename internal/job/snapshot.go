@@ -156,7 +156,8 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 			TTLSecondsAfterFinished: func(i int32) *int32 { return &i }(60),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName:            snapshot.Container.ServiceAccountName,
