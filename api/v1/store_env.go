@@ -330,6 +330,10 @@ func (s *Store) getOpensearch() []corev1.EnvVar {
 				Value: "1",
 			},
 			{
+				Name:  "SHOPWARE_ES_THROW_EXCEPTION",
+				Value: "0",
+			},
+			{
 				Name:  "SHOPWARE_ES_INDEXING_ENABLED",
 				Value: "1",
 			},
