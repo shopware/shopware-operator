@@ -420,6 +420,43 @@ func (s *Store) getBlackfire() []corev1.EnvVar {
 	return []corev1.EnvVar{}
 }
 
+func (s *Store) getTideways() []corev1.EnvVar {
+	if !s.Spec.Tideways.Enabled {
+		return []corev1.EnvVar{}
+	}
+
+	envVars := []corev1.EnvVar{
+		{
+			Name: "TIDEWAYS_CONNECTION",
+			Value: fmt.Sprintf(
+				"tcp://%s:%d",
+				s.Spec.Tideways.Host,
+				s.Spec.Tideways.Port,
+			),
+		},
+		{
+			Name:  "TIDEWAYS_SERVICE",
+			Value: s.Spec.Tideways.Service,
+		},
+	}
+
+	if s.Spec.Tideways.APIKeyRef.Name != "" && s.Spec.Tideways.APIKeyRef.Key != "" {
+		envVars = append(envVars, corev1.EnvVar{
+			Name: "TIDEWAYS_APIKEY",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: s.Spec.Tideways.APIKeyRef.Name,
+					},
+					Key: s.Spec.Tideways.APIKeyRef.Key,
+				},
+			},
+		})
+	}
+
+	return envVars
+}
+
 // TODO: Minimum s3 storage no filesystem support
 // TODO: Minio should use bucketname before URL. So we have public.domain.com see:
 // https://min.io/docs/minio/linux/administration/object-management.html#minio-object-management-path-virtual-access
@@ -668,6 +705,7 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 	c = append(c, s.getLock()...)
 	c = append(c, s.getOtel()...)
 	c = append(c, s.getBlackfire()...)
+	c = append(c, s.getTideways()...)
 	c = append(c, s.getStorage()...)
 	c = append(c, s.getWorker()...)
 	c = append(c, s.getOpensearch()...)
