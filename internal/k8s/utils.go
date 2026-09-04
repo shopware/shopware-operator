@@ -604,6 +604,16 @@ func objectMetaEqual(old, new metav1.Object) bool {
 		util.MapEqual(old.GetAnnotations(), new.GetAnnotations())
 }
 
+type secretHashData struct {
+	Data       map[string][]byte `json:"data,omitempty"`
+	StringData map[string]string `json:"stringData,omitempty"`
+}
+
+type configMapHashData struct {
+	Data       map[string]string `json:"data,omitempty"`
+	BinaryData map[string][]byte `json:"binaryData,omitempty"`
+}
+
 func extractRelevantData(obj runtime.Object) interface{} {
 	switch object := obj.(type) {
 	case *appsv1.StatefulSet:
@@ -613,9 +623,15 @@ func extractRelevantData(obj runtime.Object) interface{} {
 	case *corev1.Service:
 		return object.Spec
 	case *corev1.Secret:
-		return object.Data
+		return secretHashData{
+			Data:       object.Data,
+			StringData: object.StringData,
+		}
 	case *corev1.ConfigMap:
-		return object.Data
+		return configMapHashData{
+			Data:       object.Data,
+			BinaryData: object.BinaryData,
+		}
 	case *kedav1alpha1.ScaledObject:
 		return object.Spec
 	case *cm.Certificate:
