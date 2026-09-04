@@ -56,3 +56,59 @@ func TestSnapshotCreateJobUsesRestrictedContainerSecurityContext(t *testing.T) {
 	assert.Len(t, result.Spec.Template.Spec.Volumes, 2)
 	assert.Equal(t, "database-tls", result.Spec.Template.Spec.Volumes[0].Secret.SecretName)
 }
+
+func TestSnapshotCreateJobPropagatesContainerAnnotationsToPodTemplate(t *testing.T) {
+	store := v1.Store{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-store",
+			Namespace: "test",
+		},
+	}
+
+	snapshot := v1.StoreSnapshotCreate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-snapshot",
+			Namespace: "test",
+		},
+		Spec: v1.StoreSnapshotSpec{
+			Container: v1.ContainerSpec{
+				Annotations: map[string]string{
+					"ad.datadoghq.com/operator-snapshot.logs": "[]",
+				},
+			},
+		},
+	}
+
+	result := job.SnapshotCreateJob(store, snapshot)
+
+	assert.Equal(t, "[]", result.Annotations["ad.datadoghq.com/operator-snapshot.logs"])
+	assert.Equal(t, "[]", result.Spec.Template.Annotations["ad.datadoghq.com/operator-snapshot.logs"])
+}
+
+func TestSnapshotRestoreJobPropagatesContainerAnnotationsToPodTemplate(t *testing.T) {
+	store := v1.Store{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-store",
+			Namespace: "test",
+		},
+	}
+
+	snapshot := v1.StoreSnapshotRestore{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-snapshot",
+			Namespace: "test",
+		},
+		Spec: v1.StoreSnapshotSpec{
+			Container: v1.ContainerSpec{
+				Annotations: map[string]string{
+					"ad.datadoghq.com/operator-snapshot.logs": "[]",
+				},
+			},
+		},
+	}
+
+	result := job.SnapshotRestoreJob(store, snapshot)
+
+	assert.Equal(t, "[]", result.Annotations["ad.datadoghq.com/operator-snapshot.logs"])
+	assert.Equal(t, "[]", result.Spec.Template.Annotations["ad.datadoghq.com/operator-snapshot.logs"])
+}
