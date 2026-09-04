@@ -84,3 +84,31 @@ func TestSnapshotCreateJobPropagatesContainerAnnotationsToPodTemplate(t *testing
 	assert.Equal(t, "[]", result.Annotations["ad.datadoghq.com/operator-snapshot.logs"])
 	assert.Equal(t, "[]", result.Spec.Template.Annotations["ad.datadoghq.com/operator-snapshot.logs"])
 }
+
+func TestSnapshotRestoreJobPropagatesContainerAnnotationsToPodTemplate(t *testing.T) {
+	store := v1.Store{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-store",
+			Namespace: "test",
+		},
+	}
+
+	snapshot := v1.StoreSnapshotRestore{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-snapshot",
+			Namespace: "test",
+		},
+		Spec: v1.StoreSnapshotSpec{
+			Container: v1.ContainerSpec{
+				Annotations: map[string]string{
+					"ad.datadoghq.com/operator-snapshot.logs": "[]",
+				},
+			},
+		},
+	}
+
+	result := job.SnapshotRestoreJob(store, snapshot)
+
+	assert.Equal(t, "[]", result.Annotations["ad.datadoghq.com/operator-snapshot.logs"])
+	assert.Equal(t, "[]", result.Spec.Template.Annotations["ad.datadoghq.com/operator-snapshot.logs"])
+}
