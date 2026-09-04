@@ -34,7 +34,7 @@ func TestStoreExecSuccessfulCleanupDeletesDoneOneShotAfterGracePeriod(t *testing
 
 	require.NoError(t, err)
 	assert.True(t, handled)
-	assert.False(t, result.Requeue)
+	assert.Zero(t, result)
 
 	got := &shopv1.StoreExec{}
 	err = cl.Get(ctx, types.NamespacedName{Namespace: cleanupTestNamespace, Name: ex.Name}, got)
@@ -156,7 +156,7 @@ func TestStoreDebugInstanceSuccessfulCleanupUsesDurationAndGracePeriod(t *testin
 			err = cl.Get(ctx, types.NamespacedName{Namespace: cleanupTestNamespace, Name: debugInstance.Name}, got)
 			if tt.expectDeleted {
 				assert.True(t, k8serrors.IsNotFound(err))
-				assert.False(t, result.Requeue)
+				assert.Zero(t, result)
 				return
 			}
 

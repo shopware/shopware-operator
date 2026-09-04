@@ -63,6 +63,11 @@ var (
 		Help: "Status of the latest scheduled task run (1 for success, -1 for failure, 0 for unknown/no runs)",
 	}, []string{"store", "namespace"})
 
+	storeQueueCount = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "shopware_store_queue_count",
+		Help: "Number of pending messages per messenger transport",
+	}, []string{"store", "namespace", "queue"})
+
 	storeScheduledTaskLastSuccessTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "shopware_store_scheduled_task_last_success_timestamp",
 		Help: "Unix timestamp of the last successful scheduled task run",
@@ -101,7 +106,18 @@ func init() {
 		storeScheduledTaskSuspended,
 		storeScheduledTaskLastRunStatus,
 		storeScheduledTaskLastSuccessTime,
+		storeQueueCount,
 	)
+}
+
+func UpdateQueueMetrics(namespace string, storeName string, transports []v1.QueueTransportStats) {
+	storeQueueCount.DeletePartialMatch(prometheus.Labels{
+		"store":     storeName,
+		"namespace": namespace,
+	})
+	for _, transport := range transports {
+		storeQueueCount.WithLabelValues(storeName, namespace, transport.Name).Set(float64(transport.Count))
+	}
 }
 
 // UpdateStoreMetrics sets all gauge values from a Store's status.

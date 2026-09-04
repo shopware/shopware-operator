@@ -81,7 +81,7 @@ func TestDeploymentResourceIsolation(t *testing.T) {
 
 	// Generate deployments
 	adminDeploy := deployment.AdminDeployment(store)
-	workerDeploy := deployment.WorkerDeployment(store)
+	workerDeploy := deployment.WorkerDeployment(store, []string{"async"})
 	storefrontDeploy := deployment.StorefrontDeployment(store)
 
 	// Verify Admin deployment has 512Mi resources
@@ -193,7 +193,7 @@ func TestDeploymentResourceIsolationWithPartialOverrides(t *testing.T) {
 		},
 	}
 
-	workerDeploy := deployment.WorkerDeployment(store)
+	workerDeploy := deployment.WorkerDeployment(store, []string{"async"})
 	workerContainer := findMainContainer(workerDeploy.Spec.Template.Spec.Containers, "shopware-worker")
 	require.NotNil(t, workerContainer, "Worker container should exist")
 
@@ -246,7 +246,7 @@ func TestDeploymentResourceIsolationNoOverrides(t *testing.T) {
 	}
 
 	adminDeploy := deployment.AdminDeployment(store)
-	workerDeploy := deployment.WorkerDeployment(store)
+	workerDeploy := deployment.WorkerDeployment(store, []string{"async"})
 	storefrontDeploy := deployment.StorefrontDeployment(store)
 
 	// All deployments should have base resources

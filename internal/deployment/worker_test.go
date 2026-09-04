@@ -1,16 +1,99 @@
 package deployment_test
 
 import (
+	"context"
+	"strings"
 	"testing"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/deployment"
 	"github.com/shopware/shopware-operator/internal/util"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func TestGetWorkerDeploymentConditionScaling(t *testing.T) {
+	store := v1.Store{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-store", Namespace: "test"},
+		Spec:       v1.StoreSpec{SecretName: "store-secret", Container: v1.ContainerSpec{Replicas: 1}},
+	}
+	store.Status.QueueState.Transports = []v1.QueueTransportStats{{Name: "async", Count: 500}}
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, appsv1.AddToScheme(scheme))
+
+	tests := []struct {
+		name     string
+		status   appsv1.DeploymentStatus
+		expected v1.DeploymentState
+	}{
+		{
+			name:     "partially available counts as running",
+			status:   appsv1.DeploymentStatus{Replicas: 3, AvailableReplicas: 1, UnavailableReplicas: 2},
+			expected: v1.DeploymentStateRunning,
+		},
+		{
+			name:     "nothing available is scaling",
+			status:   appsv1.DeploymentStatus{Replicas: 1, AvailableReplicas: 0, UnavailableReplicas: 1},
+			expected: v1.DeploymentStateScaling,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			worker := deployment.WorkerDeployment(store, []string{"async"})
+			worker.Status = tt.status
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(client.Object(worker)).Build()
+
+			con := deployment.GetWorkerDeploymentCondition(context.Background(), store, c, true)
+			assert.Equal(t, tt.expected, con.State)
+		})
+	}
+
+	t.Run("keda scale from zero counts as running", func(t *testing.T) {
+		kedaStore := store
+		kedaStore.Spec.Worker.EnableKedaScaling = true
+		kedaStore.Spec.Worker.MinReplicas = 0
+		worker := deployment.WorkerDeployment(kedaStore, []string{"async"})
+		worker.Status = appsv1.DeploymentStatus{Replicas: 1, AvailableReplicas: 0, UnavailableReplicas: 1}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(client.Object(worker)).Build()
+
+		con := deployment.GetWorkerDeploymentCondition(context.Background(), kedaStore, c, true)
+		assert.Equal(t, v1.DeploymentStateRunning, con.State)
+	})
+}
+
+func TestGetQueueWorkerDeploymentName(t *testing.T) {
+	store := v1.Store{ObjectMeta: metav1.ObjectMeta{Name: "test-store"}}
+
+	t.Run("short queue keeps full name", func(t *testing.T) {
+		assert.Equal(t, "test-store-store-worker-low-priority",
+			deployment.GetQueueWorkerDeploymentName(store, "low_priority"))
+	})
+
+	t.Run("long queue is truncated to 63 chars with hash", func(t *testing.T) {
+		longQueue := strings.Repeat("very_long_queue_", 5)
+		name := deployment.GetQueueWorkerDeploymentName(store, longQueue)
+		assert.LessOrEqual(t, len(name), 63)
+		assert.True(t, strings.HasPrefix(name, "test-store-store-worker-very-long-queue-"))
+	})
+
+	t.Run("long queues stay unique and deterministic", func(t *testing.T) {
+		queueA := strings.Repeat("very_long_queue_", 5) + "a"
+		queueB := strings.Repeat("very_long_queue_", 5) + "b"
+		nameA := deployment.GetQueueWorkerDeploymentName(store, queueA)
+		nameB := deployment.GetQueueWorkerDeploymentName(store, queueB)
+		assert.NotEqual(t, nameA, nameB)
+		assert.Equal(t, nameA, deployment.GetQueueWorkerDeploymentName(store, queueA))
+	})
+}
 
 func TestWorkerDeployment(t *testing.T) {
 	t.Run("test annotation merging", func(t *testing.T) {
@@ -40,7 +123,7 @@ func TestWorkerDeployment(t *testing.T) {
 			},
 		}
 
-		result := deployment.WorkerDeployment(store)
+		result := deployment.WorkerDeployment(store, []string{"async"})
 
 		// Verify annotations are merged correctly
 		assert.Equal(t, "worker-value", result.Annotations["shared.key"], "Shared key should be overwritten by worker")
@@ -109,7 +192,7 @@ func TestWorkerDeployment(t *testing.T) {
 			},
 		}
 
-		result := deployment.WorkerDeployment(store)
+		result := deployment.WorkerDeployment(store, []string{"async"})
 		container := result.Spec.Template.Spec.Containers[0]
 
 		// Verify image and policy are overwritten
@@ -167,7 +250,7 @@ func TestWorkerDeployment(t *testing.T) {
 			},
 		}
 
-		result := deployment.WorkerDeployment(store)
+		result := deployment.WorkerDeployment(store, []string{"async"})
 
 		// Verify security context is overwritten
 		assert.NotNil(t, result.Spec.Template.Spec.SecurityContext)
@@ -192,7 +275,7 @@ func TestWorkerDeployment(t *testing.T) {
 			},
 		}
 
-		result := deployment.WorkerDeployment(store)
+		result := deployment.WorkerDeployment(store, []string{"async"})
 
 		// Verify service account is overwritten
 		assert.Equal(t, "worker-sa", result.Spec.Template.Spec.ServiceAccountName)
@@ -213,15 +296,16 @@ func TestWorkerDeployment(t *testing.T) {
 			},
 		}
 
-		result := deployment.WorkerDeployment(store)
+		result := deployment.WorkerDeployment(store, []string{"async"})
 		container := result.Spec.Template.Spec.Containers[0]
 
 		// Verify worker command and args
 		assert.Equal(t, []string{"/bin/sh", "-c"}, container.Command)
 		assert.Len(t, container.Args, 1)
-		assert.Contains(t, container.Args[0], "bin/console messenger:consume failed async low_priority --time-limit=300")
+		assert.Contains(t, container.Args[0], "bin/console messenger:consume async --time-limit=300")
 		assert.NotContains(t, container.Args[0], "--memory-limit")
-		assert.Contains(t, container.Args[0], `trap 'kill -TERM "$child"`)
+		assert.Contains(t, container.Args[0], `trap term TERM INT`)
+		assert.Contains(t, container.Args[0], `kill -TERM "$child"`)
 		assert.Equal(t, "shopware-worker", container.Name)
 	})
 
@@ -243,9 +327,35 @@ func TestWorkerDeployment(t *testing.T) {
 			},
 		}
 
-		result := deployment.WorkerDeployment(store)
+		result := deployment.WorkerDeployment(store, []string{"async"})
 		container := result.Spec.Template.Spec.Containers[0]
 
 		assert.Contains(t, container.Args[0], "--memory-limit=900M")
+	})
+}
+
+func TestWorkerDeploymentQueueLabels(t *testing.T) {
+	store := v1.Store{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-store", Namespace: "test"},
+		Spec:       v1.StoreSpec{SecretName: "store-secret"},
+	}
+
+	t.Run("single queue", func(t *testing.T) {
+		result := deployment.WorkerDeployment(store, []string{"low_priority"})
+
+		assert.Equal(t, "test-store-store-worker-low-priority", result.Name)
+		assert.Equal(t, "low_priority", result.Spec.Selector.MatchLabels[util.ShopwareKey("worker.queue")])
+		assert.Equal(t, "low_priority", result.Spec.Template.Labels[util.ShopwareKey("worker.queues")])
+	})
+
+	t.Run("multiple queues", func(t *testing.T) {
+		result := deployment.WorkerDeployment(store, []string{"failed", "async", "low_priority"})
+
+		assert.Equal(t, "test-store-store-worker", result.Name)
+		assert.NotContains(t, result.Spec.Selector.MatchLabels, util.ShopwareKey("worker.queue"))
+		assert.Equal(t, "failed.async.low_priority", result.Labels[util.ShopwareKey("worker.queues")])
+		assert.Equal(t, "failed.async.low_priority", result.Spec.Template.Labels[util.ShopwareKey("worker.queues")])
+		assert.Contains(t, result.Spec.Template.Spec.Containers[0].Args[0],
+			"messenger:consume failed async low_priority --time-limit=300")
 	})
 }
