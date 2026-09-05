@@ -92,38 +92,20 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 			envs = util.MergeEnv(envs, phpEnvs)
 			fmt.Println("envs: ", phpEnvs)
 		}
+	} else if store.Spec.FPM.ProcessManagement == "frankenphp" {
+		if containerSpec.Resources.Limits.Memory() != nil && containerSpec.Resources.Limits.Memory().Value() != 0 {
+			phpEnvs := GetCalculatedFrankenPHPValues(int(containerSpec.Resources.Limits.Memory().Value() / (1024 * 1024)))
+			envs = util.MergeEnv(envs, phpEnvs)
+		} else {
+			phpEnvs := GetCalculatedFrankenPHPValues(2048)
+			envs = util.MergeEnv(envs, phpEnvs)
+		}
 	}
 
 	containers := append(util.DefaultContainerSecurityContexts(containerSpec.ExtraContainers), corev1.Container{
-		Name: DEPLOYMENT_STOREFRONT_CONTAINER_NAME,
-		StartupProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/-/fpm/ping",
-					Port: intstr.IntOrString{
-						Type:   intstr.Int,
-						IntVal: FPM_ADMIN_PORT,
-					},
-				},
-			},
-			PeriodSeconds:    5,
-			TimeoutSeconds:   5,
-			FailureThreshold: 18,
-		},
-		LivenessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/-/fpm/ping",
-					Port: intstr.IntOrString{
-						Type:   intstr.Int,
-						IntVal: FPM_ADMIN_PORT,
-					},
-				},
-			},
-			PeriodSeconds:    10,
-			TimeoutSeconds:   5,
-			FailureThreshold: 3,
-		},
+		Name:            DEPLOYMENT_STOREFRONT_CONTAINER_NAME,
+		StartupProbe:    storefrontStartupProbe(store),
+		LivenessProbe:   storefrontLivenessProbe(store),
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
@@ -214,4 +196,73 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 
 func GetStorefrontDeploymentName(store v1.Store) string {
 	return fmt.Sprintf("%s-storefront", store.Name)
+}
+
+// storefrontStartupProbe returns the startup probe based on the runtime mode.
+// FrankenPHP uses the Caddy admin API on port 2019, PHP-FPM uses the FPM ping on port 8001.
+func storefrontStartupProbe(store v1.Store) *corev1.Probe {
+	if store.Spec.FPM.ProcessManagement == "frankenphp" {
+		return &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/config/",
+					Port: intstr.IntOrString{
+						Type:   intstr.Int,
+						IntVal: 2019,
+					},
+				},
+			},
+			PeriodSeconds:    5,
+			TimeoutSeconds:   5,
+			FailureThreshold: 18,
+		}
+	}
+	return &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path: "/-/fpm/ping",
+				Port: intstr.IntOrString{
+					Type:   intstr.Int,
+					IntVal: FPM_ADMIN_PORT,
+				},
+			},
+		},
+		PeriodSeconds:    5,
+		TimeoutSeconds:   5,
+		FailureThreshold: 18,
+	}
+}
+
+// storefrontLivenessProbe returns the liveness probe based on the runtime mode.
+func storefrontLivenessProbe(store v1.Store) *corev1.Probe {
+	if store.Spec.FPM.ProcessManagement == "frankenphp" {
+		return &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/config/",
+					Port: intstr.IntOrString{
+						Type:   intstr.Int,
+						IntVal: 2019,
+					},
+				},
+			},
+			PeriodSeconds:    10,
+			TimeoutSeconds:   5,
+			FailureThreshold: 3,
+		}
+	}
+	return &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path: "/-/fpm/ping",
+				Port: intstr.IntOrString{
+					Type:   intstr.Int,
+					IntVal: FPM_ADMIN_PORT,
+				},
+			},
+		},
+		PeriodSeconds:    10,
+		TimeoutSeconds:   5,
+		FailureThreshold: 3,
+	}
 }

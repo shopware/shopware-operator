@@ -257,4 +257,115 @@ func TestStorefrontDeployment(t *testing.T) {
 		assert.Equal(t, int32(10), container.LivenessProbe.PeriodSeconds)
 		assert.Equal(t, int32(3), container.LivenessProbe.FailureThreshold)
 	})
+
+	t.Run("test frankenphp injects FRANKENPHP_MAX_THREADS", func(t *testing.T) {
+		store := v1.Store{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-store",
+				Namespace: "test",
+			},
+			Spec: v1.StoreSpec{
+				Container: v1.ContainerSpec{
+					Image:           "shopware:frankenphp",
+					ImagePullPolicy: "IfNotPresent",
+					Resources: corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							"memory": resource.MustParse("2Gi"),
+						},
+					},
+				},
+				FPM: v1.FPMSpec{
+					ProcessManagement: "frankenphp",
+				},
+				SecretName: "store-secret",
+			},
+		}
+
+		result := deployment.StorefrontDeployment(store)
+		container := result.Spec.Template.Spec.Containers[0]
+
+		// Verify FRANKENPHP_MAX_THREADS is set
+		hasFrankenPHPThreads := false
+		hasFPMEnv := false
+		for _, env := range container.Env {
+			if env.Name == "FRANKENPHP_MAX_THREADS" {
+				hasFrankenPHPThreads = true
+				// 2048 MiB / 50 MiB per thread = 40 threads
+				assert.Equal(t, "40", env.Value)
+			}
+			if env.Name == "FPM_PM" {
+				hasFPMEnv = true
+			}
+		}
+		assert.True(t, hasFrankenPHPThreads, "FRANKENPHP_MAX_THREADS should be set")
+		assert.False(t, hasFPMEnv, "FPM_PM should NOT be set for frankenphp mode")
+	})
+
+	t.Run("test frankenphp does not inject FPM env vars", func(t *testing.T) {
+		store := v1.Store{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-store",
+				Namespace: "test",
+			},
+			Spec: v1.StoreSpec{
+				Container: v1.ContainerSpec{
+					Image: "shopware:frankenphp",
+				},
+				FPM: v1.FPMSpec{
+					ProcessManagement: "frankenphp",
+					MaxChildren:       8,
+					StartServers:      4,
+				},
+				SecretName: "store-secret",
+			},
+		}
+
+		result := deployment.StorefrontDeployment(store)
+		container := result.Spec.Template.Spec.Containers[0]
+
+		// Verify no FPM env vars are injected
+		for _, env := range container.Env {
+			assert.NotEqual(t, "FPM_PM", env.Name, "FPM_PM should not be set")
+			assert.NotEqual(t, "FPM_PM_MAX_CHILDREN", env.Name, "FPM_PM_MAX_CHILDREN should not be set")
+			assert.NotEqual(t, "FPM_PM_START_SERVERS", env.Name, "FPM_PM_START_SERVERS should not be set")
+			assert.NotEqual(t, "FPM_LISTEN", env.Name, "FPM_LISTEN should not be set")
+		}
+	})
+
+	t.Run("test frankenphp uses caddy admin probes instead of fpm ping", func(t *testing.T) {
+		store := v1.Store{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-store",
+				Namespace: "test",
+			},
+			Spec: v1.StoreSpec{
+				Container: v1.ContainerSpec{
+					Image:           "shopware:frankenphp",
+					ImagePullPolicy: "IfNotPresent",
+					Port:            8000,
+					Resources: corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							"memory": resource.MustParse("2Gi"),
+						},
+					},
+				},
+				FPM: v1.FPMSpec{
+					ProcessManagement: "frankenphp",
+				},
+				SecretName: "store-secret",
+			},
+		}
+
+		result := deployment.StorefrontDeployment(store)
+		container := result.Spec.Template.Spec.Containers[0]
+
+		// FrankenPHP should use Caddy admin API (port 2019) for startup/liveness
+		assert.Equal(t, "/config/", container.StartupProbe.HTTPGet.Path)
+		assert.Equal(t, int32(2019), container.StartupProbe.HTTPGet.Port.IntVal)
+		assert.Equal(t, "/config/", container.LivenessProbe.HTTPGet.Path)
+		assert.Equal(t, int32(2019), container.LivenessProbe.HTTPGet.Port.IntVal)
+		// Readiness still uses the app health check
+		assert.Equal(t, "/api/_info/health-check", container.ReadinessProbe.HTTPGet.Path)
+		assert.Equal(t, int32(8000), container.ReadinessProbe.HTTPGet.Port.IntVal)
+	})
 }
