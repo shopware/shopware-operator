@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.8.0](https://github.com/shopware/shopware-operator/compare/1.7.2...v1.8.0) (2026-09-04)
+
+
+### Features
+
+* adds tideways support ([c8927f1](https://github.com/shopware/shopware-operator/commit/c8927f131b0df63b385a4420d0fa6d69da656f5a))
+
+
+### Bug Fixes
+
+* propagate snapshot annotations to pods ([031893f](https://github.com/shopware/shopware-operator/commit/031893fcba1447ba050cceb2e2b533087ba0c1bf))
+* propagate snapshot annotations to pods ([1610eb0](https://github.com/shopware/shopware-operator/commit/1610eb0c218721903f27da7feb6f92fb0b030a8f))
+
 ## [1.7.2](https://github.com/shopware/shopware-operator/compare/1.7.1...v1.7.2) (2026-08-27)
 
 
