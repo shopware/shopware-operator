@@ -152,7 +152,7 @@ func main() {
 				Name:  "restore",
 				Usage: "Restore a snapshot",
 				Action: func(ctx context.Context, c *cli.Command) error {
-					snapshotTempDir, err := os.MkdirTemp("", "snapshot-")
+					snapshotTempDir, err := os.MkdirTemp(tempDir, "snapshot-")
 					if err != nil {
 						logger.Errorw("TempDir creation failed", zap.Error(err))
 						os.Exit(14)
