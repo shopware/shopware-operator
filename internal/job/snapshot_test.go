@@ -112,3 +112,70 @@ func TestSnapshotRestoreJobPropagatesContainerAnnotationsToPodTemplate(t *testin
 	assert.Equal(t, "[]", result.Annotations["ad.datadoghq.com/operator-snapshot.logs"])
 	assert.Equal(t, "[]", result.Spec.Template.Annotations["ad.datadoghq.com/operator-snapshot.logs"])
 }
+
+func TestSnapshotRestoreJobUsesEphemeralVolumeTempDir(t *testing.T) {
+	store := v1.Store{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-store",
+			Namespace: "test",
+		},
+		Spec: v1.StoreSpec{
+			SecretName: "store-secret",
+			Database: v1.DatabaseSpec{
+				Name: "shopware",
+			},
+			S3Storage: v1.S3Storage{
+				EndpointURL:       "https://s3.example.com",
+				PrivateBucketName: "private",
+				PublicBucketName:  "public",
+			},
+		},
+	}
+
+	snapshot := v1.StoreSnapshotRestore{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-restore",
+			Namespace: "test",
+		},
+		Spec: v1.StoreSnapshotSpec{
+			Path: "s3://bucket/snapshot.zip",
+			Container: v1.ContainerSpec{
+				Image: "shopware:snapshot",
+				Volumes: []corev1.Volume{
+					{
+						Name: "snapshot-storage",
+						VolumeSource: corev1.VolumeSource{
+							Ephemeral: &corev1.EphemeralVolumeSource{
+								VolumeClaimTemplate: &corev1.PersistentVolumeClaimTemplate{
+									Spec: corev1.PersistentVolumeClaimSpec{
+										AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+									},
+								},
+							},
+						},
+					},
+				},
+				VolumeMounts: []corev1.VolumeMount{
+					{
+						Name:      "snapshot-storage",
+						MountPath: "/snapshot-storage",
+					},
+				},
+			},
+		},
+	}
+
+	result := job.SnapshotRestoreJob(store, snapshot)
+	var container *corev1.Container
+	for i := range result.Spec.Template.Spec.Containers {
+		if result.Spec.Template.Spec.Containers[i].Name == job.CONTAINER_NAME_SNAPSHOT {
+			container = &result.Spec.Template.Spec.Containers[i]
+			break
+		}
+	}
+
+	assert.NotNil(t, container)
+	assert.Contains(t, container.Args, "--tempdir")
+	assert.Contains(t, container.Args, "/snapshot-storage")
+	assert.Equal(t, []string{"restore", "--backup-file", "s3://bucket/snapshot.zip", "--tempdir", "/snapshot-storage"}, container.Args)
+}
