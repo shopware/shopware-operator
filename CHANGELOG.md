@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.1](https://github.com/shopware/shopware-operator/compare/1.8.0...v1.8.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* **snapshot-restore:** not using empemeral storage ([#251](https://github.com/shopware/shopware-operator/issues/251)) ([0fa515f](https://github.com/shopware/shopware-operator/commit/0fa515f54d4ff03d3e42234b1cd92dfe048aba86))
+
 ## [1.8.0](https://github.com/shopware/shopware-operator/compare/1.7.2...v1.8.0) (2026-09-04)
 
 
