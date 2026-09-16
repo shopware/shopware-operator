@@ -162,13 +162,11 @@ func TestSQLConnection(ctx context.Context, spec *DatabaseSpec) error {
 	//nolint:errcheck
 	defer db.Close()
 	err = db.PingContext(ctx)
-
-	if mysqlErr, ok := err.(*mysql.MySQLError); ok {
+	if err != nil {
 		// Error 1049 (42000): Unknown database
-		if mysqlErr.Number == 1049 {
+		if mysqlErr, ok := err.(*mysql.MySQLError); ok && mysqlErr.Number == 1049 {
 			return nil
 		}
-	} else {
 		return err
 	}
 
