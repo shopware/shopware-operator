@@ -224,7 +224,7 @@ func WorkerDeployment(store v1.Store, consumeQueues []string) *appsv1.Deployment
 		})
 	}
 
-	consume := fmt.Sprintf("bin/console messenger:consume %s --time-limit=300", strings.Join(consumeQueues, " "))
+	consume := fmt.Sprintf("bin/console messenger:consume %s --time-limit=300 -vv", strings.Join(consumeQueues, " "))
 	if phpMemoryLimitMiB > 0 {
 		consume += fmt.Sprintf(" --memory-limit=%dM", phpMemoryLimitMiB)
 	}
