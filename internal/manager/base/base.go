@@ -37,12 +37,35 @@ func (b *Base) Eventf(store *v1.Store, reason string, format string, args ...any
 	}
 }
 
-func (b *Base) AllDeploymentsRunning(ctx context.Context, store *v1.Store) bool {
+func (b *Base) refreshDeploymentStates(ctx context.Context, store *v1.Store) []v1.DeploymentState {
 	store.Status.AdminState = deployment.GetAdminDeploymentCondition(ctx, *store, b.Client)
 	store.Status.WorkerState = deployment.GetWorkerDeploymentCondition(ctx, *store, b.Client, b.EnableKeda)
 	store.Status.StorefrontState = deployment.GetStorefrontDeploymentCondition(ctx, *store, b.Client)
 
-	return store.Status.AdminState.State == v1.DeploymentStateRunning &&
-		store.Status.WorkerState.State == v1.DeploymentStateRunning &&
-		store.Status.StorefrontState.State == v1.DeploymentStateRunning
+	return []v1.DeploymentState{
+		store.Status.AdminState.State,
+		store.Status.WorkerState.State,
+		store.Status.StorefrontState.State,
+	}
+}
+
+func (b *Base) AllDeploymentsRunning(ctx context.Context, store *v1.Store) bool {
+	for _, state := range b.refreshDeploymentStates(ctx, store) {
+		if state != v1.DeploymentStateRunning {
+			return false
+		}
+	}
+	return true
+}
+
+// AllDeploymentsAvailable also accepts deployments that are scaling. Replicas
+// are moved by autoscalers and by manual scaling, which must not send a
+// running store back to initializing.
+func (b *Base) AllDeploymentsAvailable(ctx context.Context, store *v1.Store) bool {
+	for _, state := range b.refreshDeploymentStates(ctx, store) {
+		if state != v1.DeploymentStateRunning && state != v1.DeploymentStateScaling {
+			return false
+		}
+	}
+	return true
 }

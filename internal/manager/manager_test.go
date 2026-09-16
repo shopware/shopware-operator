@@ -199,6 +199,81 @@ func TestReconcileStateInitializingWaitsForDeployments(t *testing.T) {
 	assert.Equal(t, v1.StateInitializing, store.Status.State)
 }
 
+func scaleStorefront(t *testing.T, store *v1.Store, objs []client.Object, status appsv1.DeploymentStatus) {
+	t.Helper()
+	name := deployment.StorefrontDeployment(*store).Name
+	for _, obj := range objs {
+		d, ok := obj.(*appsv1.Deployment)
+		if ok && d.Name == name {
+			d.Status = status
+			return
+		}
+	}
+	t.Fatalf("storefront deployment %s not found", name)
+}
+
+func TestReconcileStateReadyStaysReadyWhileScaling(t *testing.T) {
+	store := testStore()
+	store.Status.State = v1.StateReady
+	store.Status.CurrentImageTag = store.Spec.Container.Image
+
+	objs := runningDeployments(store)
+	scaleStorefront(t, store, objs, appsv1.DeploymentStatus{
+		Replicas:            2,
+		AvailableReplicas:   0,
+		UnavailableReplicas: 2,
+	})
+	m, _ := newTestManager(t, objs...)
+
+	m.ReconcileState(context.Background(), store)
+
+	assert.Equal(t, v1.StateReady, store.Status.State)
+	assert.Equal(t, v1.DeploymentStateScaling, store.Status.StorefrontState.State)
+}
+
+func TestReconcileStateReadyLeavesReadyOnStalledRollout(t *testing.T) {
+	store := testStore()
+	store.Status.State = v1.StateReady
+	store.Status.CurrentImageTag = store.Spec.Container.Image
+
+	objs := runningDeployments(store)
+	scaleStorefront(t, store, objs, appsv1.DeploymentStatus{
+		Replicas:            1,
+		AvailableReplicas:   0,
+		UnavailableReplicas: 1,
+		Conditions: []appsv1.DeploymentCondition{
+			{
+				Type:   appsv1.DeploymentProgressing,
+				Status: corev1.ConditionFalse,
+				Reason: "ProgressDeadlineExceeded",
+			},
+		},
+	})
+	m, _ := newTestManager(t, objs...)
+
+	m.ReconcileState(context.Background(), store)
+
+	assert.Equal(t, v1.StateInitializing, store.Status.State)
+	assert.Equal(t, v1.DeploymentStateError, store.Status.StorefrontState.State)
+}
+
+func TestReconcileStateInitializingWaitsWhileScaling(t *testing.T) {
+	store := testStore()
+	store.Status.State = v1.StateInitializing
+
+	objs := runningDeployments(store)
+	scaleStorefront(t, store, objs, appsv1.DeploymentStatus{
+		Replicas:            1,
+		AvailableReplicas:   0,
+		UnavailableReplicas: 1,
+	})
+	m, _ := newTestManager(t, objs...)
+
+	m.ReconcileState(context.Background(), store)
+
+	assert.Equal(t, v1.StateInitializing, store.Status.State)
+}
+
 func TestReconcileStateReadyDetectsImageChange(t *testing.T) {
 	store := testStore()
 	store.Status.State = v1.StateReady

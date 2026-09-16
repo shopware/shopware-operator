@@ -56,7 +56,7 @@ func (m *Manager) StateHandler(ctx context.Context, store *v1.Store) v1.Stateful
 		return v1.StateMigration
 	}
 
-	if !m.AllDeploymentsRunning(ctx, store) {
+	if !m.AllDeploymentsAvailable(ctx, store) {
 		con.Reason = "Deployments are not running anymore"
 		return v1.StateInitializing
 	}

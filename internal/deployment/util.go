@@ -20,6 +20,16 @@ const (
 	memoryPerChildMiB    = 80 //Every PHP-FPM process in an empty shop uses 70.6MiB
 )
 
+func progressDeadlineExceeded(deployment *appsv1.Deployment) bool {
+	for _, con := range deployment.Status.Conditions {
+		if con.Type == appsv1.DeploymentProgressing {
+			return con.Status == corev1.ConditionFalse &&
+				con.Reason == "ProgressDeadlineExceeded"
+		}
+	}
+	return false
+}
+
 func getDeploymentCondition(
 	deployment *appsv1.Deployment,
 	storeReplicas int32,
@@ -52,6 +62,16 @@ func getDeploymentCondition(
 				State:          v1.DeploymentStateRunning,
 				LastUpdateTime: metav1.Now(),
 				Message:        "Deployment is running, but is scaling",
+				Ready:          fmt.Sprintf("%d/%d", deployment.Status.AvailableReplicas, storeReplicas),
+				StoreReplicas:  storeReplicas,
+			}
+		}
+
+		if progressDeadlineExceeded(deployment) {
+			return v1.DeploymentCondition{
+				State:          v1.DeploymentStateError,
+				LastUpdateTime: metav1.Now(),
+				Message:        "Deployment has no available replicas and exceeded its progress deadline",
 				Ready:          fmt.Sprintf("%d/%d", deployment.Status.AvailableReplicas, storeReplicas),
 				StoreReplicas:  storeReplicas,
 			}
