@@ -32,6 +32,7 @@ import (
 	"time"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	"github.com/pkg/errors"
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/logging"
@@ -582,6 +583,10 @@ func EnsureObjectWithHash(
 			// Gateway API resources use MergeFrom instead of StrategicMergeFrom
 			patch = client.MergeFrom(oldObj.DeepCopy())
 			obj.(*gatewayv1.HTTPRoute).TypeMeta = oldObj.DeepCopy().TypeMeta
+		case *kedav1alpha1.ScaledObject:
+			// CRDs don't support strategic merge patch
+			patch = client.MergeFrom(oldObj.DeepCopy())
+			obj.(*kedav1alpha1.ScaledObject).TypeMeta = oldObj.DeepCopy().TypeMeta
 		default:
 			patch = client.StrategicMergeFrom(oldObject)
 		}
@@ -599,6 +604,16 @@ func objectMetaEqual(old, new metav1.Object) bool {
 		util.MapEqual(old.GetAnnotations(), new.GetAnnotations())
 }
 
+type secretHashData struct {
+	Data       map[string][]byte `json:"data,omitempty"`
+	StringData map[string]string `json:"stringData,omitempty"`
+}
+
+type configMapHashData struct {
+	Data       map[string]string `json:"data,omitempty"`
+	BinaryData map[string][]byte `json:"binaryData,omitempty"`
+}
+
 func extractRelevantData(obj runtime.Object) interface{} {
 	switch object := obj.(type) {
 	case *appsv1.StatefulSet:
@@ -608,7 +623,17 @@ func extractRelevantData(obj runtime.Object) interface{} {
 	case *corev1.Service:
 		return object.Spec
 	case *corev1.Secret:
-		return object.Data
+		return secretHashData{
+			Data:       object.Data,
+			StringData: object.StringData,
+		}
+	case *corev1.ConfigMap:
+		return configMapHashData{
+			Data:       object.Data,
+			BinaryData: object.BinaryData,
+		}
+	case *kedav1alpha1.ScaledObject:
+		return object.Spec
 	case *cm.Certificate:
 		return object.Spec
 	case *cm.Issuer:

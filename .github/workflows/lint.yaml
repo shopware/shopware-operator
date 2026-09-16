@@ -62,12 +62,20 @@ jobs:
           make helm path=test version=99.99.98
           cd test
           helm lint .
-          helm template no-webhook . --set crds.install=false --set webhook.enabled=false > /tmp/no-webhook.yaml
+          helm template no-webhook . --set crds.install=false > /tmp/no-webhook.yaml
           if grep -Eq 'kind: (Certificate|Issuer|ValidatingWebhookConfiguration)|cert-manager.io|webhook-certs|containerPort: 9443' /tmp/no-webhook.yaml; then
-            echo "Webhook resources were rendered while webhook.enabled=false"
+            echo "Webhook resources were rendered with the default webhook.enabled=false"
             exit 1
           fi
           grep -A1 'name: ENABLE_WEBHOOK' /tmp/no-webhook.yaml | grep -q 'value: "false"'
+          helm template with-webhook . --set crds.install=false --set webhook.enabled=true > /tmp/with-webhook.yaml
+          for kind in Certificate Issuer ValidatingWebhookConfiguration; do
+            if ! grep -q "kind: $kind" /tmp/with-webhook.yaml; then
+              echo "$kind was not rendered while webhook.enabled=true"
+              exit 1
+            fi
+          done
+          grep -A1 'name: ENABLE_WEBHOOK' /tmp/with-webhook.yaml | grep -q 'value: "true"'
 
   test-on-cluster:
     name: Cluster E2E Test
@@ -144,7 +152,7 @@ jobs:
           helm lint test
           kubectl create namespace test
 
-          helm template test --namespace test test --set image.tag="$version" > rendered.yaml
+          helm template test --namespace test test --set image.tag="$version" --set webhook.enabled=true > rendered.yaml
           kubectl apply --server-side -f rendered.yaml --namespace test
           kubectl wait --namespace test --for=condition=Ready --timeout=60s certificate/test-serving-cert
           kubectl wait --namespace test --for=condition=Available --timeout=60s deployment/test-shopware-operator

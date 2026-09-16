@@ -19,15 +19,20 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	zapz "go.uber.org/zap"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -36,13 +41,16 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
+	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/go-logr/zapr"
+	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	shopv1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/config"
 	"github.com/shopware/shopware-operator/internal/controller"
 	"github.com/shopware/shopware-operator/internal/event"
 	"github.com/shopware/shopware-operator/internal/event/nats"
 	"github.com/shopware/shopware-operator/internal/logging"
+	"github.com/shopware/shopware-operator/internal/metrics"
 	shopwebhook "github.com/shopware/shopware-operator/internal/webhook"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	//+kubebuilder:scaffold:imports
@@ -53,6 +61,12 @@ var (
 	version = "dev"
 	commit  = "none"
 	date    = "unknown"
+
+	serviceMonitorGVK = schema.GroupVersionKind{
+		Group:   "monitoring.coreos.com",
+		Version: "v1",
+		Kind:    "ServiceMonitor",
+	}
 )
 
 func init() {
@@ -64,6 +78,9 @@ func init() {
 	// Ignore errors because gateway-api is not per default installed
 	// nolint:errcheck
 	gatewayv1.Install(scheme)
+	// Ignore errors because keda is not per default installed
+	// nolint:errcheck
+	kedav1alpha1.AddToScheme(scheme)
 }
 
 func main() {
@@ -91,9 +108,32 @@ func main() {
 		os.Exit(3)
 	}
 
+	if cfg.EnableKeda && (cfg.MetricsAddr == "0" || cfg.MetricsAddr == "" || cfg.OperatorServiceURL == "") {
+		setupLog.Error(fmt.Errorf("keda is enabled but metrics are not configured"),
+			"ENABLE_KEDA requires the metrics endpoint: "+
+				"set METRICS_BIND_ADDRESS and OPERATOR_SERVICE_URL (helm: metrics.enabled=true)")
+		os.Exit(3)
+	}
+
+	var queueStats *metrics.QueueStats
+	metricsExtraHandlers := map[string]http.Handler{}
+	if cfg.EnableKeda {
+		metricsExtraHandlers[metrics.QueueHandlerPath] = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if queueStats == nil {
+				http.Error(w, "operator is not ready yet", http.StatusServiceUnavailable)
+				return
+			}
+			queueStats.Handler().ServeHTTP(w, r)
+		})
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                 scheme,
-		Metrics:                metricsserver.Options{BindAddress: cfg.MetricsAddr, SecureServing: false},
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress:   cfg.MetricsAddr,
+			SecureServing: false,
+			ExtraHandlers: metricsExtraHandlers,
+		},
 		HealthProbeBindAddress: cfg.ProbeAddr,
 		Cache: cache.Options{
 			DefaultNamespaces: map[string]cache.Config{
@@ -120,14 +160,44 @@ func main() {
 		os.Exit(1)
 	}
 
+	if cfg.EnableKeda {
+		if err := requireAPI(mgr.GetRESTMapper(), kedav1alpha1.SchemeGroupVersion.WithKind("ScaledObject")); err != nil {
+			setupLog.Error(err, "ENABLE_KEDA requires KEDA to be installed in the cluster (helm: keda.enabled=true)")
+			os.Exit(4)
+		}
+	}
+
+	if cfg.EnableServiceMonitor {
+		if err := requireAPI(mgr.GetRESTMapper(), serviceMonitorGVK); err != nil {
+			setupLog.Error(err,
+				"ENABLE_SERVICE_MONITOR requires the Prometheus Operator CRDs to be installed in the cluster "+
+					"(helm: metrics.serviceMonitor.enabled=true)")
+			os.Exit(6)
+		}
+	}
+
 	if cfg.EnableWebhook {
+		if err := requireAPI(mgr.GetRESTMapper(), cm.SchemeGroupVersion.WithKind("Certificate")); err != nil {
+			setupLog.Error(err,
+				"ENABLE_WEBHOOK requires cert-manager to be installed in the cluster (helm: webhook.enabled=true)")
+			os.Exit(5)
+		}
 		mgr.GetWebhookServer().Register(
 			shopwebhook.StoreValidationPath,
-			&admission.Webhook{Handler: shopwebhook.StoreValidator{Logger: logger}},
+			&admission.Webhook{Handler: shopwebhook.StoreValidator{
+				Logger: logger.With(zapz.String("component", "store-webhook")),
+			}},
 		)
 	}
 
 	nsClient := client.NewNamespacedClient(mgr.GetClient(), cfg.Namespace)
+	queueStats = metrics.NewQueueStats(
+		mgr.GetClient(),
+		kubernetes.NewForConfigOrDie(mgr.GetConfig()),
+		mgr.GetConfig(),
+		10*time.Second,
+		logger.With(zapz.String("component", "queue-stats")),
+	)
 
 	// Event Registration
 	var handlers []event.EventHandler
@@ -157,10 +227,14 @@ func main() {
 	if err = (&controller.StoreReconciler{
 		Logger:               logger.With(zapz.String("component", "store-reconciler")),
 		Client:               nsClient,
+		Clientset:            kubernetes.NewForConfigOrDie(mgr.GetConfig()),
+		RestConfig:           mgr.GetConfig(),
 		EventHandlers:        handlers,
 		Scheme:               mgr.GetScheme(),
 		Recorder:             mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
 		DisableServiceChecks: cfg.DisableChecks,
+		EnableKeda:           cfg.EnableKeda,
+		OperatorMetricsURL:   cfg.OperatorServiceURL,
 	}).SetupWithManager(mgr, logger); err != nil {
 		setupLog.Error(err, "unable to create store controller", "controller", "Store")
 		os.Exit(1)
@@ -231,4 +305,15 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func requireAPI(mapper meta.RESTMapper, gvk schema.GroupVersionKind) error {
+	_, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	if meta.IsNoMatchError(err) {
+		return fmt.Errorf("api %s is not available in the cluster", gvk.GroupVersion().WithKind(gvk.Kind))
+	}
+	if err != nil {
+		return fmt.Errorf("resolve %s REST mapping: %w", gvk.Kind, err)
+	}
+	return nil
 }
