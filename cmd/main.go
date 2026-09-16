@@ -155,7 +155,7 @@ func main() {
 	}()
 
 	if err = (&controller.StoreReconciler{
-		Logger:               logger,
+		Logger:               logger.With(zapz.String("component", "store-reconciler")),
 		Client:               nsClient,
 		EventHandlers:        handlers,
 		Scheme:               mgr.GetScheme(),
@@ -167,7 +167,7 @@ func main() {
 	}
 	if err = (&controller.StoreExecReconciler{
 		Client:             nsClient,
-		Logger:             logger,
+		Logger:             logger.With(zapz.String("component", "store-exec-reconciler")),
 		Scheme:             mgr.GetScheme(),
 		Recorder:           mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
 		CleanupGracePeriod: cfg.SuccessfulCRCleanupGracePeriod,
@@ -181,7 +181,7 @@ func main() {
 			EventHandlers: handlers,
 			Scheme:        mgr.GetScheme(),
 			Recorder:      mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
-			Logger:        logger,
+			Logger:        logger.With(zapz.String("component", "store-snapshot-create-reconciler")),
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create snapshot create controller", "controller", "StoreSnapshot")
@@ -193,7 +193,7 @@ func main() {
 			EventHandlers: handlers,
 			Scheme:        mgr.GetScheme(),
 			Recorder:      mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
-			Logger:        logger,
+			Logger:        logger.With(zapz.String("component", "store-snapshot-restore-reconciler")),
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create snapshot restore controller", "controller", "StoreSnapshot")
@@ -201,7 +201,7 @@ func main() {
 	}
 	if err = (&controller.StoreDebugInstanceReconciler{
 		Client:             nsClient,
-		Logger:             logger,
+		Logger:             logger.With(zapz.String("component", "store-debug-instance-reconciler")),
 		Scheme:             mgr.GetScheme(),
 		Recorder:           mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
 		CleanupGracePeriod: cfg.SuccessfulCRCleanupGracePeriod,
