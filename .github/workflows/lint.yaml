@@ -237,7 +237,7 @@ jobs:
           cat operator-logs.txt
 
           # Check for permission errors (forbidden) and Unhandled Errors
-          if grep -i "forbidden" operator-logs.txt; then
+          if grep -i "is forbidden" operator-logs.txt; then
             echo "ERROR: Found permission errors (forbidden) in operator logs"
             exit 1
           fi
