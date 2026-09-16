@@ -15,7 +15,7 @@ This repository contains the Shopware Operator for Kubernetes. The Operator is a
 
 Below you find a descriptions how to deploy the Operator using `helm` or `kubectl`.
 
-The validating webhook is enabled by default and requires [cert-manager](https://cert-manager.io/) to issue and rotate its certificate. Helm installations can disable it with `--set webhook.enabled=false`; this also removes the cert-manager dependency, but container overrides will no longer receive webhook validation.
+The validating webhook is disabled by default. Enabling it with `--set webhook.enabled=true` requires [cert-manager](https://cert-manager.io/) to issue and rotate its certificate; the operator exits on startup when the webhook is enabled but cert-manager is not installed. Without the webhook, container overrides do not receive schema validation.
 
 For Helm installations, the webhook validates `Store` resources only in the
 operator's release namespace by default. This allows multiple operator versions

@@ -17,10 +17,10 @@ crds:
   # This will install only the crd's
   installOnly: false
 
-# Validates the schemaless Store container override fields. When enabled,
-# cert-manager must be installed in the cluster.
+# Validates the schemaless Store container override fields. Disabled by
+# default. When enabled, cert-manager must be installed in the cluster.
 webhook:
-  enabled: true
+  enabled: false
   # An empty map ({}) uses the operator's release namespace by default.
   # To validate Stores in all namespaces, use:
   # namespaceSelector:
