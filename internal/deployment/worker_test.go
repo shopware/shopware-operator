@@ -317,6 +317,8 @@ func TestWorkerDeployment(t *testing.T) {
 		assert.NotContains(t, container.Args[0], "--memory-limit")
 		assert.Contains(t, container.Args[0], `trap term TERM INT`)
 		assert.Contains(t, container.Args[0], `kill -TERM "$child"`)
+		assert.Contains(t, container.Args[0], `consumer="${MESSENGER_CONSUMER_NAME:-$(hostname)}"`)
+		assert.Contains(t, container.Args[0], `&consumer=${consumer}`)
 		assert.Equal(t, "shopware-worker", container.Name)
 	})
 
