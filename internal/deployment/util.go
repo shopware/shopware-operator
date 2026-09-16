@@ -47,6 +47,16 @@ func getDeploymentCondition(
 	}
 
 	if deployment.Status.AvailableReplicas != deployment.Status.Replicas {
+		if deployment.Status.AvailableReplicas > 0 || storeReplicas == 0 {
+			return v1.DeploymentCondition{
+				State:          v1.DeploymentStateRunning,
+				LastUpdateTime: metav1.Now(),
+				Message:        "Deployment is running, but is scaling",
+				Ready:          fmt.Sprintf("%d/%d", deployment.Status.AvailableReplicas, storeReplicas),
+				StoreReplicas:  storeReplicas,
+			}
+		}
+
 		return v1.DeploymentCondition{
 			State:          v1.DeploymentStateScaling,
 			LastUpdateTime: metav1.Now(),
