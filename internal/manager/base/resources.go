@@ -18,6 +18,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 func (b *Base) EnsureAppSecrets(ctx context.Context, store *v1.Store) error {
@@ -183,16 +185,28 @@ func (b *Base) ReconcileDeployment(ctx context.Context, store *v1.Store) (err er
 	return nil
 }
 
-func (b *Base) ReconcileWorkerScaledObjects(ctx context.Context, store *v1.Store) (err error) {
+func (b *Base) ReconcileScaledObjects(ctx context.Context, store *v1.Store) (err error) {
+	if !b.EnableKeda || !store.Spec.Worker.EnableKedaScaling {
+		return deployment.CleanupObsoleteWorkerScaledObjects(ctx, b.Client, *store)
+	}
+
 	objs, err := deployment.WorkerScaledObjects(*store, b.OperatorMetricsURL)
 	if err != nil {
 		return err
 	}
 
-	desired := make(map[string]struct{})
 	var changed bool
 	for _, obj := range objs {
-		desired[obj.Name] = struct{}{}
+		target := &appsv1.Deployment{}
+		if err := b.Get(ctx, types.NamespacedName{
+			Namespace: obj.Namespace,
+			Name:      obj.Spec.ScaleTargetRef.Name,
+		}, target); err != nil {
+			if k8serrors.IsNotFound(err) {
+				continue
+			}
+			return fmt.Errorf("get scale target %s: %w", obj.Spec.ScaleTargetRef.Name, err)
+		}
 
 		if changed, err = k8s.HasObjectChanged(ctx, b.Client, obj); err != nil {
 			return fmt.Errorf("reconcile worker scaledobject: %w", err)
@@ -204,13 +218,13 @@ func (b *Base) ReconcileWorkerScaledObjects(ctx context.Context, store *v1.Store
 				store.Name,
 				store.Namespace,
 				obj.Name)
-			if err := k8s.EnsureObjectWithHash(ctx, b.Client, store, obj, b.Scheme); err != nil {
-				return fmt.Errorf("reconcile worker scaledobject: %w", err)
-			}
+		}
+
+		if err := k8s.EnsureObjectWithHash(ctx, b.Client, target, obj, b.Scheme); err != nil {
+			return fmt.Errorf("reconcile worker scaledobject: %w", err)
 		}
 	}
-
-	return deployment.CleanupObsoleteWorkerScaledObjects(ctx, b.Client, *store, desired)
+	return nil
 }
 
 func (b *Base) ReconcileHorizontalPodAutoscaler(ctx context.Context, store *v1.Store) (err error) {

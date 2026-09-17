@@ -81,7 +81,6 @@ func CleanupObsoleteWorkerScaledObjects(
 	ctx context.Context,
 	c client.Client,
 	store v1.Store,
-	desiredNames map[string]struct{},
 ) error {
 	list := &kedav1alpha1.ScaledObjectList{}
 	if err := c.List(ctx, list,
@@ -93,9 +92,6 @@ func CleanupObsoleteWorkerScaledObjects(
 
 	for i := range list.Items {
 		so := &list.Items[i]
-		if _, ok := desiredNames[so.Name]; ok {
-			continue
-		}
 		if err := c.Delete(ctx, so); err != nil && !k8serrors.IsNotFound(err) {
 			return fmt.Errorf("delete obsolete worker scaledobject %s: %w", so.Name, err)
 		}

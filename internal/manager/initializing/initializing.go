@@ -50,11 +50,9 @@ func (m *Manager) ResourceHandler(ctx context.Context, store *v1.Store) error {
 		return fmt.Errorf("deployment: %w", err)
 	}
 
-	if m.EnableKeda {
-		log.Debug("reconcile keda scaled objects")
-		if err := m.ReconcileWorkerScaledObjects(ctx, store); err != nil {
-			return fmt.Errorf("deployment: %w", err)
-		}
+	log.Debug("reconcile keda scaled objects")
+	if err := m.ReconcileScaledObjects(ctx, store); err != nil {
+		return fmt.Errorf("scaledobject: %w", err)
 	}
 
 	return nil

@@ -518,6 +518,7 @@ func TestReconcileResourcesCreatesScaledObjectsWhenKedaEnabled(t *testing.T) {
 		{Name: "async", Count: 5},
 		{Name: "low_priority", Count: 0},
 	}
+	store.Spec.Worker.EnableKedaScaling = true
 
 	scheme := testScheme(t)
 	c := fake.NewClientBuilder().
