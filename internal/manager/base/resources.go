@@ -180,18 +180,10 @@ func (b *Base) ReconcileDeployment(ctx context.Context, store *v1.Store) (err er
 		}
 	}
 
-	if err := b.reconcileWorkerScaledObjects(ctx, store); err != nil {
-		return fmt.Errorf("worker scaledobjects: %w", err)
-	}
-
 	return nil
 }
 
-func (b *Base) reconcileWorkerScaledObjects(ctx context.Context, store *v1.Store) (err error) {
-	if !b.EnableKeda {
-		return nil
-	}
-
+func (b *Base) ReconcileWorkerScaledObjects(ctx context.Context, store *v1.Store) (err error) {
 	objs, err := deployment.WorkerScaledObjects(*store, b.OperatorMetricsURL)
 	if err != nil {
 		return err

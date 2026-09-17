@@ -44,9 +44,18 @@ func (m *Manager) StateHandler(ctx context.Context, store *v1.Store) v1.Stateful
 }
 
 func (m *Manager) ResourceHandler(ctx context.Context, store *v1.Store) error {
-	logging.FromContext(ctx).Info("reconcile deployment for initializing state")
+	log := logging.FromContext(ctx)
+	log.Debug("reconcile deployment for initializing state")
 	if err := m.ReconcileDeployment(ctx, store); err != nil {
 		return fmt.Errorf("deployment: %w", err)
 	}
+
+	if m.EnableKeda {
+		log.Debug("reconcile keda scaled objects")
+		if err := m.ReconcileWorkerScaledObjects(ctx, store); err != nil {
+			return fmt.Errorf("deployment: %w", err)
+		}
+	}
+
 	return nil
 }
