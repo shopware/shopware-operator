@@ -29,7 +29,7 @@ func WorkerScaledObjects(store v1.Store, metricsURL string) ([]*kedav1alpha1.Sca
 func WorkerScaledObject(store v1.Store, queue string, metricsURL string) *kedav1alpha1.ScaledObject {
 	worker := store.Spec.Worker
 
-	labels := util.GetDefaultStoreLabels(store)
+	labels := util.GetStoreLabel(store)
 	labels[util.ShopwareKey("store.app")] = "shopware-worker"
 	labels[util.ShopwareKey("worker.queue")] = truncateWithHash(queue)
 
@@ -86,7 +86,7 @@ func CleanupObsoleteWorkerScaledObjects(
 	list := &kedav1alpha1.ScaledObjectList{}
 	if err := c.List(ctx, list,
 		client.InNamespace(store.Namespace),
-		client.MatchingLabels(util.GetWorkerDeploymentMatchLabel()),
+		client.MatchingLabels(util.GetWorkerDeploymentMatchLabel(store)),
 	); err != nil {
 		return fmt.Errorf("list worker scaledobjects: %w", err)
 	}

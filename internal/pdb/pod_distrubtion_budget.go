@@ -15,7 +15,7 @@ func StorefrontPDB(store v1.Store) *policy.PodDisruptionBudget {
 
 	spec := policy.PodDisruptionBudgetSpec{
 		Selector: &metav1.LabelSelector{
-			MatchLabels: util.GetStorefrontDeploymentMatchLabel(),
+			MatchLabels: util.GetStorefrontDeploymentMatchLabel(store),
 		},
 		MaxUnavailable: &intstr.IntOrString{
 			IntVal: 1,
@@ -28,7 +28,7 @@ func StorefrontPDB(store v1.Store) *policy.PodDisruptionBudget {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      GetStorefrontPDBName(store),
 			Namespace: store.GetNamespace(),
-			Labels:    util.GetDefaultStoreLabels(store),
+			Labels:    util.GetStoreLabel(store),
 		},
 		Spec: spec,
 	}
@@ -39,7 +39,7 @@ func WorkerPDB(store v1.Store) *policy.PodDisruptionBudget {
 
 	spec := policy.PodDisruptionBudgetSpec{
 		Selector: &metav1.LabelSelector{
-			MatchLabels: util.GetWorkerDeploymentMatchLabel(),
+			MatchLabels: util.GetWorkerDeploymentMatchLabel(store),
 		},
 		MaxUnavailable: &intstr.IntOrString{
 			IntVal: 1,
@@ -52,7 +52,7 @@ func WorkerPDB(store v1.Store) *policy.PodDisruptionBudget {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      GetWorkerPDBName(store),
 			Namespace: store.GetNamespace(),
-			Labels:    util.GetDefaultStoreLabels(store),
+			Labels:    util.GetStoreLabel(store),
 		},
 		Spec: spec,
 	}
@@ -63,7 +63,7 @@ func AdminPDB(store v1.Store) *policy.PodDisruptionBudget {
 
 	spec := policy.PodDisruptionBudgetSpec{
 		Selector: &metav1.LabelSelector{
-			MatchLabels: util.GetAdminDeploymentMatchLabel(),
+			MatchLabels: util.GetAdminDeploymentMatchLabel(store),
 		},
 		MaxUnavailable: &intstr.IntOrString{
 			IntVal: 1,
@@ -76,7 +76,7 @@ func AdminPDB(store v1.Store) *policy.PodDisruptionBudget {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      GetAdminPDBName(store),
 			Namespace: store.GetNamespace(),
-			Labels:    util.GetDefaultStoreLabels(store),
+			Labels:    util.GetStoreLabel(store),
 		},
 		Spec: spec,
 	}

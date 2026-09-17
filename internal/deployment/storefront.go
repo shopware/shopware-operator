@@ -16,8 +16,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const DEPLOYMENT_STOREFRONT_CONTAINER_NAME = "shopware-storefront"
-const FPM_ADMIN_PORT int32 = 8001
+const (
+	DEPLOYMENT_STOREFRONT_CONTAINER_NAME       = "shopware-storefront"
+	FPM_ADMIN_PORT                       int32 = 8001
+)
 
 func GetStorefrontDeployment(
 	ctx context.Context,
@@ -78,7 +80,7 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 
 	appName := "shopware-storefront"
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.StorefrontDeploymentContainer.Labels)
-	maps.Copy(labels, util.GetStorefrontDeploymentMatchLabel())
+	maps.Copy(labels, util.GetStorefrontDeploymentMatchLabel(store))
 
 	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.StorefrontDeploymentContainer.Annotations)
 
@@ -166,7 +168,7 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 			ProgressDeadlineSeconds: &containerSpec.ProgressDeadlineSeconds,
 			Replicas:                &containerSpec.Replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: util.GetStorefrontDeploymentMatchLabel(),
+				MatchLabels: util.GetStorefrontDeploymentMatchLabel(store),
 			},
 			Strategy: appsv1.DeploymentStrategy{
 				RollingUpdate: &appsv1.RollingUpdateDeployment{
