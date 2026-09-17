@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -33,6 +34,11 @@ type queueCacheEntry struct {
 	transports []v1.QueueTransportStats
 }
 
+type queueCacheSlot struct {
+	fetchMu sync.Mutex
+	entry   atomic.Pointer[queueCacheEntry]
+}
+
 // QueueStats serves live queue lengths for the KEDA metrics-api scaler. The
 // counts are fetched from the admin pod on demand and cached for a short TTL,
 // so freshness is driven by the scaler polling instead of the reconcile
@@ -44,8 +50,7 @@ type QueueStats struct {
 	TTL        time.Duration
 	Logger     *zap.SugaredLogger
 
-	mu    sync.Mutex
-	cache map[types.NamespacedName]queueCacheEntry
+	cache sync.Map
 }
 
 func NewQueueStats(
@@ -61,7 +66,6 @@ func NewQueueStats(
 		RestConfig: restConfig,
 		TTL:        ttl,
 		Logger:     logger,
-		cache:      make(map[types.NamespacedName]queueCacheEntry),
 	}
 }
 
@@ -115,11 +119,17 @@ func (q *QueueStats) transports(ctx context.Context, store *v1.Store) []v1.Queue
 	}
 
 	nn := types.NamespacedName{Namespace: store.Namespace, Name: store.Name}
+	value, _ := q.cache.LoadOrStore(nn, &queueCacheSlot{})
+	slot := value.(*queueCacheSlot)
 
-	q.mu.Lock()
-	defer q.mu.Unlock()
+	if entry := slot.entry.Load(); entry != nil && time.Since(entry.fetchedAt) < q.TTL {
+		return entry.transports
+	}
 
-	if entry, ok := q.cache[nn]; ok && time.Since(entry.fetchedAt) < q.TTL {
+	slot.fetchMu.Lock()
+	defer slot.fetchMu.Unlock()
+
+	if entry := slot.entry.Load(); entry != nil && time.Since(entry.fetchedAt) < q.TTL {
 		return entry.transports
 	}
 
@@ -133,10 +143,10 @@ func (q *QueueStats) transports(ctx context.Context, store *v1.Store) []v1.Queue
 		return store.Status.QueueState.Transports
 	}
 
-	q.cache[nn] = queueCacheEntry{
+	slot.entry.Store(&queueCacheEntry{
 		fetchedAt:  time.Now(),
 		transports: stats,
-	}
+	})
 	UpdateQueueMetrics(store.Namespace, store.Name, stats)
 	return stats
 }
