@@ -173,8 +173,11 @@ func (b *Base) ReconcileDeployment(ctx context.Context, store *v1.Store) (err er
 		}
 	}
 
-	if err := deployment.CleanupObsoleteWorkerDeployments(ctx, b.Client, *store, b.EnableKeda); err != nil {
-		return fmt.Errorf("cleanup worker deployments: %w", err)
+	// Cleanup queue only if it has no errors
+	if store.Status.QueueState.Error == "" {
+		if err := deployment.CleanupObsoleteWorkerDeployments(ctx, b.Client, *store, b.EnableKeda); err != nil {
+			return fmt.Errorf("cleanup worker deployments: %w", err)
+		}
 	}
 
 	if err := b.reconcileWorkerScaledObjects(ctx, store); err != nil {
