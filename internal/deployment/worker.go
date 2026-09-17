@@ -343,6 +343,9 @@ func GetQueueWorkerDeploymentName(store v1.Store, queue string) string {
 		return GetWorkerDeploymentName(store)
 	}
 	sanitized := strings.ReplaceAll(strings.ToLower(queue), "_", "-")
+	if sanitized != queue {
+		sanitized += "-" + fmt.Sprintf("%x", sha256.Sum256([]byte(queue)))[:8]
+	}
 	name := fmt.Sprintf("%s-%s", GetWorkerDeploymentName(store), sanitized)
 	return truncateWithHash(name)
 }

@@ -431,6 +431,7 @@ func TestReconcileResourcesReadyWithImageChangeCreatesMigrationJob(t *testing.T)
 
 func TestReconcileResourcesCreatesWorkerPerQueue(t *testing.T) {
 	store := testStore()
+	store.Spec.Worker.EnableKedaScaling = true
 	store.Status.State = v1.StateReady
 	store.Status.CurrentImageTag = store.Spec.Container.Image
 	store.Status.QueueState.Transports = []v1.QueueTransportStats{
@@ -467,13 +468,13 @@ func TestReconcileResourcesCreatesWorkerPerQueue(t *testing.T) {
 	assert.ElementsMatch(t, []string{
 		"test-store-store-worker-async",
 		"test-store-store-worker-failed",
-		"test-store-store-worker-low-priority",
+		"test-store-store-worker-low-priority-e718f68a",
 	}, names, "one worker per transport, stale worker cleaned up")
 
 	queueByName := map[string]string{
-		"test-store-store-worker-async":        "async",
-		"test-store-store-worker-failed":       "failed",
-		"test-store-store-worker-low-priority": "low_priority",
+		"test-store-store-worker-async":                 "async",
+		"test-store-store-worker-failed":                "failed",
+		"test-store-store-worker-low-priority-e718f68a": "low_priority",
 	}
 	for _, d := range workers.Items {
 		assert.Contains(t, d.Spec.Template.Spec.Containers[0].Args[0],
