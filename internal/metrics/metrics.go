@@ -291,4 +291,5 @@ func RemoveStoreMetrics(store *v1.Store) {
 	storeScheduledTaskSuspended.DeletePartialMatch(match)
 	storeScheduledTaskLastRunStatus.DeletePartialMatch(match)
 	storeScheduledTaskLastSuccessTime.DeletePartialMatch(match)
+	storeQueueCount.DeletePartialMatch(match)
 }
