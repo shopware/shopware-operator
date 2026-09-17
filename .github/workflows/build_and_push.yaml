@@ -11,6 +11,7 @@ on:
 permissions:
   contents: write
   packages: write
+  pull-requests: write
 
 concurrency:
   group: build-and-push-${{ github.ref }}
@@ -81,10 +82,36 @@ jobs:
         id: get_tag
         run: echo "tag=${{ fromJSON(steps.goreleaser.outputs.metadata).version }}" >> "$GITHUB_OUTPUT"
 
-  preview-helm-chart:
+  chart-changes:
     if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Compare the chart sources against main
+        id: check
+        run: |
+          set -euo pipefail
+
+          # The chart is generated, so everything kustomize and controller-gen
+          # read has to count as a chart change, not just helm/.
+          base=$(git merge-base origin/main HEAD)
+          if git diff --quiet "$base" HEAD -- \
+            helm config api Makefile .github/workflows/build_and_push.yaml; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  preview-helm-chart:
+    if: github.ref != 'refs/heads/main' && needs.chart-changes.outputs.changed == 'true'
     runs-on: runs-on=${{ github.run_id }}/runner=sw-amd64/cpu=8
-    needs: goreleaser
+    needs: [goreleaser, chart-changes]
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -141,3 +168,49 @@ jobs:
             echo "  --version ${CHART_VERSION}"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment the preview version on the pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHART_VERSION: ${{ steps.chart.outputs.version }}
+          IMAGE_TAG: ${{ needs.goreleaser.outputs.tag }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          pr=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -z "$pr" ]; then
+            echo "No open pull request for ${BRANCH}, skipping the comment"
+            exit 0
+          fi
+
+          marker='<!-- preview-helm-chart -->'
+          body=$(cat <<EOF
+          ${marker}
+          ### Preview helm chart
+
+          \`\`\`sh
+          helm upgrade --install shopware-operator \\
+            ${PREVIEW_CHART_REGISTRY}/operator \\
+            --version ${CHART_VERSION}
+          \`\`\`
+
+          | | |
+          | --- | --- |
+          | Chart version | \`${CHART_VERSION}\` |
+          | Image tag | \`${IMAGE_TAG}\` |
+          | Commit | \`${GITHUB_SHA::7}\` |
+          EOF
+          )
+
+          # Keep one comment per pull request instead of one per push.
+          id=$(gh api --paginate "/repos/${GITHUB_REPOSITORY}/issues/${pr}/comments" \
+            --jq "map(select(.body | startswith(\"${marker}\"))) | .[0].id // empty")
+
+          if [ -n "$id" ]; then
+            gh api -X PATCH "/repos/${GITHUB_REPOSITORY}/issues/comments/${id}" -f body="$body" >/dev/null
+            echo "Updated comment ${id} on pull request ${pr}"
+          else
+            gh api -X POST "/repos/${GITHUB_REPOSITORY}/issues/${pr}/comments" -f body="$body" >/dev/null
+            echo "Created comment on pull request ${pr}"
+          fi
