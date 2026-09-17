@@ -116,12 +116,12 @@ func (q *QueueStats) transports(ctx context.Context, store *v1.Store) []v1.Queue
 
 	nn := types.NamespacedName{Namespace: store.Namespace, Name: store.Name}
 
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
 	if entry, ok := q.cache[nn]; ok && time.Since(entry.fetchedAt) < q.TTL {
 		return entry.transports
 	}
-
-	q.mu.Lock()
-	defer q.mu.Unlock()
 
 	stats, _, err := deployment.GetAdminQueueStats(ctx, q.Client, q.Clientset, q.RestConfig, *store)
 	if err != nil {
