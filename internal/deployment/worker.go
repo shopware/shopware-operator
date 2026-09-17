@@ -35,7 +35,7 @@ func WorkerQueues(store v1.Store) []string {
 
 // WorkerDeployments returns one deployment per known queue when perQueue is
 // set (keda scaling), otherwise a single deployment consuming all queues.
-func WorkerDeployments(store v1.Store, perQueue bool) ([]*appsv1.Deployment, error) {
+func WorkerDeployments(store v1.Store) ([]*appsv1.Deployment, error) {
 	queues := WorkerQueues(store)
 	for _, queue := range queues {
 		if queue == "" {
@@ -47,7 +47,7 @@ func WorkerDeployments(store v1.Store, perQueue bool) ([]*appsv1.Deployment, err
 		return []*appsv1.Deployment{}, nil
 	}
 
-	if !perQueue {
+	if !store.Spec.Worker.EnableKedaScaling {
 		return []*appsv1.Deployment{WorkerDeployment(store, queues)}, nil
 	}
 
@@ -64,7 +64,7 @@ func CleanupObsoleteWorkerDeployments(
 	store v1.Store,
 	perQueue bool,
 ) error {
-	workers, err := WorkerDeployments(store, perQueue)
+	workers, err := WorkerDeployments(store)
 	if err != nil {
 		return err
 	}
@@ -114,7 +114,7 @@ func GetWorkerDeploymentCondition(
 		Message:        "All worker deployments are running",
 	}
 
-	workers, err := WorkerDeployments(store, perQueue)
+	workers, err := WorkerDeployments(store)
 	if err != nil {
 		return v1.DeploymentCondition{
 			State:          v1.DeploymentStateError,

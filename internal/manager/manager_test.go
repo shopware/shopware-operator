@@ -96,7 +96,7 @@ func newTestManager(t *testing.T, objs ...client.Object) (*manager.StoreStateMan
 }
 
 func runningDeployments(store *v1.Store) []client.Object {
-	workers, _ := deployment.WorkerDeployments(*store, false)
+	workers, _ := deployment.WorkerDeployments(*store)
 	all := make([]*appsv1.Deployment, 0, 2+len(workers))
 	all = append(all, deployment.StorefrontDeployment(*store), deployment.AdminDeployment(*store))
 	all = append(all, workers...)
@@ -478,7 +478,7 @@ func TestReconcileResourcesCreatesWorkerPerQueue(t *testing.T) {
 	}
 	for _, d := range workers.Items {
 		assert.Contains(t, d.Spec.Template.Spec.Containers[0].Args[0],
-			"messenger:consume "+queueByName[d.Name]+" --time-limit=300")
+			"messenger:consume "+queueByName[d.Name]+" --time-limit=300 -vv")
 	}
 }
 

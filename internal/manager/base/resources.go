@@ -147,7 +147,7 @@ func (b *Base) ReconcilePDB(ctx context.Context, store *v1.Store) (err error) {
 func (b *Base) ReconcileDeployment(ctx context.Context, store *v1.Store) (err error) {
 	var changed bool
 
-	workers, err := deployment.WorkerDeployments(*store, b.EnableKeda)
+	workers, err := deployment.WorkerDeployments(*store)
 	if err != nil {
 		return fmt.Errorf("worker deployments: %w", err)
 	}

@@ -85,7 +85,7 @@ func TestGetQueueWorkerDeploymentName(t *testing.T) {
 	store := v1.Store{ObjectMeta: metav1.ObjectMeta{Name: "test-store"}}
 
 	t.Run("short queue keeps full name", func(t *testing.T) {
-		assert.Equal(t, "test-store-store-worker-low-priority",
+		assert.Equal(t, "test-store-store-worker-low-priority-e718f68a",
 			deployment.GetQueueWorkerDeploymentName(store, "low_priority"))
 	})
 
@@ -350,13 +350,13 @@ func TestWorkerDeployment(t *testing.T) {
 func TestWorkerDeploymentQueueLabels(t *testing.T) {
 	store := v1.Store{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-store", Namespace: "test"},
-		Spec:       v1.StoreSpec{SecretName: "store-secret"},
+		Spec:       v1.StoreSpec{SecretName: "store-secret", Worker: v1.WorkerSpec{EnableKedaScaling: true}},
 	}
 
 	t.Run("single queue", func(t *testing.T) {
 		result := deployment.WorkerDeployment(store, []string{"low_priority"})
 
-		assert.Equal(t, "test-store-store-worker-low-priority", result.Name)
+		assert.Equal(t, "test-store-store-worker-low-priority-e718f68a", result.Name)
 		assert.Equal(t, "low_priority", result.Spec.Selector.MatchLabels[util.ShopwareKey("worker.queue")])
 		assert.Equal(t, "low_priority", result.Spec.Template.Labels[util.ShopwareKey("worker.queues")])
 	})
