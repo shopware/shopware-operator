@@ -229,13 +229,7 @@ func WorkerDeployment(store v1.Store, consumeQueues []string) *appsv1.Deployment
 		consume += fmt.Sprintf(" --memory-limit=%dM", phpMemoryLimitMiB)
 	}
 	workerScript := fmt.Sprintf(
-		`consumer="${MESSENGER_CONSUMER_NAME:-$(hostname)}"
-case "$MESSENGER_TRANSPORT_DSN" in
-  redis*consumer=*) ;;
-  redis*\?*) export MESSENGER_TRANSPORT_DSN="${MESSENGER_TRANSPORT_DSN}&consumer=${consumer}" ;;
-  redis*) export MESSENGER_TRANSPORT_DSN="${MESSENGER_TRANSPORT_DSN}?consumer=${consumer}" ;;
-esac
-term() {
+		`term() {
   trap - TERM INT
   kill -TERM "$child" 2>/dev/null
   wait "$child"
