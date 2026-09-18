@@ -17,10 +17,10 @@ crds:
   # This will install only the crd's
   installOnly: false
 
-# Validates the schemaless Store container override fields. When enabled,
-# cert-manager must be installed in the cluster.
+# Validates the schemaless Store container override fields. Disabled by
+# default. When enabled, cert-manager must be installed in the cluster.
 webhook:
-  enabled: true
+  enabled: false
   # An empty map ({}) uses the operator's release namespace by default.
   # To validate Stores in all namespaces, use:
   # namespaceSelector:
@@ -108,6 +108,13 @@ disableChecks: false
 # Grace period before successful StoreExec and StoreDebugInstance CRs are deleted. Set to "0" to disable cleanup.
 successfulCRCleanupGracePeriod: 1h
 
+# keda: when enabled, the operator creates a KEDA ScaledObject for every store
+# queue worker deployment. The ScaledObject scales the workers based on the
+# queue length served by the operator queue metrics endpoint, so this requires
+# KEDA to be installed in the cluster and metrics.enabled to be true.
+keda:
+  enabled: false
+
 metrics:
   # When enabled, a Service named 'shopware-operator' is created, the metrics
   # endpoint is exposed, and SHOPWARE_OPERATOR_URL is injected into every store
@@ -120,7 +127,8 @@ metrics:
   #   http://shopware-operator.<namespace>.svc.cluster.local:<port>
   shopwareOperatorUrl: ""
   # serviceMonitor: configure a Prometheus Operator ServiceMonitor to scrape
-  # the operator metrics. Requires the Prometheus Operator CRDs to be installed.
+  # the operator metrics. Requires the Prometheus Operator CRDs to be installed,
+  # the operator exits on startup when they are missing.
   serviceMonitor:
     enabled: false
     # Interval at which Prometheus scrapes the metrics endpoint.

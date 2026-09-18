@@ -28,7 +28,7 @@ func StorefrontPDB(store v1.Store) *policy.PodDisruptionBudget {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      GetStorefrontPDBName(store),
 			Namespace: store.GetNamespace(),
-			Labels:    util.GetDefaultStoreLabels(store),
+			Labels:    util.GetStoreLabel(store),
 		},
 		Spec: spec,
 	}
@@ -52,7 +52,7 @@ func WorkerPDB(store v1.Store) *policy.PodDisruptionBudget {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      GetWorkerPDBName(store),
 			Namespace: store.GetNamespace(),
-			Labels:    util.GetDefaultStoreLabels(store),
+			Labels:    util.GetStoreLabel(store),
 		},
 		Spec: spec,
 	}
@@ -76,7 +76,7 @@ func AdminPDB(store v1.Store) *policy.PodDisruptionBudget {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      GetAdminPDBName(store),
 			Namespace: store.GetNamespace(),
-			Labels:    util.GetDefaultStoreLabels(store),
+			Labels:    util.GetStoreLabel(store),
 		},
 		Spec: spec,
 	}

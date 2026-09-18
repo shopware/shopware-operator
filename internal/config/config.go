@@ -72,7 +72,9 @@ type StoreConfig struct {
 	OperatorServiceURL string `env:"OPERATOR_SERVICE_URL"`
 
 	EnableLeaderElection bool   `env:"LEADER_ELECT, default=true"`
-	EnableWebhook        bool   `env:"ENABLE_WEBHOOK, default=true"`
+	EnableWebhook        bool   `env:"ENABLE_WEBHOOK, default=false"`
+	EnableKeda           bool   `env:"ENABLE_KEDA, default=false"`
+	EnableServiceMonitor bool   `env:"ENABLE_SERVICE_MONITOR, default=false"`
 	DisableChecks        bool   `env:"DISABLE_CHECKS, default=false"`
 	Namespace            string `env:"NAMESPACE, default=default"`
 

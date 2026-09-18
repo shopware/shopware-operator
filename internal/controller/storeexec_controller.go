@@ -35,9 +35,10 @@ type StoreExecReconciler struct {
 // +kubebuilder:rbac:groups="batch",namespace=default,resources=jobs,verbs=get;list;watch;create;delete
 
 func (r *StoreExecReconciler) Reconcile(ctx context.Context, req ctrl.Request) (rr ctrl.Result, err error) {
-	log := logging.FromContext(ctx).
+	log := r.Logger.
 		With(zap.String("namespace", req.Namespace)).
 		With(zap.String("name", req.Name))
+	ctx = logging.WithLogger(ctx, log)
 
 	rr = ctrl.Result{RequeueAfter: 10 * time.Second}
 
@@ -105,7 +106,7 @@ func (r *StoreExecReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	} else {
 		if ex.IsState(v1.ExecStateDone, v1.ExecStateError) {
-			return ctrl.Result{Requeue: false}, nil
+			return ctrl.Result{}, nil
 		}
 		if err := r.reconcileJob(ctx, store, ex); err != nil {
 			log.Errorw("exec error", zap.Error(err))
@@ -166,7 +167,7 @@ func (r *StoreExecReconciler) reconcileSuccessfulStoreExecCleanup(
 		return ctrl.Result{}, false, fmt.Errorf("delete successful StoreExec: %w", err)
 	}
 
-	return ctrl.Result{Requeue: false}, true, nil
+	return ctrl.Result{}, true, nil
 }
 
 func storeExecFinishedAt(ex *v1.StoreExec) time.Time {

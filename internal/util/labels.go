@@ -14,14 +14,14 @@ func ShopwareKey(key string) string {
 	return shopwareLabelPrefix + key
 }
 
-func GetDefaultStoreLabels(store v1.Store) map[string]string {
+func GetStoreLabel(store v1.Store) map[string]string {
 	return map[string]string{
 		ShopwareKey("store.name"): store.Name,
 	}
 }
 
 func overrideStoreLabels(store v1.Store, extra map[string]string) map[string]string {
-	labels := GetDefaultStoreLabels(store)
+	labels := GetStoreLabel(store)
 	if store.Spec.Container.Labels != nil {
 		maps.Copy(labels, store.Spec.Container.Labels)
 	}
@@ -69,14 +69,32 @@ func GetAdminDeploymentMatchLabel() map[string]string {
 	return labels
 }
 
+func GetAdminDeploymentStoreLabels(store v1.Store) map[string]string {
+	labels := GetStoreLabel(store)
+	maps.Copy(labels, GetAdminDeploymentMatchLabel())
+	return labels
+}
+
 func GetStorefrontDeploymentMatchLabel() map[string]string {
 	labels := make(map[string]string)
 	labels[ShopwareKey("store.app")] = "shopware-storefront"
 	return labels
 }
 
+func GetStorefrontDeploymentStoreLabels(store v1.Store) map[string]string {
+	labels := GetStoreLabel(store)
+	maps.Copy(labels, GetStorefrontDeploymentMatchLabel())
+	return labels
+}
+
 func GetWorkerDeploymentMatchLabel() map[string]string {
 	labels := make(map[string]string)
 	labels[ShopwareKey("store.app")] = "shopware-worker"
+	return labels
+}
+
+func GetWorkerDeploymentStoreLabels(store v1.Store) map[string]string {
+	labels := GetStoreLabel(store)
+	maps.Copy(labels, GetWorkerDeploymentMatchLabel())
 	return labels
 }

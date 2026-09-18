@@ -39,7 +39,7 @@ func DebugService(store v1.Store, debugInstance v1.StoreDebugInstance) *corev1.S
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      debugInstance.Name,
 			Namespace: store.Namespace,
-			Labels:    util.GetDefaultStoreLabels(store),
+			Labels:    util.GetStoreLabel(store),
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: selector,

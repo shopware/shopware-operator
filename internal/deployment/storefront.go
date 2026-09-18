@@ -16,8 +16,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const DEPLOYMENT_STOREFRONT_CONTAINER_NAME = "shopware-storefront"
-const FPM_ADMIN_PORT int32 = 8001
+const (
+	DEPLOYMENT_STOREFRONT_CONTAINER_NAME       = "shopware-storefront"
+	FPM_ADMIN_PORT                       int32 = 8001
+)
 
 func GetStorefrontDeployment(
 	ctx context.Context,

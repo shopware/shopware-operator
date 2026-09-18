@@ -54,9 +54,10 @@ type StoreDebugInstanceReconciler struct {
 // +kubebuilder:rbac:groups="",namespace=default,resources=services,verbs=get;list;watch;create;delete;
 
 func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (rr ctrl.Result, err error) {
-	log := logging.FromContext(ctx).
+	log := r.Logger.
 		With(zap.String("namespace", req.Namespace)).
 		With(zap.String("name", req.Name))
+	ctx = logging.WithLogger(ctx, log)
 
 	var store *shopv1.Store
 	var storeDebugInstance *shopv1.StoreDebugInstance
@@ -130,8 +131,7 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return result, nil
 		}
 
-		rr.Requeue = false
-		return rr, nil
+		return ctrl.Result{}, nil
 	}
 
 	// Only check store readiness if not explicitly ignored
@@ -154,7 +154,7 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	if storeDebugInstance.IsState(shopv1.StoreDebugInstanceStateDone, shopv1.StoreDebugInstanceStateError) {
-		return ctrl.Result{Requeue: false}, nil
+		return ctrl.Result{}, nil
 	}
 
 	if err := r.reconcilePod(ctx, store, storeDebugInstance); err != nil {
@@ -259,7 +259,7 @@ func (r *StoreDebugInstanceReconciler) deleteSuccessfulStoreDebugInstance(
 		return ctrl.Result{}, false, fmt.Errorf("delete successful StoreDebugInstance: %w", err)
 	}
 
-	return ctrl.Result{Requeue: false}, true, nil
+	return ctrl.Result{}, true, nil
 }
 
 func (r *StoreDebugInstanceReconciler) reconcileService(ctx context.Context, store *shopv1.Store, storeDebugInstance *shopv1.StoreDebugInstance) error {
