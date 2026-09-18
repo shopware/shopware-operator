@@ -222,8 +222,10 @@ func GenerateStoreSecret(ctx context.Context, store *v1.Store, secret *corev1.Se
 
 	secret.Data["database-url"] = util.GenerateDatabaseURLForShopware(dbSpec)
 
-	if len(opensearchPassword) > 0 {
+	if store.Spec.OpensearchSpec.Enabled {
 		secret.Data["opensearch-url"] = util.GenerateOpensearchURLForShopware(&store.Spec.OpensearchSpec, opensearchPassword)
+	} else {
+		delete(secret.Data, "opensearch-url")
 	}
 
 	if len(fastlyServiceID) > 0 && len(fastlyToken) > 0 {
