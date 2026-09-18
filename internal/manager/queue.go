@@ -36,7 +36,7 @@ func (m *StoreStateManager) UpdateQueueState(ctx context.Context, store *v1.Stor
 				zap.String("stderr", statsErr.Stderr),
 			)
 		}
-		log.Errorw("failed to get queue stats from admin pod, no worker deployments will be created", zap.Error(err))
+		log.Errorw("failed to get queue stats from admin pod", zap.Error(err))
 		queueState := store.Status.QueueState
 		queueState.LastUpdateTime = metav1.Now()
 		queueState.Error = err.Error()
