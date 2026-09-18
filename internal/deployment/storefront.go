@@ -80,7 +80,7 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 
 	appName := "shopware-storefront"
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.StorefrontDeploymentContainer.Labels)
-	maps.Copy(labels, util.GetStorefrontDeploymentMatchLabel(store))
+	maps.Copy(labels, util.GetStorefrontDeploymentMatchLabel())
 
 	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.StorefrontDeploymentContainer.Annotations)
 
@@ -168,7 +168,7 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 			ProgressDeadlineSeconds: &containerSpec.ProgressDeadlineSeconds,
 			Replicas:                &containerSpec.Replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: util.GetStorefrontDeploymentMatchLabel(store),
+				MatchLabels: util.GetStorefrontDeploymentMatchLabel(),
 			},
 			Strategy: appsv1.DeploymentStrategy{
 				RollingUpdate: &appsv1.RollingUpdateDeployment{

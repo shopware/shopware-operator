@@ -85,7 +85,7 @@ func CleanupObsoleteWorkerScaledObjects(
 	list := &kedav1alpha1.ScaledObjectList{}
 	if err := c.List(ctx, list,
 		client.InNamespace(store.Namespace),
-		client.MatchingLabels(util.GetWorkerDeploymentMatchLabel(store)),
+		client.MatchingLabels(util.GetWorkerDeploymentStoreLabels(store)),
 	); err != nil {
 		return fmt.Errorf("list worker scaledobjects: %w", err)
 	}

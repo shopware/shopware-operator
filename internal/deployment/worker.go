@@ -76,7 +76,7 @@ func CleanupObsoleteWorkerDeployments(
 	list := &appsv1.DeploymentList{}
 	if err := c.List(ctx, list,
 		client.InNamespace(store.Namespace),
-		client.MatchingLabels(util.GetWorkerDeploymentMatchLabel(store)),
+		client.MatchingLabels(util.GetWorkerDeploymentStoreLabels(store)),
 	); err != nil {
 		return fmt.Errorf("list worker deployments: %w", err)
 	}
@@ -192,7 +192,7 @@ func WorkerDeployment(store v1.Store, consumeQueues []string) *appsv1.Deployment
 	}
 
 	appName := "shopware-worker"
-	matchLabels := util.GetWorkerDeploymentMatchLabel(store)
+	matchLabels := util.GetWorkerDeploymentMatchLabel()
 	if queue != "" {
 		matchLabels[util.ShopwareKey("worker.queue")] = truncateWithHash(queue)
 	}

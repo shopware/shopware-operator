@@ -63,20 +63,38 @@ func GetDefaultStoreInstanceDebugLabels(store v1.Store, storeDebugInstance v1.St
 	return labels
 }
 
-func GetAdminDeploymentMatchLabel(store v1.Store) map[string]string {
-	labels := GetStoreLabel(store)
+func GetAdminDeploymentMatchLabel() map[string]string {
+	labels := make(map[string]string)
 	labels[ShopwareKey("store.app")] = "shopware-admin"
 	return labels
 }
 
-func GetStorefrontDeploymentMatchLabel(store v1.Store) map[string]string {
+func GetAdminDeploymentStoreLabels(store v1.Store) map[string]string {
 	labels := GetStoreLabel(store)
+	maps.Copy(labels, GetAdminDeploymentMatchLabel())
+	return labels
+}
+
+func GetStorefrontDeploymentMatchLabel() map[string]string {
+	labels := make(map[string]string)
 	labels[ShopwareKey("store.app")] = "shopware-storefront"
 	return labels
 }
 
-func GetWorkerDeploymentMatchLabel(store v1.Store) map[string]string {
+func GetStorefrontDeploymentStoreLabels(store v1.Store) map[string]string {
 	labels := GetStoreLabel(store)
+	maps.Copy(labels, GetStorefrontDeploymentMatchLabel())
+	return labels
+}
+
+func GetWorkerDeploymentMatchLabel() map[string]string {
+	labels := make(map[string]string)
 	labels[ShopwareKey("store.app")] = "shopware-worker"
+	return labels
+}
+
+func GetWorkerDeploymentStoreLabels(store v1.Store) map[string]string {
+	labels := GetStoreLabel(store)
+	maps.Copy(labels, GetWorkerDeploymentMatchLabel())
 	return labels
 }
