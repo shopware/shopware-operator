@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.9.0](https://github.com/shopware/shopware-operator/compare/1.8.1...v1.9.0) (2026-09-21)
+
+
+### Features
+
+* add keda scaling, moved controler logic to manager ([169e92c](https://github.com/shopware/shopware-operator/commit/169e92c94383c237caba459d4c88b62d49708c5d))
+
+
+### Bug Fixes
+
+* add consumer to worker ([c6733fe](https://github.com/shopware/shopware-operator/commit/c6733fe4c01a597c9dc2043a8553b801eb7496f6))
+* again keda and delete old resources if keda gets disabled ([5fcceea](https://github.com/shopware/shopware-operator/commit/5fcceeabb539ae90fa1701dfb51b7cfccb5da4e6))
+* change the label selector back ([fded11d](https://github.com/shopware/shopware-operator/commit/fded11d172c98d06313c4115402f6551089d0275))
+* cleanup worker only if queue has no errors ([5f8c9f9](https://github.com/shopware/shopware-operator/commit/5f8c9f915023aeeb30f68623d62ba7ee96492036))
+* concurrency cache not under mutex ([d3f427b](https://github.com/shopware/shopware-operator/commit/d3f427bcf4d31d09410b9e0a501a7a55a4e911f4))
+* concurrency with metrics and queues ([3e3e458](https://github.com/shopware/shopware-operator/commit/3e3e45814ec3f5dd7cab1bac60c68238f54b60e3))
+* db connection check ([70bfb70](https://github.com/shopware/shopware-operator/commit/70bfb7014ed1b73ffaa76f9c98b31c2d68192928))
+* delete queues in metrics ([28d816a](https://github.com/shopware/shopware-operator/commit/28d816ac2e698cbe6ed924560e705fb9b467c81f))
+* deployment scaling not trigger update store status ([a0ba4e0](https://github.com/shopware/shopware-operator/commit/a0ba4e0faff5924dde6539930295f2c7e8e2ea95))
+* disable webhook by default ([93040d1](https://github.com/shopware/shopware-operator/commit/93040d1c87f8d77dc935b428c5b0087b19b2a1a3))
+* disable webhook per default ([64fc8ff](https://github.com/shopware/shopware-operator/commit/64fc8ff469f840d9e737b9843f60bee4061a919e))
+* if deployment is scaling we set it to running state ([7e506b9](https://github.com/shopware/shopware-operator/commit/7e506b9bb627ca47e26a3e18d99370d929782717))
+* label issue, only use resources attached to the same shop ([3cd38fc](https://github.com/shopware/shopware-operator/commit/3cd38fc2d71925e3e69d537b094d04deb444b7c6))
+* log ([8f95052](https://github.com/shopware/shopware-operator/commit/8f95052a27fa86d2235365394237535117544f3a))
+* missing logger in controllers, also add component to it ([4b15fa6](https://github.com/shopware/shopware-operator/commit/4b15fa6d0e72a63a8b130ff2a90d76f274165ca9))
+* only split queue if keda scaling is set by shop ([5012ec4](https://github.com/shopware/shopware-operator/commit/5012ec4ca5dd4b92d6249ec98fd1d72407799c7b))
+* remove consumer solved in config ([ba02254](https://github.com/shopware/shopware-operator/commit/ba022548482b4aeca2fd1ddd7cb9e1b325a1c7a9))
+* uniqueness for worker ([991f927](https://github.com/shopware/shopware-operator/commit/991f9277ccb48275d8cf06cedea58cfe7d8cd9a2))
+* use -vv for worker script ([0d0c9d0](https://github.com/shopware/shopware-operator/commit/0d0c9d04cfcf522f81f2564b8e952386b33b2b83))
+
 ## [1.8.1](https://github.com/shopware/shopware-operator/compare/1.8.0...v1.8.1) (2026-09-11)
 
 
