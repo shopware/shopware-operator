@@ -208,6 +208,10 @@ func (s *Store) getLock() []corev1.EnvVar {
 }
 
 func (f *FPMSpec) getFPMConfiguration() []corev1.EnvVar {
+	if f.ProcessManagement == "frankenphp" {
+		// FrankenPHP doesn't use PHP-FPM — no FPM env vars needed
+		return []corev1.EnvVar{}
+	}
 	if f.ProcessManagement != "dynamic" && f.ProcessManagement != "operator" {
 		return []corev1.EnvVar{
 			{
