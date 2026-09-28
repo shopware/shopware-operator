@@ -206,6 +206,8 @@ func (r *StoreReconciler) Reconcile(
 		return shortRequeue, nil
 	}
 
+	stateBefore := store.Status.State
+
 	if err := r.stateManager().ReconcileResources(ctx, store); err != nil {
 		log.Errorw("reconcile", zap.Error(err))
 		return rr, nil
@@ -215,6 +217,16 @@ func (r *StoreReconciler) Reconcile(
 
 	if err := r.stateManager().ReconcileStatus(ctx, store, err); err != nil {
 		log.Errorw("failed to update status", zap.Error(err))
+	}
+
+	// Resources are reconciled for the state the store was in when this reconcile started, so a
+	// state reached during ReconcileStatus has not had its resource handler run yet. Come back
+	// right away instead of waiting for the long requeue, otherwise e.g. a finished migration
+	// leaves the deployments on the old image until the next timer tick.
+	if store.Status.State != stateBefore {
+		log.Infow("Schedule short Reconcile, because store state changed",
+			zap.String("from", string(stateBefore)), zap.String("to", string(store.Status.State)))
+		return shortRequeue, nil
 	}
 
 	if !store.IsState(v1.StateReady) {
