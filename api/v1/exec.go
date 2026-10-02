@@ -26,6 +26,11 @@ type StoreExecSpec struct {
 	// +kubebuilder:default=3
 	MaxRetries int32 `json:"maxRetries,omitempty"`
 
+	// +kubebuilder:default="5m"
+	CleanupPeriodSuccessfulExec metav1.Duration `json:"cleanupPeriodSuccessfulExec,omitempty"`
+	// +kubebuilder:default="1h"
+	CleanupPeriodErrorExec metav1.Duration `json:"cleanupPeriodErrorExec,omitempty"`
+
 	ExtraEnvs []corev1.EnvVar `json:"extraEnvs,omitempty"`
 
 	Container ContainerSpec `json:"container,omitempty"`

@@ -17,54 +17,86 @@ import (
 
 const cleanupTestNamespace = "default"
 
-func TestStoreExecSuccessfulCleanupDeletesDoneOneShotAfterGracePeriod(t *testing.T) {
+func TestStoreExecCleanupDeletesFinishedExecAfterCleanupPeriod(t *testing.T) {
 	ctx := context.Background()
-	ex := storeExecForCleanup("done-old", shopv1.ExecStateDone, time.Now().Add(-2*time.Hour))
-	cl := fake.NewClientBuilder().
-		WithScheme(cleanupTestScheme(t)).
-		WithObjects(ex).
-		Build()
+	scheme := cleanupTestScheme(t)
 
-	reconciler := StoreExecReconciler{
-		Client:             cl,
-		CleanupGracePeriod: time.Hour,
+	tests := []struct {
+		name         string
+		state        shopv1.StatefulState
+		successfulIn time.Duration
+		errorIn      time.Duration
+	}{
+		{name: "done", state: shopv1.ExecStateDone, successfulIn: time.Hour},
+		{name: "error", state: shopv1.ExecStateError, errorIn: time.Hour},
 	}
 
-	result, handled, err := reconciler.reconcileSuccessfulStoreExecCleanup(ctx, ex)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ex := storeExecForCleanup(tt.name+"-old", tt.state, time.Now().Add(-2*time.Hour))
+			ex.Spec.CleanupPeriodSuccessfulExec = metav1.Duration{Duration: tt.successfulIn}
+			ex.Spec.CleanupPeriodErrorExec = metav1.Duration{Duration: tt.errorIn}
 
-	require.NoError(t, err)
-	assert.True(t, handled)
-	assert.Zero(t, result)
+			cl := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(ex).
+				Build()
 
-	got := &shopv1.StoreExec{}
-	err = cl.Get(ctx, types.NamespacedName{Namespace: cleanupTestNamespace, Name: ex.Name}, got)
-	assert.True(t, k8serrors.IsNotFound(err))
+			reconciler := StoreExecReconciler{Client: cl}
+
+			result, handled, err := reconciler.reconcileStoreExecCleanup(ctx, ex)
+
+			require.NoError(t, err)
+			assert.True(t, handled)
+			assert.Zero(t, result)
+
+			got := &shopv1.StoreExec{}
+			err = cl.Get(ctx, types.NamespacedName{Namespace: cleanupTestNamespace, Name: ex.Name}, got)
+			assert.True(t, k8serrors.IsNotFound(err))
+		})
+	}
 }
 
-func TestStoreExecSuccessfulCleanupRetainsDoneOneShotBeforeGracePeriod(t *testing.T) {
+func TestStoreExecCleanupRetainsFinishedExecBeforeCleanupPeriod(t *testing.T) {
 	ctx := context.Background()
-	ex := storeExecForCleanup("done-new", shopv1.ExecStateDone, time.Now().Add(-30*time.Minute))
-	cl := fake.NewClientBuilder().
-		WithScheme(cleanupTestScheme(t)).
-		WithObjects(ex).
-		Build()
+	scheme := cleanupTestScheme(t)
 
-	reconciler := StoreExecReconciler{
-		Client:             cl,
-		CleanupGracePeriod: time.Hour,
+	tests := []struct {
+		name         string
+		state        shopv1.StatefulState
+		successfulIn time.Duration
+		errorIn      time.Duration
+	}{
+		{name: "done", state: shopv1.ExecStateDone, successfulIn: time.Hour},
+		{name: "error", state: shopv1.ExecStateError, errorIn: time.Hour},
 	}
 
-	result, handled, err := reconciler.reconcileSuccessfulStoreExecCleanup(ctx, ex)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ex := storeExecForCleanup(tt.name+"-new", tt.state, time.Now().Add(-30*time.Minute))
+			ex.Spec.CleanupPeriodSuccessfulExec = metav1.Duration{Duration: tt.successfulIn}
+			ex.Spec.CleanupPeriodErrorExec = metav1.Duration{Duration: tt.errorIn}
 
-	require.NoError(t, err)
-	assert.True(t, handled)
-	assert.Greater(t, result.RequeueAfter, time.Duration(0))
+			cl := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(ex).
+				Build()
 
-	got := &shopv1.StoreExec{}
-	require.NoError(t, cl.Get(ctx, types.NamespacedName{Namespace: cleanupTestNamespace, Name: ex.Name}, got))
+			reconciler := StoreExecReconciler{Client: cl}
+
+			result, handled, err := reconciler.reconcileStoreExecCleanup(ctx, ex)
+
+			require.NoError(t, err)
+			assert.True(t, handled)
+			assert.Greater(t, result.RequeueAfter, time.Duration(0))
+
+			got := &shopv1.StoreExec{}
+			require.NoError(t, cl.Get(ctx, types.NamespacedName{Namespace: cleanupTestNamespace, Name: ex.Name}, got))
+		})
+	}
 }
 
-func TestStoreExecSuccessfulCleanupRetainsCronAndFailedResources(t *testing.T) {
+func TestStoreExecCleanupSkipsUnaffectedResources(t *testing.T) {
 	ctx := context.Background()
 	scheme := cleanupTestScheme(t)
 
@@ -77,12 +109,34 @@ func TestStoreExecSuccessfulCleanupRetainsCronAndFailedResources(t *testing.T) {
 			ex: func() *shopv1.StoreExec {
 				ex := storeExecForCleanup("cron-done", shopv1.ExecStateDone, time.Now().Add(-2*time.Hour))
 				ex.Spec.CronSchedule = "*/5 * * * *"
+				ex.Spec.CleanupPeriodSuccessfulExec = metav1.Duration{Duration: time.Hour}
 				return ex
 			}(),
 		},
 		{
-			name: "error",
-			ex:   storeExecForCleanup("error", shopv1.ExecStateError, time.Now().Add(-2*time.Hour)),
+			name: "still running",
+			ex: func() *shopv1.StoreExec {
+				ex := storeExecForCleanup("running", shopv1.ExecStateRunning, time.Now().Add(-2*time.Hour))
+				ex.Spec.CleanupPeriodSuccessfulExec = metav1.Duration{Duration: time.Hour}
+				ex.Spec.CleanupPeriodErrorExec = metav1.Duration{Duration: time.Hour}
+				return ex
+			}(),
+		},
+		{
+			name: "done without successful period",
+			ex: func() *shopv1.StoreExec {
+				ex := storeExecForCleanup("done-no-period", shopv1.ExecStateDone, time.Now().Add(-2*time.Hour))
+				ex.Spec.CleanupPeriodErrorExec = metav1.Duration{Duration: time.Hour}
+				return ex
+			}(),
+		},
+		{
+			name: "error without error period",
+			ex: func() *shopv1.StoreExec {
+				ex := storeExecForCleanup("error-no-period", shopv1.ExecStateError, time.Now().Add(-2*time.Hour))
+				ex.Spec.CleanupPeriodSuccessfulExec = metav1.Duration{Duration: time.Hour}
+				return ex
+			}(),
 		},
 	}
 
@@ -93,12 +147,9 @@ func TestStoreExecSuccessfulCleanupRetainsCronAndFailedResources(t *testing.T) {
 				WithObjects(tt.ex).
 				Build()
 
-			reconciler := StoreExecReconciler{
-				Client:             cl,
-				CleanupGracePeriod: time.Hour,
-			}
+			reconciler := StoreExecReconciler{Client: cl}
 
-			result, handled, err := reconciler.reconcileSuccessfulStoreExecCleanup(ctx, tt.ex)
+			result, handled, err := reconciler.reconcileStoreExecCleanup(ctx, tt.ex)
 
 			require.NoError(t, err)
 			assert.False(t, handled)
@@ -166,7 +217,7 @@ func TestStoreDebugInstanceSuccessfulCleanupUsesDurationAndGracePeriod(t *testin
 	}
 }
 
-func TestSuccessfulCleanupDisabledWithZeroGracePeriod(t *testing.T) {
+func TestSuccessfulCleanupDisabledWithZeroPeriods(t *testing.T) {
 	ctx := context.Background()
 	scheme := cleanupTestScheme(t)
 
@@ -178,7 +229,7 @@ func TestSuccessfulCleanupDisabledWithZeroGracePeriod(t *testing.T) {
 		Build()
 
 	execReconciler := StoreExecReconciler{Client: cl}
-	execResult, execHandled, err := execReconciler.reconcileSuccessfulStoreExecCleanup(ctx, ex)
+	execResult, execHandled, err := execReconciler.reconcileStoreExecCleanup(ctx, ex)
 	require.NoError(t, err)
 	assert.False(t, execHandled)
 	assert.Equal(t, time.Duration(0), execResult.RequeueAfter)
@@ -220,7 +271,7 @@ func storeExecForCleanup(name string, state shopv1.StatefulState, finishedAt tim
 			State: state,
 			Conditions: []shopv1.ExecCondition{
 				{
-					Type:               shopv1.ExecStateRunning,
+					Type:               state,
 					LastTransitionTime: metav1.NewTime(finishedAt),
 					LastUpdateTime:     metav1.NewTime(finishedAt),
 					Message:            "Command finished",
