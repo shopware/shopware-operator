@@ -115,7 +115,7 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/-/fpm/ping",
+					Path: "/-/healthz",
 					Port: intstr.IntOrString{
 						Type:   intstr.Int,
 						IntVal: FPM_ADMIN_PORT,

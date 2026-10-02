@@ -92,10 +92,10 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/api/_info/health-check",
+					Path: "/-/healthz",
 					Port: intstr.IntOrString{
 						Type:   intstr.Int,
-						IntVal: containerSpec.Port,
+						IntVal: FPM_ADMIN_PORT,
 					},
 				},
 			},
