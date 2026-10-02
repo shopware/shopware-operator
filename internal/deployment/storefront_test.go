@@ -247,7 +247,7 @@ func TestStorefrontDeployment(t *testing.T) {
 		assert.NotNil(t, container.ReadinessProbe)
 		assert.Equal(t, "/-/fpm/ping", container.StartupProbe.HTTPGet.Path)
 		assert.Equal(t, int32(8001), container.StartupProbe.HTTPGet.Port.IntVal)
-		assert.Equal(t, "/-/fpm/ping", container.LivenessProbe.HTTPGet.Path)
+		assert.Equal(t, "/-/healthz", container.LivenessProbe.HTTPGet.Path)
 		assert.Equal(t, int32(8001), container.LivenessProbe.HTTPGet.Port.IntVal)
 		assert.Equal(t, "/api/_info/health-check", container.ReadinessProbe.HTTPGet.Path)
 		assert.Equal(t, int32(8000), container.ReadinessProbe.HTTPGet.Port.IntVal)
