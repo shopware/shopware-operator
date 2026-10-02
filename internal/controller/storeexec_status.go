@@ -127,7 +127,8 @@ func (r *StoreExecReconciler) stateRunning(ctx context.Context, store *v1.Store,
 	if jobState.IsDone() && jobState.HasErrors() {
 		con.Message = "Command is Done but has Errors. Check logs for more details"
 		con.Reason = fmt.Sprintf("Exit code: %d", jobState.ExitCode)
-		con.Status = Error
+		con.Type = v1.ExecStateError
+		con.Status = Ready
 		con.LastTransitionTime = metav1.Now()
 		return v1.ExecStateError
 	}
@@ -135,6 +136,8 @@ func (r *StoreExecReconciler) stateRunning(ctx context.Context, store *v1.Store,
 	if jobState.IsDone() && !jobState.HasErrors() {
 		con.Message = "Command finished"
 		con.LastTransitionTime = metav1.Now()
+		con.Type = v1.ExecStateDone
+		con.Status = Ready
 		return v1.ExecStateDone
 	}
 
