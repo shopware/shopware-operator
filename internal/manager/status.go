@@ -31,6 +31,8 @@ func (m *StoreStateManager) ReconcileStatus(
 		return nil
 	}
 
+	m.ReconcileState(ctx, store)
+
 	if reconcileError != nil {
 		store.Status.AddCondition(
 			v1.StoreCondition{
@@ -43,10 +45,6 @@ func (m *StoreStateManager) ReconcileStatus(
 			},
 		)
 	}
-
-	printWarningForEnvs(ctx, store)
-
-	m.ReconcileState(ctx, store)
 
 	store.Status.Message = store.Status.GetLastCondition().Message
 	store.Status.AdminState = deployment.GetAdminDeploymentCondition(ctx, *store, m.Client)
