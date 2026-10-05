@@ -240,11 +240,10 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controller.StoreExecReconciler{
-		Client:             nsClient,
-		Logger:             logger.With(zapz.String("component", "store-exec-reconciler")),
-		Scheme:             mgr.GetScheme(),
-		Recorder:           mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
-		CleanupGracePeriod: cfg.SuccessfulCRCleanupGracePeriod,
+		Client:   nsClient,
+		Logger:   logger.With(zapz.String("component", "store-exec-reconciler")),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create exec controller", "controller", "StoreExec")
 		os.Exit(1)

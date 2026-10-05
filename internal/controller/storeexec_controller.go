@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
@@ -11,6 +12,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/logging"
 	"go.uber.org/zap"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -20,10 +22,9 @@ import (
 
 type StoreExecReconciler struct {
 	client.Client
-	Scheme             *runtime.Scheme
-	Recorder           record.EventRecorder
-	Logger             *zap.SugaredLogger
-	CleanupGracePeriod time.Duration
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
+	Logger   *zap.SugaredLogger
 }
 
 // +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storeexecs,verbs=get;list;watch;create;update;patch;delete
@@ -63,9 +64,9 @@ func (r *StoreExecReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return rr, nil
 	}
 
-	if result, handled, cleanupErr := r.reconcileSuccessfulStoreExecCleanup(ctx, ex); handled || cleanupErr != nil {
+	if result, handled, cleanupErr := r.reconcileStoreExecCleanup(ctx, ex); handled || cleanupErr != nil {
 		if cleanupErr != nil {
-			log.Errorw("failed to cleanup successful store-exec", zap.Error(cleanupErr))
+			log.Errorw("failed to cleanup finished store-exec", zap.Error(cleanupErr))
 			skipStatusUpdate = true
 			return rr, nil
 		}
@@ -147,47 +148,80 @@ func (r *StoreExecReconciler) reconcileJob(ctx context.Context, store *v1.Store,
 	return nil
 }
 
-func (r *StoreExecReconciler) reconcileSuccessfulStoreExecCleanup(
+func (r *StoreExecReconciler) reconcileStoreExecCleanup(
 	ctx context.Context,
 	ex *v1.StoreExec,
 ) (ctrl.Result, bool, error) {
-	if r.CleanupGracePeriod <= 0 ||
-		ex.DeletionTimestamp != nil ||
-		ex.Spec.CronSchedule != "" ||
-		!ex.IsState(v1.ExecStateDone) {
+	period, ok := cleanupPeriodFor(ex)
+	if !ok {
 		return ctrl.Result{}, false, nil
 	}
 
-	deleteAfter := storeExecFinishedAt(ex).Add(r.CleanupGracePeriod)
+	finishedAt, ok := storeExecFinishedAt(ex)
+	if !ok {
+		return ctrl.Result{}, false, nil
+	}
+
+	deleteAfter := finishedAt.Add(period)
 	if remaining := time.Until(deleteAfter); remaining > 0 {
 		return ctrl.Result{RequeueAfter: remaining}, true, nil
 	}
 
 	if err := r.Delete(ctx, ex); err != nil && !k8serrors.IsNotFound(err) {
-		return ctrl.Result{}, false, fmt.Errorf("delete successful StoreExec: %w", err)
+		return ctrl.Result{}, false, fmt.Errorf("delete finished StoreExec: %w", err)
 	}
 
 	return ctrl.Result{}, true, nil
 }
 
-func storeExecFinishedAt(ex *v1.StoreExec) time.Time {
-	for i := len(ex.Status.Conditions) - 1; i >= 0; i-- {
-		if !ex.Status.Conditions[i].LastTransitionTime.IsZero() {
-			return ex.Status.Conditions[i].LastTransitionTime.Time
+func storeExecFinishedAt(ex *v1.StoreExec) (time.Time, bool) {
+	if !ex.IsState(v1.ExecStateDone, v1.ExecStateError) {
+		return time.Time{}, false
+	}
+
+	for _, v := range slices.Backward(ex.Status.Conditions) {
+		if t := v.LastTransitionTime; !t.IsZero() {
+			return t.Time, true
 		}
 	}
 
-	for i := len(ex.Status.Conditions) - 1; i >= 0; i-- {
-		if !ex.Status.Conditions[i].LastUpdateTime.IsZero() {
-			return ex.Status.Conditions[i].LastUpdateTime.Time
-		}
+	return time.Time{}, false
+}
+
+// Mirror of the kubebuilder defaults on StoreExecSpec. They apply when the field
+// is unset in the object we hold, which happens if the CRD in the cluster is
+// older than this operator and dropped the field before defaulting could run.
+const (
+	defaultCleanupPeriodSuccessfulExec = 5 * time.Minute
+	defaultCleanupPeriodErrorExec      = time.Hour
+)
+
+func cleanupPeriodFor(ex *v1.StoreExec) (time.Duration, bool) {
+	if ex.DeletionTimestamp != nil || ex.Spec.CronSchedule != "" {
+		return 0, false
 	}
 
-	if !ex.CreationTimestamp.IsZero() {
-		return ex.CreationTimestamp.Time
+	var period time.Duration
+	switch {
+	case ex.IsState(v1.ExecStateDone):
+		period = cleanupPeriodOrDefault(ex.Spec.CleanupPeriodSuccessfulExec, defaultCleanupPeriodSuccessfulExec)
+	case ex.IsState(v1.ExecStateError):
+		period = cleanupPeriodOrDefault(ex.Spec.CleanupPeriodErrorExec, defaultCleanupPeriodErrorExec)
+	default:
+		return 0, false
 	}
 
-	return time.Now()
+	return period, period > 0
+}
+
+// An explicit zero stays zero and disables cleanup for that state; only an unset
+// field falls back to the default.
+func cleanupPeriodOrDefault(period *metav1.Duration, fallback time.Duration) time.Duration {
+	if period == nil {
+		return fallback
+	}
+
+	return period.Duration
 }
 
 func (r *StoreExecReconciler) reconcileCronJob(ctx context.Context, store *v1.Store, exec *v1.StoreExec) (err error) {
