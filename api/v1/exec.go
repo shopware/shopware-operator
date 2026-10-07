@@ -26,22 +26,15 @@ type StoreExecSpec struct {
 	// +kubebuilder:default=3
 	MaxRetries int32 `json:"maxRetries,omitempty"`
 
-	// The two cleanup periods are pointers rather than values because `omitempty`
-	// does not drop a zero metav1.Duration: a value field would send an explicit
-	// "0s" from typed clients and defeat the defaults. Keep those defaults in sync
-	// with defaultCleanupPeriod* in internal/controller/storeexec_controller.go.
-
 	// How long a successfully finished StoreExec is kept before it is deleted.
 	// Zero disables cleanup for successful executions.
-	// +optional
 	// +kubebuilder:default="5m"
-	CleanupPeriodSuccessfulExec *metav1.Duration `json:"cleanupPeriodSuccessfulExec,omitempty"`
+	CleanupPeriodSuccessfulExec metav1.Duration `json:"cleanupPeriodSuccessfulExec,omitempty"`
 
 	// How long a failed StoreExec is kept before it is deleted.
 	// Zero disables cleanup for failed executions.
-	// +optional
 	// +kubebuilder:default="1h"
-	CleanupPeriodErrorExec *metav1.Duration `json:"cleanupPeriodErrorExec,omitempty"`
+	CleanupPeriodErrorExec metav1.Duration `json:"cleanupPeriodErrorExec,omitempty"`
 
 	ExtraEnvs []corev1.EnvVar `json:"extraEnvs,omitempty"`
 

@@ -12,7 +12,6 @@ import (
 	"github.com/shopware/shopware-operator/internal/logging"
 	"go.uber.org/zap"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -188,14 +187,6 @@ func storeExecFinishedAt(ex *v1.StoreExec) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-// Mirror of the kubebuilder defaults on StoreExecSpec. They apply when the field
-// is unset in the object we hold, which happens if the CRD in the cluster is
-// older than this operator and dropped the field before defaulting could run.
-const (
-	defaultCleanupPeriodSuccessfulExec = 5 * time.Minute
-	defaultCleanupPeriodErrorExec      = time.Hour
-)
-
 func cleanupPeriodFor(ex *v1.StoreExec) (time.Duration, bool) {
 	if ex.DeletionTimestamp != nil || ex.Spec.CronSchedule != "" {
 		return 0, false
@@ -204,24 +195,14 @@ func cleanupPeriodFor(ex *v1.StoreExec) (time.Duration, bool) {
 	var period time.Duration
 	switch {
 	case ex.IsState(v1.ExecStateDone):
-		period = cleanupPeriodOrDefault(ex.Spec.CleanupPeriodSuccessfulExec, defaultCleanupPeriodSuccessfulExec)
+		period = ex.Spec.CleanupPeriodSuccessfulExec.Duration
 	case ex.IsState(v1.ExecStateError):
-		period = cleanupPeriodOrDefault(ex.Spec.CleanupPeriodErrorExec, defaultCleanupPeriodErrorExec)
+		period = ex.Spec.CleanupPeriodErrorExec.Duration
 	default:
 		return 0, false
 	}
 
 	return period, period > 0
-}
-
-// An explicit zero stays zero and disables cleanup for that state; only an unset
-// field falls back to the default.
-func cleanupPeriodOrDefault(period *metav1.Duration, fallback time.Duration) time.Duration {
-	if period == nil {
-		return fallback
-	}
-
-	return period.Duration
 }
 
 func (r *StoreExecReconciler) reconcileCronJob(ctx context.Context, store *v1.Store, exec *v1.StoreExec) (err error) {

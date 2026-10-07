@@ -34,8 +34,8 @@ func TestStoreExecCleanupDeletesFinishedExecAfterCleanupPeriod(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ex := storeExecForCleanup(tt.name+"-old", tt.state, time.Now().Add(-2*time.Hour))
-			ex.Spec.CleanupPeriodSuccessfulExec = &metav1.Duration{Duration: tt.successfulIn}
-			ex.Spec.CleanupPeriodErrorExec = &metav1.Duration{Duration: tt.errorIn}
+			ex.Spec.CleanupPeriodSuccessfulExec = metav1.Duration{Duration: tt.successfulIn}
+			ex.Spec.CleanupPeriodErrorExec = metav1.Duration{Duration: tt.errorIn}
 
 			cl := fake.NewClientBuilder().
 				WithScheme(scheme).
@@ -57,47 +57,6 @@ func TestStoreExecCleanupDeletesFinishedExecAfterCleanupPeriod(t *testing.T) {
 	}
 }
 
-func TestStoreExecCleanupUsesDefaultPeriodsWhenUnset(t *testing.T) {
-	ctx := context.Background()
-	scheme := cleanupTestScheme(t)
-
-	tests := []struct {
-		name       string
-		state      shopv1.StatefulState
-		finishedAt time.Time
-		wantGone   bool
-	}{
-		{name: "done past default", state: shopv1.ExecStateDone, finishedAt: time.Now().Add(-10 * time.Minute), wantGone: true},
-		{name: "done within default", state: shopv1.ExecStateDone, finishedAt: time.Now().Add(-time.Minute)},
-		{name: "error past default", state: shopv1.ExecStateError, finishedAt: time.Now().Add(-2 * time.Hour), wantGone: true},
-		{name: "error within default", state: shopv1.ExecStateError, finishedAt: time.Now().Add(-10 * time.Minute)},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Both periods stay nil: an object whose defaults never ran must still
-			// be cleaned up rather than silently retained forever.
-			ex := storeExecForCleanup(tt.name, tt.state, tt.finishedAt)
-
-			cl := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(ex).
-				Build()
-
-			reconciler := StoreExecReconciler{Client: cl}
-
-			_, handled, err := reconciler.reconcileStoreExecCleanup(ctx, ex)
-
-			require.NoError(t, err)
-			assert.True(t, handled)
-
-			got := &shopv1.StoreExec{}
-			err = cl.Get(ctx, types.NamespacedName{Namespace: cleanupTestNamespace, Name: ex.Name}, got)
-			assert.Equal(t, tt.wantGone, k8serrors.IsNotFound(err))
-		})
-	}
-}
-
 func TestStoreExecCleanupRetainsFinishedExecBeforeCleanupPeriod(t *testing.T) {
 	ctx := context.Background()
 	scheme := cleanupTestScheme(t)
@@ -115,8 +74,8 @@ func TestStoreExecCleanupRetainsFinishedExecBeforeCleanupPeriod(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ex := storeExecForCleanup(tt.name+"-new", tt.state, time.Now().Add(-30*time.Minute))
-			ex.Spec.CleanupPeriodSuccessfulExec = &metav1.Duration{Duration: tt.successfulIn}
-			ex.Spec.CleanupPeriodErrorExec = &metav1.Duration{Duration: tt.errorIn}
+			ex.Spec.CleanupPeriodSuccessfulExec = metav1.Duration{Duration: tt.successfulIn}
+			ex.Spec.CleanupPeriodErrorExec = metav1.Duration{Duration: tt.errorIn}
 
 			cl := fake.NewClientBuilder().
 				WithScheme(scheme).
@@ -150,7 +109,7 @@ func TestStoreExecCleanupSkipsUnaffectedResources(t *testing.T) {
 			ex: func() *shopv1.StoreExec {
 				ex := storeExecForCleanup("cron-done", shopv1.ExecStateDone, time.Now().Add(-2*time.Hour))
 				ex.Spec.CronSchedule = "*/5 * * * *"
-				ex.Spec.CleanupPeriodSuccessfulExec = &metav1.Duration{Duration: time.Hour}
+				ex.Spec.CleanupPeriodSuccessfulExec = metav1.Duration{Duration: time.Hour}
 				return ex
 			}(),
 		},
@@ -158,8 +117,8 @@ func TestStoreExecCleanupSkipsUnaffectedResources(t *testing.T) {
 			name: "still running",
 			ex: func() *shopv1.StoreExec {
 				ex := storeExecForCleanup("running", shopv1.ExecStateRunning, time.Now().Add(-2*time.Hour))
-				ex.Spec.CleanupPeriodSuccessfulExec = &metav1.Duration{Duration: time.Hour}
-				ex.Spec.CleanupPeriodErrorExec = &metav1.Duration{Duration: time.Hour}
+				ex.Spec.CleanupPeriodSuccessfulExec = metav1.Duration{Duration: time.Hour}
+				ex.Spec.CleanupPeriodErrorExec = metav1.Duration{Duration: time.Hour}
 				return ex
 			}(),
 		},
@@ -167,8 +126,8 @@ func TestStoreExecCleanupSkipsUnaffectedResources(t *testing.T) {
 			name: "done with successful period disabled",
 			ex: func() *shopv1.StoreExec {
 				ex := storeExecForCleanup("done-no-period", shopv1.ExecStateDone, time.Now().Add(-2*time.Hour))
-				ex.Spec.CleanupPeriodSuccessfulExec = &metav1.Duration{Duration: 0}
-				ex.Spec.CleanupPeriodErrorExec = &metav1.Duration{Duration: time.Hour}
+				ex.Spec.CleanupPeriodSuccessfulExec = metav1.Duration{Duration: 0}
+				ex.Spec.CleanupPeriodErrorExec = metav1.Duration{Duration: time.Hour}
 				return ex
 			}(),
 		},
@@ -176,8 +135,8 @@ func TestStoreExecCleanupSkipsUnaffectedResources(t *testing.T) {
 			name: "error with error period disabled",
 			ex: func() *shopv1.StoreExec {
 				ex := storeExecForCleanup("error-no-period", shopv1.ExecStateError, time.Now().Add(-2*time.Hour))
-				ex.Spec.CleanupPeriodSuccessfulExec = &metav1.Duration{Duration: time.Hour}
-				ex.Spec.CleanupPeriodErrorExec = &metav1.Duration{Duration: 0}
+				ex.Spec.CleanupPeriodSuccessfulExec = metav1.Duration{Duration: time.Hour}
+				ex.Spec.CleanupPeriodErrorExec = metav1.Duration{Duration: 0}
 				return ex
 			}(),
 		},
@@ -185,7 +144,7 @@ func TestStoreExecCleanupSkipsUnaffectedResources(t *testing.T) {
 			name: "done without usable finish time",
 			ex: func() *shopv1.StoreExec {
 				ex := storeExecForCleanup("done-no-timestamp", shopv1.ExecStateDone, time.Now().Add(-2*time.Hour))
-				ex.Spec.CleanupPeriodSuccessfulExec = &metav1.Duration{Duration: time.Hour}
+				ex.Spec.CleanupPeriodSuccessfulExec = metav1.Duration{Duration: time.Hour}
 				for i := range ex.Status.Conditions {
 					ex.Status.Conditions[i].LastTransitionTime = metav1.Time{}
 					ex.Status.Conditions[i].LastUpdateTime = metav1.Time{}
@@ -277,8 +236,8 @@ func TestSuccessfulCleanupDisabledWithZeroPeriods(t *testing.T) {
 	scheme := cleanupTestScheme(t)
 
 	ex := storeExecForCleanup("disabled-exec", shopv1.ExecStateDone, time.Now().Add(-2*time.Hour))
-	ex.Spec.CleanupPeriodSuccessfulExec = &metav1.Duration{Duration: 0}
-	ex.Spec.CleanupPeriodErrorExec = &metav1.Duration{Duration: 0}
+	ex.Spec.CleanupPeriodSuccessfulExec = metav1.Duration{Duration: 0}
+	ex.Spec.CleanupPeriodErrorExec = metav1.Duration{Duration: 0}
 	debugInstance := storeDebugInstanceForCleanup("disabled-debug", time.Now().Add(-3*time.Hour))
 	cl := fake.NewClientBuilder().
 		WithScheme(scheme).
