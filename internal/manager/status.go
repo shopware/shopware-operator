@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"slices"
 	"time"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
@@ -15,7 +14,6 @@ import (
 	"github.com/shopware/shopware-operator/internal/manager/base"
 	"github.com/shopware/shopware-operator/internal/metrics"
 	"go.uber.org/zap"
-	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -30,6 +28,8 @@ func (m *StoreStateManager) ReconcileStatus(
 	if store == nil || store.DeletionTimestamp != nil {
 		return nil
 	}
+
+	printWarningForEnvs(ctx, store)
 
 	m.ReconcileState(ctx, store)
 
@@ -73,13 +73,11 @@ func (m *StoreStateManager) ReconcileStatus(
 
 func printWarningForEnvs(ctx context.Context, store *v1.Store) {
 	l := logging.FromContext(ctx)
-
-	envs := store.GetEnv()
-	// TODO: this check doesn't make sense, because the overwriten envs are in there
-	for _, obj2 := range store.Spec.Container.ExtraEnvs {
-		if slices.ContainsFunc(envs, func(c corev1.EnvVar) bool { return c.Name == obj2.Name }) {
-			l.Infof("Overwriting env var. If you can, please use the crd to define it. Name: %s", obj2.Name)
-		}
+	for _, o := range store.OverriddenOperatorEnvs() {
+		l.Warnw("ExtraEnvs overwrites env var managed by the operator. If you can, please use the crd to define it",
+			zap.String("env", o.Extra.Name),
+			zap.String("extraEnvValue", o.Extra.Value),
+			zap.String("operatorEnvValue", o.Operator.Value))
 	}
 }
 

@@ -563,7 +563,7 @@ func (s *Store) getFastly() []corev1.EnvVar {
 	return envVars
 }
 
-func (s *Store) GetEnv() []corev1.EnvVar {
+func (s *Store) operatorEnv() []corev1.EnvVar {
 	var appUrl string
 	if s.Spec.Network.AppURLHost == "" {
 		appUrl = fmt.Sprintf("https://%s", s.Spec.Network.Host)
@@ -712,6 +712,11 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 	c = append(c, s.getFastly()...)
 	c = append(c, s.Spec.FPM.getFPMConfiguration()...)
 
+	return c
+}
+
+func (s *Store) GetEnv() []corev1.EnvVar {
+	c := s.operatorEnv()
 	for _, obj2 := range s.Spec.Container.ExtraEnvs {
 		if i := slices.IndexFunc(c, func(c corev1.EnvVar) bool { return c.Name == obj2.Name }); i > -1 {
 			c[i] = obj2
@@ -721,4 +726,24 @@ func (s *Store) GetEnv() []corev1.EnvVar {
 	}
 
 	return c
+}
+
+type EnvOverride struct {
+	Operator corev1.EnvVar
+	Extra    corev1.EnvVar
+}
+
+func (s *Store) OverriddenOperatorEnvs() []EnvOverride {
+	operator := s.operatorEnv()
+	var overridden []EnvOverride
+	for _, extra := range s.Spec.Container.ExtraEnvs {
+		if i := slices.IndexFunc(overridden, func(o EnvOverride) bool { return o.Extra.Name == extra.Name }); i > -1 {
+			overridden[i].Extra = extra
+			continue
+		}
+		if i := slices.IndexFunc(operator, func(c corev1.EnvVar) bool { return c.Name == extra.Name }); i > -1 {
+			overridden = append(overridden, EnvOverride{Operator: operator[i], Extra: extra})
+		}
+	}
+	return overridden
 }

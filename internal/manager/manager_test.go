@@ -10,10 +10,12 @@ import (
 	"github.com/shopware/shopware-operator/internal/cronjob"
 	"github.com/shopware/shopware-operator/internal/deployment"
 	"github.com/shopware/shopware-operator/internal/job"
+	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/manager"
 	"github.com/shopware/shopware-operator/internal/manager/base"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zapcore"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -730,10 +732,10 @@ func TestReconcileResourcesFailsWithoutKedaCRDsWhenKedaEnabled(t *testing.T) {
 	assert.True(t, meta.IsNoMatchError(err), "expected no-match error, got %v", err)
 }
 
-func lastConditionOfType(store *v1.Store, conditionType v1.StatefulAppState) v1.StoreCondition {
+func lastWaitCondition(store *v1.Store) v1.StoreCondition {
 	var found v1.StoreCondition
 	for _, con := range store.Status.Conditions {
-		if con.Type == string(conditionType) {
+		if con.Type == string(v1.StateWait) {
 			found = con
 		}
 	}
@@ -897,7 +899,7 @@ func TestReconcileStateWaitFastlySecretMissing(t *testing.T) {
 	m.ReconcileState(context.Background(), store)
 
 	assert.Equal(t, v1.StateWait, store.Status.State)
-	con := lastConditionOfType(store, v1.StateWait)
+	con := lastWaitCondition(store)
 	assert.Equal(t, base.Error, con.Status)
 	assert.Equal(t, "Fastly serviceRef secret does not exist", con.Reason)
 }
@@ -912,7 +914,7 @@ func TestReconcileStateWaitFastlyTokenKeyMissing(t *testing.T) {
 	m.ReconcileState(context.Background(), store)
 
 	assert.Equal(t, v1.StateWait, store.Status.State)
-	assert.Contains(t, lastConditionOfType(store, v1.StateWait).Reason, "TokenKeyRef doesn't contain the specified key 'token'")
+	assert.Contains(t, lastWaitCondition(store).Reason, "TokenKeyRef doesn't contain the specified key 'token'")
 }
 
 func TestReconcileStateWaitFastlySecretsPresent(t *testing.T) {
@@ -934,7 +936,7 @@ func TestReconcileStateWaitOpensearchSecretMissing(t *testing.T) {
 	m.ReconcileState(context.Background(), store)
 
 	assert.Equal(t, v1.StateWait, store.Status.State)
-	assert.Equal(t, "OpensearchRef secret does not exist", lastConditionOfType(store, v1.StateWait).Reason)
+	assert.Equal(t, "OpensearchRef secret does not exist", lastWaitCondition(store).Reason)
 }
 
 func TestReconcileStateWaitOpensearchSecretKeyMissing(t *testing.T) {
@@ -944,7 +946,7 @@ func TestReconcileStateWaitOpensearchSecretKeyMissing(t *testing.T) {
 	m.ReconcileState(context.Background(), store)
 
 	assert.Equal(t, v1.StateWait, store.Status.State)
-	assert.Contains(t, lastConditionOfType(store, v1.StateWait).Reason, "SecretKeyRef doesn't contain the specified key 'password'")
+	assert.Contains(t, lastWaitCondition(store).Reason, "SecretKeyRef doesn't contain the specified key 'password'")
 }
 
 func TestReconcileStateWaitOpensearchSecretPresent(t *testing.T) {
@@ -1148,4 +1150,68 @@ func TestReconcileStatusClearsReconcileErrorOnNextSuccessfulReconcile(t *testing
 		types.NamespacedName{Namespace: "test", Name: "test-store"}, stored))
 	assert.Equal(t, "Waiting for deployments to get ready", stored.Status.Message)
 	assert.Empty(t, stored.Status.GetLastCondition().Reason)
+}
+
+func TestReconcileStatusWarnsOncePerOverriddenOperatorEnv(t *testing.T) {
+	store := testStore()
+	store.Spec.DisableChecks = true
+	store.Spec.Network.Host = "shop.example.com"
+	store.Spec.Container.ExtraEnvs = []corev1.EnvVar{
+		{Name: "APP_URL", Value: "https://custom.example.com"},
+		{Name: "MY_CUSTOM_ENV", Value: "custom-value"},
+	}
+	m, _ := newStatusTestManager(t, store.DeepCopy())
+	ctx, logs := logging.WithTestLogger(context.Background())
+
+	require.NoError(t, m.ReconcileStatus(ctx, store, nil))
+
+	warnings := logs.FilterMessageSnippet("ExtraEnvs overwrites env var managed by the operator").All()
+	require.Len(t, warnings, 1)
+	assert.Equal(t, zapcore.WarnLevel, warnings[0].Level)
+	assert.Equal(t, map[string]interface{}{
+		"env":              "APP_URL",
+		"extraEnvValue":    "https://custom.example.com",
+		"operatorEnvValue": "https://shop.example.com",
+	}, warnings[0].ContextMap())
+}
+
+func TestReconcileStatusLogsSecretRefsInsteadOfResolvedValues(t *testing.T) {
+	store := testStore()
+	store.Spec.DisableChecks = true
+	store.Spec.Container.ExtraEnvs = []corev1.EnvVar{
+		{
+			Name: "DATABASE_URL",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "custom-db"},
+					Key:                  "url",
+				},
+			},
+		},
+	}
+	m, _ := newStatusTestManager(t, store.DeepCopy())
+	ctx, logs := logging.WithTestLogger(context.Background())
+
+	require.NoError(t, m.ReconcileStatus(ctx, store, nil))
+
+	warnings := logs.FilterMessageSnippet("ExtraEnvs overwrites env var managed by the operator").All()
+	require.Len(t, warnings, 1)
+	assert.Equal(t, map[string]interface{}{
+		"env": "DATABASE_URL",
+		// Only Values are read directly and displaed for security reasons
+		"extraEnvValue":    "",
+		"operatorEnvValue": "",
+	}, warnings[0].ContextMap())
+}
+
+func TestReconcileStatusNoEnvWarningWithoutOverrides(t *testing.T) {
+	store := testStore()
+	store.Spec.DisableChecks = true
+	store.Spec.Container.ExtraEnvs = []corev1.EnvVar{{Name: "MY_CUSTOM_ENV", Value: "custom-value"}}
+	m, _ := newStatusTestManager(t, store.DeepCopy())
+	ctx, logs := logging.WithTestLogger(context.Background())
+
+	require.NoError(t, m.ReconcileStatus(ctx, store, nil))
+
+	assert.Empty(t, logs.FilterMessageSnippet("ExtraEnvs overwrites env var managed by the operator").All())
 }

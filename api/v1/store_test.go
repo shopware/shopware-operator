@@ -605,3 +605,116 @@ func TestWorkerRedisDsnOverwrite(t *testing.T) {
 		assert.True(t, foundConsumerName, "MESSENGER_CONSUMER_NAME should be set")
 	})
 }
+
+func overriddenNames(overrides []v1.EnvOverride) []string {
+	names := make([]string, 0, len(overrides))
+	for _, o := range overrides {
+		names = append(names, o.Extra.Name)
+	}
+	return names
+}
+
+func TestOverriddenOperatorEnvs(t *testing.T) {
+	tests := []struct {
+		name      string
+		extraEnvs []corev1.EnvVar
+		want      []string
+	}{
+		{
+			name: "no extra envs",
+			want: []string{},
+		},
+		{
+			name:      "extra env not managed by operator",
+			extraEnvs: []corev1.EnvVar{{Name: "MY_CUSTOM_ENV", Value: "custom"}},
+			want:      []string{},
+		},
+		{
+			name:      "extra env overrides operator env",
+			extraEnvs: []corev1.EnvVar{{Name: "APP_URL", Value: "https://custom.example.com"}},
+			want:      []string{"APP_URL"},
+		},
+		{
+			name: "only overriding envs are returned in order",
+			extraEnvs: []corev1.EnvVar{
+				{Name: "MY_CUSTOM_ENV", Value: "custom"},
+				{Name: "DATABASE_URL", Value: "mysql://custom"},
+				{Name: "APP_URL", Value: "https://custom.example.com"},
+			},
+			want: []string{"DATABASE_URL", "APP_URL"},
+		},
+		{
+			name: "duplicate extra envs are reported once",
+			extraEnvs: []corev1.EnvVar{
+				{Name: "APP_URL", Value: "https://one.example.com"},
+				{Name: "APP_URL", Value: "https://two.example.com"},
+			},
+			want: []string{"APP_URL"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &v1.Store{
+				Spec: v1.StoreSpec{
+					Container: v1.ContainerSpec{
+						ExtraEnvs: tt.extraEnvs,
+					},
+				},
+			}
+
+			assert.Equal(t, tt.want, overriddenNames(store.OverriddenOperatorEnvs()))
+		})
+	}
+}
+
+func TestOverriddenOperatorEnvsContainsBothValues(t *testing.T) {
+	store := &v1.Store{
+		Spec: v1.StoreSpec{
+			Network: v1.NetworkSpec{Host: "shop.example.com"},
+			Container: v1.ContainerSpec{
+				ExtraEnvs: []corev1.EnvVar{
+					{Name: "APP_URL", Value: "https://one.example.com"},
+					{Name: "DATABASE_URL", Value: "mysql://custom"},
+					{Name: "APP_URL", Value: "https://two.example.com"},
+				},
+			},
+		},
+	}
+
+	overrides := store.OverriddenOperatorEnvs()
+
+	require.Len(t, overrides, 2)
+	assert.Equal(t, corev1.EnvVar{Name: "APP_URL", Value: "https://shop.example.com"}, overrides[0].Operator)
+	assert.Equal(t, corev1.EnvVar{Name: "APP_URL", Value: "https://two.example.com"}, overrides[0].Extra,
+		"last duplicate wins, like in GetEnv")
+	require.NotNil(t, overrides[1].Operator.ValueFrom)
+	require.NotNil(t, overrides[1].Operator.ValueFrom.SecretKeyRef)
+	assert.Equal(t, "mysql://custom", overrides[1].Extra.Value)
+}
+
+func TestOverriddenOperatorEnvsDoesNotChangeGetEnv(t *testing.T) {
+	store := &v1.Store{
+		Spec: v1.StoreSpec{
+			Container: v1.ContainerSpec{
+				ExtraEnvs: []corev1.EnvVar{
+					{Name: "APP_URL", Value: "https://custom.example.com"},
+					{Name: "MY_CUSTOM_ENV", Value: "custom"},
+				},
+			},
+		},
+	}
+
+	assert.Equal(t, []string{"APP_URL"}, overriddenNames(store.OverriddenOperatorEnvs()))
+
+	env := store.GetEnv()
+	appURLs := 0
+	for _, e := range env {
+		if e.Name == "APP_URL" {
+			appURLs++
+			assert.Equal(t, "https://custom.example.com", e.Value)
+		}
+	}
+	assert.Equal(t, 1, appURLs, "APP_URL must be replaced, not duplicated")
+	assert.Contains(t, env, corev1.EnvVar{Name: "MY_CUSTOM_ENV", Value: "custom"})
+}
