@@ -75,6 +75,7 @@ type StoreConfig struct {
 	EnableKeda           bool   `env:"ENABLE_KEDA, default=false"`
 	EnableServiceMonitor bool   `env:"ENABLE_SERVICE_MONITOR, default=false"`
 	DisableChecks        bool   `env:"DISABLE_CHECKS, default=false"`
+	EnableTracing        bool   `env:"ENABLE_TRACING, default=false"`
 	Namespace            string `env:"NAMESPACE, default=default"`
 }
 

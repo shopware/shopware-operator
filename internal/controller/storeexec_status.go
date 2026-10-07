@@ -8,6 +8,7 @@ import (
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/job"
 	"github.com/shopware/shopware-operator/internal/logging"
+	"github.com/shopware/shopware-operator/internal/tracing"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -25,10 +26,14 @@ func (r *StoreExecReconciler) reconcileCRStatus(
 	store *v1.Store,
 	ex *v1.StoreExec,
 	reconcileError error,
-) error {
+) (err error) {
 	if ex == nil {
 		return nil
 	}
+
+	ctx, span := tracing.Start(ctx, "StoreExec.ReconcileStatus", tracing.AttrState.String(string(ex.Status.State)))
+	defer tracing.End(span, &err)
+	previousState := ex.Status.State
 
 	if reconcileError != nil {
 		ex.Status.AddCondition(
@@ -66,6 +71,8 @@ func (r *StoreExecReconciler) reconcileCRStatus(
 	}
 
 	logging.FromContext(ctx).Info("Update exec status", "status", ex.Status)
+	tracing.RecordStateChange(ctx, string(previousState), string(ex.Status.State))
+	tracing.RecordStatusUpdate(ctx, string(ex.Status.State), ex.Status.GetLastCondition().Message)
 	return writeExecStatus(ctx, r.Client, types.NamespacedName{
 		Namespace: ex.Namespace,
 		Name:      ex.Name,

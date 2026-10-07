@@ -9,6 +9,10 @@ TAG_REGEX := ^v([0-9]{1,}\.){2}[0-9]{1,}$$
 # In which namespace should the operator run
 NAMESPACE ?= default
 
+JAEGER_CONTAINER ?= jaeger
+JAEGER_IMAGE ?= docker.io/jaegertracing/jaeger:latest
+OTEL_EXPORTER_OTLP_ENDPOINT ?= http://localhost:4318
+
 ## Tool Binaries
 KUBECTL ?= kubectl
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
@@ -114,9 +118,19 @@ test-chart: install
 	helm install test shopware/shopware
 ##@ Build
 
+.PHONY: jaeger
+jaeger: ## Restart the local Jaeger container with $(CONTAINER_TOOL), create it if it does not exist.
+	@if $(CONTAINER_TOOL) container inspect $(JAEGER_CONTAINER) >/dev/null 2>&1; then \
+		$(CONTAINER_TOOL) stop $(JAEGER_CONTAINER) && $(CONTAINER_TOOL) start $(JAEGER_CONTAINER); \
+	else \
+		$(CONTAINER_TOOL) run -d --name $(JAEGER_CONTAINER) -p 127.0.0.1:16686:16686 -p 127.0.0.1:4317:4317 -p 127.0.0.1:4318:4318 $(JAEGER_IMAGE); \
+	fi
+
 .PHONY: run
-run: manifests generate zap-pretty ## Run a controller from your host.
-	ENABLE_WEBHOOK=false LEADER_ELECT=false DISABLE_CHECKS=true LOG_LEVEL=debug LOG_FORMAT=zap-pretty go run ./cmd/main.go \
+run: manifests generate zap-pretty jaeger ## Run a controller from your host.
+	ENABLE_WEBHOOK=false LEADER_ELECT=false DISABLE_CHECKS=true LOG_LEVEL=debug LOG_FORMAT=zap-pretty \
+		ENABLE_TRACING=true OTEL_EXPORTER_OTLP_ENDPOINT=$(OTEL_EXPORTER_OTLP_ENDPOINT) \
+		go run ./cmd/main.go \
 		2>&1 | $(ZAP_PRETTY) --all
 
 

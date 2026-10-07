@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 
+	"github.com/shopware/shopware-operator/internal/tracing"
+	"go.opentelemetry.io/otel/attribute"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -20,7 +23,21 @@ func ExecInPod(
 	podName string,
 	containerName string,
 	command []string,
-) (string, string, error) {
+) (stdoutResult string, stderrResult string, err error) {
+	ctx, span := tracing.Start(ctx, "k8s.ExecInPod",
+		tracing.AttrNamespace.String(namespace),
+		attribute.String("k8s.pod.name", podName),
+		attribute.String("k8s.container.name", containerName),
+		attribute.String("process.command_line", strings.Join(command, " ")),
+	)
+	defer func() {
+		span.SetAttributes(
+			attribute.Int("process.stdout.size", len(stdoutResult)),
+			attribute.Int("process.stderr.size", len(stderrResult)),
+		)
+		tracing.End(span, &err)
+	}()
+
 	req := clientset.CoreV1().RESTClient().
 		Post().
 		Resource("pods").
