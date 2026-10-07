@@ -29,11 +29,13 @@ type StoreExecSpec struct {
 	// How long a successfully finished StoreExec is kept before it is deleted.
 	// Zero disables cleanup for successful executions.
 	// +kubebuilder:default="5m"
+	// +kubebuilder:validation:XValidation:rule="self.matches('^(0|([0-9]+([.][0-9]+)?(ns|us|ms|s|m|h))+)$')",message="must be a valid duration, e.g. 30s, 5m or 1h"
 	CleanupPeriodSuccessfulExec metav1.Duration `json:"cleanupPeriodSuccessfulExec,omitempty"`
 
 	// How long a failed StoreExec is kept before it is deleted.
 	// Zero disables cleanup for failed executions.
 	// +kubebuilder:default="1h"
+	// +kubebuilder:validation:XValidation:rule="self.matches('^(0|([0-9]+([.][0-9]+)?(ns|us|ms|s|m|h))+)$')",message="must be a valid duration, e.g. 30s, 5m or 1h"
 	CleanupPeriodErrorExec metav1.Duration `json:"cleanupPeriodErrorExec,omitempty"`
 
 	ExtraEnvs []corev1.EnvVar `json:"extraEnvs,omitempty"`
