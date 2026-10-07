@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.10.0](https://github.com/shopware/shopware-operator/compare/1.9.0...v1.10.0) (2026-10-07)
+
+
+### Features
+
+* change admin & storefront liveness probe to Caddy healthz ([023e72a](https://github.com/shopware/shopware-operator/commit/023e72aba597984f16a5c49be3a9d3bf920154e1))
+* change admin & storefront liveness probe to Caddy healthz ([ac48ac2](https://github.com/shopware/shopware-operator/commit/ac48ac25ac1ab77788378f1eb7920e54b2b06f03))
+
+
+### Bug Fixes
+
+* add tests for manager ([b6098f0](https://github.com/shopware/shopware-operator/commit/b6098f029a64f655c244715cc48cd5a2875a384f))
+* only cleanup if operator has keda enabled ([03abd73](https://github.com/shopware/shopware-operator/commit/03abd73d9e900ec6b0a27fb53f13c78c99183829))
+* print env warnings correctly ([2aa8570](https://github.com/shopware/shopware-operator/commit/2aa857048c6c513b73878533db75b1caf21023d0))
+
 ## [1.9.0](https://github.com/shopware/shopware-operator/compare/1.8.1...v1.9.0) (2026-09-21)
 
 
