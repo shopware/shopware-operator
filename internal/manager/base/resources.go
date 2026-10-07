@@ -186,7 +186,12 @@ func (b *Base) ReconcileDeployment(ctx context.Context, store *v1.Store) (err er
 }
 
 func (b *Base) ReconcileScaledObjects(ctx context.Context, store *v1.Store) (err error) {
-	if !b.EnableKeda || !store.Spec.Worker.EnableKedaScaling {
+	// Skip Keda (cleanup/creation) if operator has disabled it
+	if !b.EnableKeda {
+		return nil
+	}
+
+	if !store.Spec.Worker.EnableKedaScaling {
 		return deployment.CleanupObsoleteWorkerScaledObjects(ctx, b.Client, *store)
 	}
 
