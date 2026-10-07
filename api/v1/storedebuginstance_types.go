@@ -29,9 +29,9 @@ type StoreDebugInstanceSpec struct {
 	// StoreRef is the reference to the store to debug
 	StoreRef string `json:"storeRef,omitempty"`
 	// Duration is the duration of the debug instance after which it will be deleted
-	// e.g. 1h or 30m
+	// e.g. 1h or 30m. Zero keeps the instance until it is deleted manually.
 	// +default="1h"
-	Duration string `json:"duration,omitempty"`
+	Duration metav1.Duration `json:"duration,omitempty"`
 	// ExtraLabels is the extra labels to add to the debug instance
 	ExtraLabels map[string]string `json:"extraLabels,omitempty"`
 	// ExtraContainerPorts is the extra ports to add to the debug instance

@@ -273,11 +273,10 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controller.StoreDebugInstanceReconciler{
-		Client:             nsClient,
-		Logger:             logger.With(zapz.String("component", "store-debug-instance-reconciler")),
-		Scheme:             mgr.GetScheme(),
-		Recorder:           mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
-		CleanupGracePeriod: cfg.SuccessfulCRCleanupGracePeriod,
+		Client:   nsClient,
+		Logger:   logger.With(zapz.String("component", "store-debug-instance-reconciler")),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create instance controller", "controller", "StoreDebugInstance")
 		os.Exit(1)

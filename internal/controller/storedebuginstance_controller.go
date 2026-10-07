@@ -40,10 +40,9 @@ import (
 // StoreDebugInstanceReconciler reconciles a StoreDebugInstance object
 type StoreDebugInstanceReconciler struct {
 	client.Client
-	Scheme             *runtime.Scheme
-	Recorder           record.EventRecorder
-	Logger             *zap.SugaredLogger
-	CleanupGracePeriod time.Duration
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
+	Logger   *zap.SugaredLogger
 }
 
 // +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=storedebuginstances,verbs=get;list;watch;create;update;patch;delete
@@ -78,12 +77,6 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return rr, nil
 		}
 		log.Errorw("get CR store debug instance", zap.Error(err))
-	}
-
-	// validate duration
-	_, err = time.ParseDuration(storeDebugInstance.Spec.Duration)
-	if err != nil {
-		return rr, fmt.Errorf("invalid duration: %w", err)
 	}
 
 	if result, deleted, cleanupErr := r.deleteSuccessfulStoreDebugInstanceIfCleanupDue(ctx, storeDebugInstance); deleted || cleanupErr != nil {
@@ -238,7 +231,7 @@ func (r *StoreDebugInstanceReconciler) reconcileSuccessfulStoreDebugInstanceClea
 func (r *StoreDebugInstanceReconciler) isStoreDebugInstanceCleanupEligible(
 	storeDebugInstance *shopv1.StoreDebugInstance,
 ) bool {
-	return r.CleanupGracePeriod > 0 &&
+	return storeDebugInstance.Spec.Duration.Duration > 0 &&
 		storeDebugInstance.DeletionTimestamp == nil &&
 		storeDebugInstance.IsState(shopv1.StoreDebugInstanceStateDone)
 }
@@ -246,9 +239,7 @@ func (r *StoreDebugInstanceReconciler) isStoreDebugInstanceCleanupEligible(
 func (r *StoreDebugInstanceReconciler) storeDebugInstanceCleanupRemaining(
 	storeDebugInstance *shopv1.StoreDebugInstance,
 ) time.Duration {
-	duration, _ := time.ParseDuration(storeDebugInstance.Spec.Duration)
-	deleteAfter := storeDebugInstance.CreationTimestamp.Add(duration).Add(r.CleanupGracePeriod)
-	return time.Until(deleteAfter)
+	return time.Until(storeDebugInstance.CreationTimestamp.Add(storeDebugInstance.Spec.Duration.Duration))
 }
 
 func (r *StoreDebugInstanceReconciler) deleteSuccessfulStoreDebugInstance(

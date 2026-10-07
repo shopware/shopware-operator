@@ -175,7 +175,7 @@ func TestStoreExecCleanupSkipsUnaffectedResources(t *testing.T) {
 	}
 }
 
-func TestStoreDebugInstanceSuccessfulCleanupUsesDurationAndGracePeriod(t *testing.T) {
+func TestStoreDebugInstanceSuccessfulCleanupUsesDuration(t *testing.T) {
 	ctx := context.Background()
 	scheme := cleanupTestScheme(t)
 
@@ -186,15 +186,15 @@ func TestStoreDebugInstanceSuccessfulCleanupUsesDurationAndGracePeriod(t *testin
 		expectDeleted bool
 	}{
 		{
-			name:          "after duration and grace",
+			name:          "after duration",
 			objectName:    "debug-done-old",
-			creationTime:  time.Now().Add(-3 * time.Hour),
+			creationTime:  time.Now().Add(-2 * time.Hour),
 			expectDeleted: true,
 		},
 		{
-			name:          "before duration and grace",
+			name:          "before duration",
 			objectName:    "debug-done-new",
-			creationTime:  time.Now().Add(-90 * time.Minute),
+			creationTime:  time.Now().Add(-30 * time.Minute),
 			expectDeleted: false,
 		},
 	}
@@ -207,10 +207,7 @@ func TestStoreDebugInstanceSuccessfulCleanupUsesDurationAndGracePeriod(t *testin
 				WithObjects(debugInstance).
 				Build()
 
-			reconciler := StoreDebugInstanceReconciler{
-				Client:             cl,
-				CleanupGracePeriod: time.Hour,
-			}
+			reconciler := StoreDebugInstanceReconciler{Client: cl}
 
 			result, handled, err := reconciler.reconcileSuccessfulStoreDebugInstanceCleanup(ctx, debugInstance)
 
@@ -239,6 +236,7 @@ func TestSuccessfulCleanupDisabledWithZeroPeriods(t *testing.T) {
 	ex.Spec.CleanupPeriodSuccessfulExec = metav1.Duration{Duration: 0}
 	ex.Spec.CleanupPeriodErrorExec = metav1.Duration{Duration: 0}
 	debugInstance := storeDebugInstanceForCleanup("disabled-debug", time.Now().Add(-3*time.Hour))
+	debugInstance.Spec.Duration = metav1.Duration{Duration: 0}
 	cl := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(ex, debugInstance).
@@ -307,7 +305,7 @@ func storeDebugInstanceForCleanup(name string, creationTime time.Time) *shopv1.S
 		},
 		Spec: shopv1.StoreDebugInstanceSpec{
 			StoreRef: "test",
-			Duration: "1h",
+			Duration: metav1.Duration{Duration: time.Hour},
 		},
 		Status: shopv1.StoreDebugInstanceStatus{
 			State: shopv1.StoreDebugInstanceStateDone,

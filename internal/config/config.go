@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/sethvargo/go-envconfig"
 )
@@ -77,8 +76,6 @@ type StoreConfig struct {
 	EnableServiceMonitor bool   `env:"ENABLE_SERVICE_MONITOR, default=false"`
 	DisableChecks        bool   `env:"DISABLE_CHECKS, default=false"`
 	Namespace            string `env:"NAMESPACE, default=default"`
-
-	SuccessfulCRCleanupGracePeriod time.Duration `env:"SUCCESSFUL_CR_CLEANUP_GRACE_PERIOD, default=1h"`
 }
 
 type Config struct {
