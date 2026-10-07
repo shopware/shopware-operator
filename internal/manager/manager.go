@@ -15,8 +15,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const maxStateTransitionsPerReconcile = 5
-
 type (
 	StateHandler    func(ctx context.Context, store *v1.Store) v1.StatefulAppState
 	ResourceHandler func(ctx context.Context, store *v1.Store) error
@@ -54,21 +52,19 @@ func NewStoreStateManager(b *base.Base) *StoreStateManager {
 	}
 }
 
-func (m *StoreStateManager) ReconcileState(ctx context.Context, store *v1.Store) {
-	for i := 0; i < maxStateTransitionsPerReconcile; i++ {
-		mgr, ok := m.managers[store.Status.State]
-		if !ok {
-			break
-		}
-		next := mgr.StateHandler(ctx, store)
-		if next == store.Status.State {
-			break
-		}
+func (m *StoreStateManager) ReconcileState(ctx context.Context, store *v1.Store) error {
+	mgr, ok := m.managers[store.Status.State]
+	if !ok {
+		return fmt.Errorf("state %q is not registered in operator", store.Status.State)
+	}
+	next := mgr.StateHandler(ctx, store)
+	if next != store.Status.State {
 		logging.FromContext(ctx).Infow("Store state transition",
 			zap.String("from", string(store.Status.State)),
 			zap.String("to", string(next)))
-		store.Status.State = next
 	}
+	store.Status.State = next
+	return nil
 }
 
 func (m *StoreStateManager) ReconcileResources(ctx context.Context, store *v1.Store) error {

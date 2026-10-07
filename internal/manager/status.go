@@ -29,9 +29,19 @@ func (m *StoreStateManager) ReconcileStatus(
 		return nil
 	}
 
-	printWarningForEnvs(ctx, store)
-
-	m.ReconcileState(ctx, store)
+	err := m.ReconcileState(ctx, store)
+	if err != nil {
+		store.Status.AddCondition(
+			v1.StoreCondition{
+				Type:               string(store.Status.State),
+				LastTransitionTime: metav1.Time{},
+				LastUpdateTime:     metav1.NewTime(time.Now()),
+				Message:            err.Error(),
+				Reason:             "StatusError",
+				Status:             base.Error,
+			},
+		)
+	}
 
 	if reconcileError != nil {
 		store.Status.AddCondition(
@@ -45,6 +55,7 @@ func (m *StoreStateManager) ReconcileStatus(
 			},
 		)
 	}
+	printWarningForEnvs(ctx, store)
 
 	store.Status.Message = store.Status.GetLastCondition().Message
 	store.Status.AdminState = deployment.GetAdminDeploymentCondition(ctx, *store, m.Client)
