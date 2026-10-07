@@ -12,6 +12,9 @@ import (
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/k8s"
+	"github.com/shopware/shopware-operator/internal/tracing"
+	"github.com/shopware/shopware-operator/internal/util"
+	"go.opentelemetry.io/otel/attribute"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,7 +37,16 @@ func GetAdminQueueStats(
 	clientset *kubernetes.Clientset,
 	restConfig *rest.Config,
 	store v1.Store,
-) ([]v1.QueueTransportStats, []string, error) {
+) (stats []v1.QueueTransportStats, uncountable []string, err error) {
+	ctx, span := tracing.Start(ctx, "deployment.GetAdminQueueStats")
+	defer func() {
+		span.SetAttributes(
+			attribute.Int("shopware.queue.transports", len(stats)),
+			attribute.StringSlice("shopware.queue.uncountable_transports", uncountable),
+		)
+		tracing.End(span, &err)
+	}()
+
 	pod, err := getRunningAdminPod(ctx, c, store)
 	if err != nil {
 		return nil, nil, fmt.Errorf("find admin pod for queue stats: %w", err)
@@ -63,7 +75,7 @@ func GetAdminQueueStats(
 		}
 	}
 
-	stats, uncountable, err := parseMessengerStats([]byte(selectStatsOutput(stdout, stderr)))
+	stats, uncountable, err = parseMessengerStats([]byte(selectStatsOutput(stdout, stderr)))
 	if err != nil {
 		return nil, nil, &QueueStatsError{
 			Pod:       pod.Name,
@@ -98,23 +110,16 @@ func (e *QueueStatsError) Error() string {
 	msg := fmt.Sprintf("%s (pod: %s, container: %s, command: %q",
 		e.Err.Error(), e.Pod, e.Container, e.Command)
 	if trimmed := strings.TrimSpace(e.Stderr); trimmed != "" {
-		msg += fmt.Sprintf(", stderr: %s", truncateOutput(trimmed))
+		msg += fmt.Sprintf(", stderr: %s", util.Truncate(trimmed, 500))
 	}
 	if trimmed := strings.TrimSpace(e.Stdout); trimmed != "" {
-		msg += fmt.Sprintf(", stdout: %s", truncateOutput(trimmed))
+		msg += fmt.Sprintf(", stdout: %s", util.Truncate(trimmed, 500))
 	}
 	return msg + ")"
 }
 
 func (e *QueueStatsError) Unwrap() error {
 	return e.Err
-}
-
-func truncateOutput(s string) string {
-	if len(s) > 500 {
-		return s[:500] + "..."
-	}
-	return s
 }
 
 func getRunningAdminPod(
@@ -226,5 +231,5 @@ func parseMessengerStats(raw []byte) ([]v1.QueueTransportStats, []string, error)
 		return stats, uncountable, nil
 	}
 
-	return nil, nil, fmt.Errorf("unexpected messenger:stats output, no known json shape: %s", truncateOutput(string(raw)))
+	return nil, nil, fmt.Errorf("unexpected messenger:stats output, no known json shape: %s", util.Truncate(string(raw), 500))
 }

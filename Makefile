@@ -9,6 +9,10 @@ TAG_REGEX := ^v([0-9]{1,}\.){2}[0-9]{1,}$$
 # In which namespace should the operator run
 NAMESPACE ?= default
 
+JAEGER_CONTAINER ?= jaeger
+JAEGER_IMAGE ?= docker.io/jaegertracing/jaeger:latest
+OTEL_EXPORTER_OTLP_ENDPOINT ?= http://localhost:4318
+
 ## Tool Binaries
 KUBECTL ?= kubectl
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
@@ -114,9 +118,19 @@ test-chart: install
 	helm install test shopware/shopware
 ##@ Build
 
+.PHONY: jaeger
+jaeger: ## Restart the local Jaeger container in podman, create it if it does not exist.
+	@if podman container exists $(JAEGER_CONTAINER); then \
+		podman stop $(JAEGER_CONTAINER) && podman start $(JAEGER_CONTAINER); \
+	else \
+		podman run -d --name $(JAEGER_CONTAINER) -p 16686:16686 -p 4317:4317 -p 4318:4318 $(JAEGER_IMAGE); \
+	fi
+
 .PHONY: run
-run: manifests generate zap-pretty ## Run a controller from your host.
-	ENABLE_WEBHOOK=false LEADER_ELECT=false DISABLE_CHECKS=true LOG_LEVEL=debug LOG_FORMAT=zap-pretty go run ./cmd/main.go \
+run: manifests generate zap-pretty jaeger ## Run a controller from your host.
+	ENABLE_WEBHOOK=false LEADER_ELECT=false DISABLE_CHECKS=true LOG_LEVEL=debug LOG_FORMAT=zap-pretty \
+		ENABLE_TRACING=true OTEL_EXPORTER_OTLP_ENDPOINT=$(OTEL_EXPORTER_OTLP_ENDPOINT) \
+		go run ./cmd/main.go \
 		2>&1 | $(ZAP_PRETTY) --all
 
 

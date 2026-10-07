@@ -8,6 +8,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/deployment"
 	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/metrics"
+	"github.com/shopware/shopware-operator/internal/tracing"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -23,6 +24,9 @@ func (m *StoreStateManager) UpdateQueueState(ctx context.Context, store *v1.Stor
 		return
 	}
 
+	ctx, span := tracing.Start(ctx, "StoreStateManager.UpdateQueueState")
+	defer span.End()
+
 	stats, uncountable, err := deployment.GetAdminQueueStats(ctx, m.Client, m.Clientset, m.RestConfig, *store)
 	if err != nil {
 		log := logging.FromContext(ctx)
@@ -37,6 +41,7 @@ func (m *StoreStateManager) UpdateQueueState(ctx context.Context, store *v1.Stor
 			)
 		}
 		log.Errorw("failed to get queue stats from admin pod", zap.Error(err))
+		tracing.RecordError(span, err)
 		queueState := store.Status.QueueState
 		queueState.LastUpdateTime = metav1.Now()
 		queueState.Error = err.Error()

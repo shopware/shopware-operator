@@ -108,6 +108,28 @@ disableChecks: false
 # Grace period before successful StoreExec and StoreDebugInstance CRs are deleted. Set to "0" to disable cleanup.
 successfulCRCleanupGracePeriod: 1h
 
+# tracing: when enabled, the operator exports OpenTelemetry traces for every
+# reconcile and status change via OTLP. The exporter is configured with the
+# standard OTEL_* environment variables, e.g. OTEL_EXPORTER_OTLP_ENDPOINT.
+tracing:
+  enabled: false
+  # endpoint sets OTEL_EXPORTER_OTLP_ENDPOINT, e.g. http://otel-collector.monitoring:4318
+  endpoint: ""
+  # protocol sets OTEL_EXPORTER_OTLP_PROTOCOL. Supported: http/protobuf, grpc
+  protocol: http/protobuf
+  # batch configures the batch span processor. Empty values use the OpenTelemetry SDK defaults.
+  batch:
+    # OTEL_BSP_SCHEDULE_DELAY in milliseconds, SDK default 5000
+    scheduleDelay: ""
+    # OTEL_BSP_EXPORT_TIMEOUT in milliseconds, SDK default 30000
+    exportTimeout: ""
+    # OTEL_BSP_MAX_QUEUE_SIZE, SDK default 2048
+    maxQueueSize: ""
+    # OTEL_BSP_MAX_EXPORT_BATCH_SIZE, SDK default 512
+    maxExportBatchSize: ""
+  # extraEnv adds additional OTEL_* environment variables, e.g. OTEL_TRACES_SAMPLER
+  extraEnv: []
+
 # keda: when enabled, the operator creates a KEDA ScaledObject for every store
 # queue worker deployment. The ScaledObject scales the workers based on the
 # queue length served by the operator queue metrics endpoint, so this requires

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/shopware/shopware-operator/internal/logging"
+	"github.com/shopware/shopware-operator/internal/tracing"
 	"go.uber.org/zap"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -54,10 +55,14 @@ type StoreDebugInstanceReconciler struct {
 // +kubebuilder:rbac:groups="",namespace=default,resources=services,verbs=get;list;watch;create;delete;
 
 func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (rr ctrl.Result, err error) {
+	ctx, span := tracing.StartReconcile(ctx, "StoreDebugInstance", req)
+	defer func() { tracing.EndReconcile(span, rr, &err) }()
+
 	log := r.Logger.
 		With(zap.String("namespace", req.Namespace)).
 		With(zap.String("name", req.Name))
 	ctx = logging.WithLogger(ctx, log)
+	log = logging.FromContext(ctx)
 
 	var store *shopv1.Store
 	var storeDebugInstance *shopv1.StoreDebugInstance

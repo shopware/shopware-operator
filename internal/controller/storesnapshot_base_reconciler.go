@@ -10,6 +10,8 @@ import (
 	"github.com/shopware/shopware-operator/internal/job"
 	"github.com/shopware/shopware-operator/internal/k8s"
 	"github.com/shopware/shopware-operator/internal/logging"
+	"github.com/shopware/shopware-operator/internal/tracing"
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	batchv1 "k8s.io/api/batch/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -61,7 +63,11 @@ func (r *StoreSnapshotBaseReconciler) reconcileCRStatus(
 	store v1.Store,
 	snapshot SnapshotResource,
 	getJob JobGetter,
-) error {
+) (err error) {
+	ctx, span := tracing.Start(ctx, "StoreSnapshot.ReconcileStatus",
+		tracing.AttrState.String(string(snapshot.GetStatus().State)))
+	previousTracedState := snapshot.GetStatus().State
+
 	status := snapshot.GetStatus()
 	if status.IsState(v1.SnapshotStateEmpty) {
 		status.State = v1.SnapshotStatePending
@@ -83,6 +89,10 @@ func (r *StoreSnapshotBaseReconciler) reconcileCRStatus(
 			con.LastTransitionTime = metav1.Now()
 		}
 		status.AddCondition(con)
+
+		tracing.RecordStateChange(ctx, string(previousTracedState), string(status.State))
+		tracing.RecordStatusUpdate(ctx, string(status.State), status.Message)
+		tracing.End(span, &err)
 	}()
 
 	snapshotJob, err := getJob(ctx, r.Client, store, snapshot)
@@ -157,7 +167,11 @@ func (r *StoreSnapshotBaseReconciler) ReconcileSnapshot(
 	getJob JobGetter,
 	createJob JobCreator,
 	writeStatus StatusWriter,
-) (ctrl.Result, error) {
+) (rr ctrl.Result, err error) {
+	ctx, span := tracing.StartReconcile(ctx, "StoreSnapshot", req)
+	span.SetAttributes(attribute.String("shopware.snapshot.type", snapshotType))
+	defer func() { tracing.EndReconcile(span, rr, &err) }()
+
 	logger := r.Logger.
 		With(zap.String("namespace", req.Namespace)).
 		With(zap.String("service", "shopware-operator-snapshot")).
@@ -165,6 +179,7 @@ func (r *StoreSnapshotBaseReconciler) ReconcileSnapshot(
 		With(zap.String("name", req.Name))
 
 	ctx = logging.WithLogger(ctx, logger)
+	logger = logging.FromContext(ctx)
 
 	snapshot, err := getSnapshot(ctx, r.Client, req.NamespacedName)
 	if err != nil {
@@ -173,6 +188,7 @@ func (r *StoreSnapshotBaseReconciler) ReconcileSnapshot(
 			return noRequeue, nil
 		} else {
 			logger.Errorw("get snapshot unknown error, stop execution", zap.Error(err))
+			tracing.RecordError(span, err)
 			return noRequeue, nil
 		}
 	}
@@ -294,6 +310,7 @@ func (r *StoreSnapshotBaseReconciler) sendEvent(ctx context.Context, snapshot Sn
 		DeployedImage: snapshot.GetSpec().Container.Image,
 		Labels:        snapshot.GetObjectMeta().GetLabels(),
 		KindType:      reflect.TypeOf(snapshot).String(),
+		TraceID:       tracing.TraceID(ctx),
 	}
 
 	log := logging.FromContext(ctx).With(

@@ -34,6 +34,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,6 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	"github.com/go-logr/logr"
 	"github.com/go-logr/zapr"
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	shopv1 "github.com/shopware/shopware-operator/api/v1"
@@ -51,6 +53,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/event/nats"
 	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/metrics"
+	"github.com/shopware/shopware-operator/internal/tracing"
 	shopwebhook "github.com/shopware/shopware-operator/internal/webhook"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	//+kubebuilder:scaffold:imports
@@ -127,7 +130,10 @@ func main() {
 		})
 	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	restConfig := ctrl.GetConfigOrDie()
+	defer setupTracing(cfg.EnableTracing, restConfig, setupLog)()
+
+	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
 			BindAddress:   cfg.MetricsAddr,
@@ -304,6 +310,25 @@ func main() {
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
+	}
+}
+
+func setupTracing(enabled bool, restConfig *rest.Config, setupLog logr.Logger) func() {
+	shutdown, err := tracing.Setup(context.Background(), enabled, version)
+	if err != nil {
+		setupLog.Error(err, "unable to set up tracing")
+		os.Exit(1)
+	}
+	if enabled {
+		tracing.WrapKubernetesClient(restConfig)
+	}
+
+	return func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdown(ctx); err != nil {
+			setupLog.Error(err, "unable to flush traces")
+		}
 	}
 }
 

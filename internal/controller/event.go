@@ -7,6 +7,7 @@ import (
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/event"
 	"github.com/shopware/shopware-operator/internal/logging"
+	"github.com/shopware/shopware-operator/internal/tracing"
 	"go.uber.org/zap"
 )
 
@@ -17,6 +18,7 @@ func (c *StoreSnapshotCreateReconciler) SendEvent(ctx context.Context, snap v1.S
 		DeployedImage: snap.Spec.Container.Image,
 		Labels:        snap.Labels,
 		KindType:      reflect.TypeOf(snap).String(),
+		TraceID:       tracing.TraceID(ctx),
 	}
 
 	log := logging.FromContext(ctx).With(
@@ -39,6 +41,7 @@ func (c *StoreSnapshotRestoreReconciler) SendEvent(ctx context.Context, snap v1.
 		DeployedImage: snap.Spec.Container.Image,
 		Labels:        snap.Labels,
 		KindType:      reflect.TypeOf(snap).String(),
+		TraceID:       tracing.TraceID(ctx),
 	}
 
 	log := logging.FromContext(ctx).With(
