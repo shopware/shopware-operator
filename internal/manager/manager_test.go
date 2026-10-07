@@ -121,7 +121,7 @@ func TestReconcileStateEmptyWithDisabledChecks(t *testing.T) {
 	store.Spec.DisableChecks = true
 	m, _ := newTestManager(t)
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateSetup, store.Status.State)
 }
@@ -130,8 +130,10 @@ func TestReconcileStateEmptyWaitsForChecks(t *testing.T) {
 	store := testStore()
 	m, _ := newTestManager(t)
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
+	assert.Equal(t, v1.StateWait, store.Status.State)
 
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 	assert.Equal(t, v1.StateWait, store.Status.State)
 	assert.NotEmpty(t, store.Status.Conditions)
 }
@@ -145,7 +147,7 @@ func TestReconcileStateWaitWithAllChecksDisabled(t *testing.T) {
 	store.Spec.DisableOpensearchCheck = true
 	m, _ := newTestManager(t)
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateSetup, store.Status.State)
 }
@@ -165,10 +167,9 @@ func TestReconcileStateSetupJobSucceeded(t *testing.T) {
 	}
 	m, _ := newTestManager(t, setupJob)
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateInitializing, store.Status.State)
-	assert.Equal(t, store.Spec.Container.Image, store.Status.CurrentImageTag)
 }
 
 func TestReconcileStateSetupJobPending(t *testing.T) {
@@ -176,7 +177,7 @@ func TestReconcileStateSetupJobPending(t *testing.T) {
 	store.Status.State = v1.StateSetup
 	m, _ := newTestManager(t)
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateSetup, store.Status.State)
 }
@@ -186,9 +187,10 @@ func TestReconcileStateInitializingToReady(t *testing.T) {
 	store.Status.State = v1.StateInitializing
 	m, _ := newTestManager(t, runningDeployments(store)...)
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateReady, store.Status.State)
+	assert.Equal(t, store.Spec.Container.Image, store.Status.CurrentImageTag)
 	assert.Equal(t, v1.DeploymentStateRunning, store.Status.StorefrontState.State)
 	assert.Equal(t, v1.DeploymentStateRunning, store.Status.AdminState.State)
 	assert.Equal(t, v1.DeploymentStateRunning, store.Status.WorkerState.State)
@@ -199,7 +201,7 @@ func TestReconcileStateInitializingWaitsForDeployments(t *testing.T) {
 	store.Status.State = v1.StateInitializing
 	m, _ := newTestManager(t)
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateInitializing, store.Status.State)
 }
@@ -230,7 +232,7 @@ func TestReconcileStateReadyStaysReadyWhileScaling(t *testing.T) {
 	})
 	m, _ := newTestManager(t, objs...)
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateReady, store.Status.State)
 	assert.Equal(t, v1.DeploymentStateScaling, store.Status.StorefrontState.State)
@@ -256,7 +258,7 @@ func TestReconcileStateReadyLeavesReadyOnStalledRollout(t *testing.T) {
 	})
 	m, _ := newTestManager(t, objs...)
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateInitializing, store.Status.State)
 	assert.Equal(t, v1.DeploymentStateError, store.Status.StorefrontState.State)
@@ -274,7 +276,7 @@ func TestReconcileStateInitializingWaitsWhileScaling(t *testing.T) {
 	})
 	m, _ := newTestManager(t, objs...)
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateInitializing, store.Status.State)
 }
@@ -290,7 +292,7 @@ func TestReconcileStateReadyDetectsImageChange(t *testing.T) {
 
 	m, _ := newTestManager(t, objs...)
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateMigration, store.Status.State)
 	assert.Equal(t, "shopware:6.6.0", store.Status.CurrentImageTag)
@@ -317,10 +319,9 @@ func TestReconcileStateMigrationFinishedWithDuration(t *testing.T) {
 
 	m, _ := newTestManager(t, migrationJob)
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateInitializing, store.Status.State)
-	assert.Equal(t, store.Spec.Container.Image, store.Status.CurrentImageTag)
 
 	var migrationCondition v1.StoreCondition
 	for _, con := range store.Status.Conditions {
@@ -789,7 +790,7 @@ func TestReconcileStateSetupJobFailed(t *testing.T) {
 	store.Status.State = v1.StateSetup
 	m, _ := newTestManager(t, failedJob(job.GetSetupJobName(*store)))
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateSetupError, store.Status.State)
 	con := store.Status.GetLastCondition()
@@ -803,7 +804,7 @@ func TestReconcileStateSetupErrorStaysWhileJobFailed(t *testing.T) {
 	store.Status.State = v1.StateSetupError
 	m, _ := newTestManager(t, failedJob(job.GetSetupJobName(*store)))
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateSetupError, store.Status.State)
 }
@@ -822,7 +823,7 @@ func TestReconcileStateSetupErrorRecoversWhenJobSucceeds(t *testing.T) {
 	}
 	m, _ := newTestManager(t, setupJob)
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateInitializing, store.Status.State)
 }
@@ -833,7 +834,7 @@ func TestReconcileStateMigrationJobFailed(t *testing.T) {
 	store.Status.CurrentImageTag = "shopware:6.6.0"
 	m, _ := newTestManager(t, failedJob(job.MigrationJob(*store).Name))
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateMigrationError, store.Status.State)
 	assert.Equal(t, "shopware:6.6.0", store.Status.CurrentImageTag, "image tag must not change on failed migration")
@@ -848,7 +849,7 @@ func TestReconcileStateMigrationJobPending(t *testing.T) {
 	store.Status.CurrentImageTag = "shopware:6.6.0"
 	m, _ := newTestManager(t)
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateMigration, store.Status.State)
 	assert.Equal(t, "shopware:6.6.0", store.Status.CurrentImageTag)
@@ -860,7 +861,7 @@ func TestReconcileStateReadyWithoutDeploymentsFallsBackToInitializing(t *testing
 	store.Status.CurrentImageTag = store.Spec.Container.Image
 	m, _ := newTestManager(t)
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateInitializing, store.Status.State)
 }
@@ -870,7 +871,7 @@ func TestReconcileStateUnknownStateIsUnchanged(t *testing.T) {
 	store.Status.State = v1.StatefulAppState("unknown")
 	m, _ := newTestManager(t)
 
-	m.ReconcileState(context.Background(), store)
+	require.Error(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StatefulAppState("unknown"), store.Status.State)
 	assert.Empty(t, store.Status.Conditions)
@@ -887,7 +888,7 @@ func TestReconcileStateOperatorDisabledServiceChecks(t *testing.T) {
 		DisableServiceChecks: true,
 	})
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateSetup, store.Status.State)
 }
@@ -896,7 +897,7 @@ func TestReconcileStateWaitFastlySecretMissing(t *testing.T) {
 	store := fastlyStore()
 	m, _ := newTestManager(t)
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateWait, store.Status.State)
 	con := lastWaitCondition(store)
@@ -911,7 +912,7 @@ func TestReconcileStateWaitFastlyTokenKeyMissing(t *testing.T) {
 		secretWithKey("fastly-token", "other"),
 	)
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateWait, store.Status.State)
 	assert.Contains(t, lastWaitCondition(store).Reason, "TokenKeyRef doesn't contain the specified key 'token'")
@@ -924,7 +925,7 @@ func TestReconcileStateWaitFastlySecretsPresent(t *testing.T) {
 		secretWithKey("fastly-token", "token"),
 	)
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateSetup, store.Status.State)
 }
@@ -933,7 +934,7 @@ func TestReconcileStateWaitOpensearchSecretMissing(t *testing.T) {
 	store := opensearchStore()
 	m, _ := newTestManager(t)
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateWait, store.Status.State)
 	assert.Equal(t, "OpensearchRef secret does not exist", lastWaitCondition(store).Reason)
@@ -943,7 +944,7 @@ func TestReconcileStateWaitOpensearchSecretKeyMissing(t *testing.T) {
 	store := opensearchStore()
 	m, _ := newTestManager(t, secretWithKey("opensearch", "other"))
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateWait, store.Status.State)
 	assert.Contains(t, lastWaitCondition(store).Reason, "SecretKeyRef doesn't contain the specified key 'password'")
@@ -953,7 +954,7 @@ func TestReconcileStateWaitOpensearchSecretPresent(t *testing.T) {
 	store := opensearchStore()
 	m, _ := newTestManager(t, secretWithKey("opensearch", "password"))
 
-	m.ReconcileState(context.Background(), store)
+	require.NoError(t, m.ReconcileState(context.Background(), store))
 
 	assert.Equal(t, v1.StateSetup, store.Status.State)
 }
@@ -1036,6 +1037,7 @@ func TestReconcileStatusWritesStatus(t *testing.T) {
 	store.Spec.DisableChecks = true
 	m, c := newStatusTestManager(t, store.DeepCopy())
 
+	require.NoError(t, m.ReconcileStatus(context.Background(), store, nil))
 	require.NoError(t, m.ReconcileStatus(context.Background(), store, nil))
 
 	stored := &v1.Store{}
