@@ -8,6 +8,7 @@ import (
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/pod"
+	"github.com/shopware/shopware-operator/internal/tracing"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -22,10 +23,14 @@ func (r *StoreDebugInstanceReconciler) reconcileCRStatus(
 	store *v1.Store,
 	storeDebugInstance *v1.StoreDebugInstance,
 	reconcileError error,
-) error {
+) (err error) {
 	if storeDebugInstance == nil || storeDebugInstance.DeletionTimestamp != nil {
 		return nil
 	}
+
+	ctx, span := tracing.Start(ctx, "StoreDebugInstance.ReconcileStatus", tracing.AttrState.String(string(storeDebugInstance.Status.State)))
+	defer tracing.End(span, &err)
+	previousState := storeDebugInstance.Status.State
 
 	if reconcileError != nil {
 		storeDebugInstance.Status.AddCondition(
@@ -63,6 +68,8 @@ func (r *StoreDebugInstanceReconciler) reconcileCRStatus(
 	}
 
 	logging.FromContext(ctx).Infow("Update store debug instance status", zap.Any("status", storeDebugInstance.Status))
+	tracing.RecordStateChange(ctx, string(previousState), string(storeDebugInstance.Status.State))
+	tracing.RecordStatusUpdate(ctx, string(storeDebugInstance.Status.State), storeDebugInstance.Status.GetLastCondition().Message)
 	return writeStoreDebugInstanceStatus(ctx, r.Client, types.NamespacedName{
 		Namespace: storeDebugInstance.Namespace,
 		Name:      storeDebugInstance.Name,

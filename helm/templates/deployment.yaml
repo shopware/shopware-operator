@@ -91,6 +91,37 @@ spec:
           value: "{{ .Values.keda.enabled | default "false" }}"
         - name: ENABLE_SERVICE_MONITOR
           value: "{{ and .Values.metrics.enabled .Values.metrics.serviceMonitor.enabled }}"
+        - name: ENABLE_TRACING
+          value: "{{ .Values.tracing.enabled | default "false" }}"
+        {{- if .Values.tracing.enabled }}
+        {{- if .Values.tracing.endpoint }}
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "{{ .Values.tracing.endpoint }}"
+        {{- end }}
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: "{{ .Values.tracing.protocol | default "http/protobuf" }}"
+        {{- with .Values.tracing.batch }}
+        {{- if .scheduleDelay }}
+        - name: OTEL_BSP_SCHEDULE_DELAY
+          value: "{{ .scheduleDelay }}"
+        {{- end }}
+        {{- if .exportTimeout }}
+        - name: OTEL_BSP_EXPORT_TIMEOUT
+          value: "{{ .exportTimeout }}"
+        {{- end }}
+        {{- if .maxQueueSize }}
+        - name: OTEL_BSP_MAX_QUEUE_SIZE
+          value: "{{ .maxQueueSize }}"
+        {{- end }}
+        {{- if .maxExportBatchSize }}
+        - name: OTEL_BSP_MAX_EXPORT_BATCH_SIZE
+          value: "{{ .maxExportBatchSize }}"
+        {{- end }}
+        {{- end }}
+        {{- with .Values.tracing.extraEnv }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- end }}
         - name: SUCCESSFUL_CR_CLEANUP_GRACE_PERIOD
           value: "{{ .Values.successfulCRCleanupGracePeriod | default "1h" }}"
         {{- if .Values.metrics.enabled }}

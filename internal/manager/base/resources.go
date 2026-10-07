@@ -15,6 +15,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/pdb"
 	"github.com/shopware/shopware-operator/internal/secret"
 	"github.com/shopware/shopware-operator/internal/service"
+	"github.com/shopware/shopware-operator/internal/tracing"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
@@ -22,7 +23,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-func (b *Base) EnsureAppSecrets(ctx context.Context, store *v1.Store) error {
+func (b *Base) EnsureAppSecrets(ctx context.Context, store *v1.Store) (err error) {
+	ctx, span := tracing.Start(ctx, "Base.EnsureAppSecrets", tracing.AttrState.String(string(store.Status.State)))
+	defer tracing.End(span, &err)
+
 	storeSecret, err := secret.EnsureStoreSecret(ctx, b.Client, b.Recorder, store)
 	if err != nil {
 		return fmt.Errorf("app secrets: %w", err)
@@ -36,6 +40,9 @@ func (b *Base) EnsureAppSecrets(ctx context.Context, store *v1.Store) error {
 }
 
 func (b *Base) ReconcileServices(ctx context.Context, store *v1.Store) (err error) {
+	ctx, span := tracing.Start(ctx, "Base.ReconcileServices", tracing.AttrState.String(string(store.Status.State)))
+	defer tracing.End(span, &err)
+
 	objs := []*corev1.Service{
 		service.StorefrontService(*store),
 		service.AdminService(*store),
@@ -63,6 +70,9 @@ func (b *Base) ReconcileServices(ctx context.Context, store *v1.Store) (err erro
 }
 
 func (b *Base) ReconcileIngress(ctx context.Context, store *v1.Store) (err error) {
+	ctx, span := tracing.Start(ctx, "Base.ReconcileIngress", tracing.AttrState.String(string(store.Status.State)))
+	defer tracing.End(span, &err)
+
 	if !store.Spec.Network.EnabledIngress {
 		if err := ingress.DeleteStoreIngress(ctx, b.Client, *store); err != nil {
 			return fmt.Errorf("delete ingress: %w", err)
@@ -91,6 +101,9 @@ func (b *Base) ReconcileIngress(ctx context.Context, store *v1.Store) (err error
 }
 
 func (b *Base) ReconcileHTTPRoute(ctx context.Context, store *v1.Store) (err error) {
+	ctx, span := tracing.Start(ctx, "Base.ReconcileHTTPRoute", tracing.AttrState.String(string(store.Status.State)))
+	defer tracing.End(span, &err)
+
 	if !store.Spec.Network.EnabledGateway {
 		if err := httproute.DeleteStoreHTTPRoute(ctx, b.Client, *store); err != nil {
 			return fmt.Errorf("delete httproute: %w", err)
@@ -119,6 +132,9 @@ func (b *Base) ReconcileHTTPRoute(ctx context.Context, store *v1.Store) (err err
 }
 
 func (b *Base) ReconcilePDB(ctx context.Context, store *v1.Store) (err error) {
+	ctx, span := tracing.Start(ctx, "Base.ReconcilePDB", tracing.AttrState.String(string(store.Status.State)))
+	defer tracing.End(span, &err)
+
 	var changed bool
 
 	objs := []*policy.PodDisruptionBudget{
@@ -147,6 +163,9 @@ func (b *Base) ReconcilePDB(ctx context.Context, store *v1.Store) (err error) {
 }
 
 func (b *Base) ReconcileDeployment(ctx context.Context, store *v1.Store) (err error) {
+	ctx, span := tracing.Start(ctx, "Base.ReconcileDeployment", tracing.AttrState.String(string(store.Status.State)))
+	defer tracing.End(span, &err)
+
 	var changed bool
 
 	workers, err := deployment.WorkerDeployments(*store)
@@ -186,6 +205,9 @@ func (b *Base) ReconcileDeployment(ctx context.Context, store *v1.Store) (err er
 }
 
 func (b *Base) ReconcileScaledObjects(ctx context.Context, store *v1.Store) (err error) {
+	ctx, span := tracing.Start(ctx, "Base.ReconcileScaledObjects", tracing.AttrState.String(string(store.Status.State)))
+	defer tracing.End(span, &err)
+
 	// Skip Keda (cleanup/creation) if operator has disabled it
 	if !b.EnableKeda {
 		return nil
@@ -233,6 +255,9 @@ func (b *Base) ReconcileScaledObjects(ctx context.Context, store *v1.Store) (err
 }
 
 func (b *Base) ReconcileHorizontalPodAutoscaler(ctx context.Context, store *v1.Store) (err error) {
+	ctx, span := tracing.Start(ctx, "Base.ReconcileHorizontalPodAutoscaler", tracing.AttrState.String(string(store.Status.State)))
+	defer tracing.End(span, &err)
+
 	if !store.Spec.HorizontalPodAutoscaler.Enabled {
 		return nil
 	}
@@ -258,6 +283,9 @@ func (b *Base) ReconcileHorizontalPodAutoscaler(ctx context.Context, store *v1.S
 }
 
 func (b *Base) ReconcileSetupJob(ctx context.Context, store *v1.Store) (err error) {
+	ctx, span := tracing.Start(ctx, "Base.ReconcileSetupJob", tracing.AttrState.String(string(store.Status.State)))
+	defer tracing.End(span, &err)
+
 	var changed bool
 	obj := job.SetupJob(*store)
 
@@ -279,6 +307,9 @@ func (b *Base) ReconcileSetupJob(ctx context.Context, store *v1.Store) (err erro
 }
 
 func (b *Base) ReconcileMigrationJob(ctx context.Context, store *v1.Store) (err error) {
+	ctx, span := tracing.Start(ctx, "Base.ReconcileMigrationJob", tracing.AttrState.String(string(store.Status.State)))
+	defer tracing.End(span, &err)
+
 	var changed bool
 	obj := job.MigrationJob(*store)
 
@@ -300,6 +331,9 @@ func (b *Base) ReconcileMigrationJob(ctx context.Context, store *v1.Store) (err 
 }
 
 func (b *Base) ReconcileScheduledTask(ctx context.Context, store *v1.Store) (err error) {
+	ctx, span := tracing.Start(ctx, "Base.ReconcileScheduledTask", tracing.AttrState.String(string(store.Status.State)))
+	defer tracing.End(span, &err)
+
 	var changed bool
 	obj := cronjob.ScheduledTaskJob(*store)
 

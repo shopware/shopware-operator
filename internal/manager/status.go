@@ -13,6 +13,8 @@ import (
 	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/manager/base"
 	"github.com/shopware/shopware-operator/internal/metrics"
+	"github.com/shopware/shopware-operator/internal/tracing"
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,12 +26,16 @@ func (m *StoreStateManager) ReconcileStatus(
 	ctx context.Context,
 	store *v1.Store,
 	reconcileError error,
-) error {
+) (err error) {
 	if store == nil || store.DeletionTimestamp != nil {
 		return nil
 	}
 
-	err := m.ReconcileState(ctx, store)
+	ctx, span := tracing.Start(ctx, "StoreStateManager.ReconcileStatus",
+		tracing.AttrState.String(string(store.Status.State)))
+	defer tracing.End(span, &err)
+
+	err = m.ReconcileState(ctx, store)
 	if err != nil {
 		store.Status.AddCondition(
 			v1.StoreCondition{
@@ -64,6 +70,12 @@ func (m *StoreStateManager) ReconcileStatus(
 	store.Status.StorefrontState = deployment.GetStorefrontDeploymentCondition(ctx, *store, m.Client)
 
 	logging.FromContext(ctx).Infow("Update store status", zap.Any("status", store.Status))
+	tracing.RecordStatusUpdate(ctx, string(store.Status.State), store.Status.Message,
+		attribute.String("shopware.status.admin_state", string(store.Status.AdminState.State)),
+		attribute.String("shopware.status.worker_state", string(store.Status.WorkerState.State)),
+		attribute.String("shopware.status.storefront_state", string(store.Status.StorefrontState.State)),
+		attribute.String("shopware.status.current_image", store.Status.CurrentImageTag),
+	)
 	m.sendEvent(ctx, *store, "Update store status")
 	metrics.UpdateStoreMetrics(store)
 
@@ -99,6 +111,7 @@ func (m *StoreStateManager) sendEvent(ctx context.Context, store v1.Store, messa
 		DeployedImage: store.Status.CurrentImageTag,
 		Labels:        store.Labels,
 		KindType:      reflect.TypeOf(store).String(),
+		TraceID:       tracing.TraceID(ctx),
 	}
 	log := logging.FromContext(ctx).With(
 		zap.Any("event", e),
@@ -117,7 +130,11 @@ func (m *StoreStateManager) writeStoreStatus(
 	ctx context.Context,
 	nn types.NamespacedName,
 	status v1.StoreStatus,
-) error {
+) (err error) {
+	ctx, span := tracing.Start(ctx, "StoreStateManager.writeStoreStatus",
+		tracing.AttrState.String(string(status.State)))
+	defer tracing.End(span, &err)
+
 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		cr := &v1.Store{}
 		if err := m.Get(ctx, nn, cr); err != nil {

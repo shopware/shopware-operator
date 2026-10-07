@@ -47,3 +47,10 @@ func (s *StoreExecStatus) AddCondition(c ExecCondition) {
 func (s *StoreExec) IsState(states ...StatefulState) bool {
 	return slices.Contains(states, s.Status.State)
 }
+
+func (s *StoreExecStatus) GetLastCondition() ExecCondition {
+	if len(s.Conditions) == 0 {
+		return ExecCondition{}
+	}
+	return s.Conditions[len(s.Conditions)-1]
+}

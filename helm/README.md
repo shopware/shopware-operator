@@ -150,6 +150,37 @@ kubectl get certificate -n my-namespace
 > every create and update of a `Store` is rejected. The operator also exits on startup if the webhook is
 > enabled and the cert-manager CRDs are not installed.
 
+## Tracing
+
+The operator can export OpenTelemetry traces via OTLP. Every reconcile of a `Store`, `StoreExec`,
+`StoreDebugInstance` and `StoreSnapshot*` creates a root span. For stores, the state manager steps
+(state handler, resource handler, ingress, deployments, jobs, status write, ...) are child spans.
+State transitions are recorded as `state changed` span events and every status write as a
+`status updated` span event. Requests to the Kubernetes API made during a reconcile show up as
+`k8s <METHOD> <path>` child spans. Logs written during a reconcile carry the trace and span id.
+
+```yaml
+tracing:
+  enabled: true
+  endpoint: http://otel-collector.monitoring:4318
+  protocol: http/protobuf
+  extraEnv:
+    - name: OTEL_TRACES_SAMPLER
+      value: parentbased_traceidratio
+    - name: OTEL_TRACES_SAMPLER_ARG
+      value: "0.25"
+```
+
+Published events (e.g. NATS) contain the `traceId` of the reconcile that sent them. When
+the NATS server supports headers, the W3C `traceparent` header is set as well, so consumers can continue
+the trace.
+
+The batch span processor can be tuned with `tracing.batch.scheduleDelay`, `tracing.batch.exportTimeout`,
+`tracing.batch.maxQueueSize` and `tracing.batch.maxExportBatchSize`. Empty values keep the SDK defaults.
+
+All standard `OTEL_*` environment variables (`OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`,
+`OTEL_EXPORTER_OTLP_HEADERS`, ...) are respected.
+
 ## Worker autoscaling with KEDA
 
 The operator can scale the Shopware message queue workers based on the queue length using
