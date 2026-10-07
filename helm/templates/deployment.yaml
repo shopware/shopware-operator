@@ -80,6 +80,10 @@ spec:
           value: "{{ .Values.logFormat | default "json" }}"
         - name: DISABLE_CHECKS
           value: "{{ .Values.disableChecks | default "false" }}"
+        {{- if and .Values.resources .Values.resources.limits .Values.resources.limits.memory }}
+        - name: GOMEMLIMIT
+          value: "{{ include "shopware-operator.goMemLimit" .Values.resources.limits.memory }}"
+        {{- end }}
         - name: ENABLE_WEBHOOK
           value: "{{ .Values.webhook.enabled }}"
         {{- if .Values.keda.enabled }}
