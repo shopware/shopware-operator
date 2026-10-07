@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/shopware/shopware-operator/internal/logging"
+	"github.com/shopware/shopware-operator/internal/tracing"
 	"go.uber.org/zap"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -53,10 +54,14 @@ type StoreDebugInstanceReconciler struct {
 // +kubebuilder:rbac:groups="",namespace=default,resources=services,verbs=get;list;watch;create;delete;
 
 func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (rr ctrl.Result, err error) {
+	ctx, span := tracing.StartReconcile(ctx, "StoreDebugInstance", req)
+	defer func() { tracing.EndReconcile(span, rr, &err) }()
+
 	log := r.Logger.
 		With(zap.String("namespace", req.Namespace)).
 		With(zap.String("name", req.Name))
 	ctx = logging.WithLogger(ctx, log)
+	log = logging.FromContext(ctx)
 
 	var store *shopv1.Store
 	var storeDebugInstance *shopv1.StoreDebugInstance
@@ -68,6 +73,7 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 		if err := r.reconcileCRStatus(ctx, store, storeDebugInstance, err); err != nil {
 			log.Errorw("failed to update status", zap.Error(err))
+			tracing.RecordError(span, err)
 		}
 	}()
 
@@ -77,11 +83,13 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return rr, nil
 		}
 		log.Errorw("get CR store debug instance", zap.Error(err))
+		tracing.RecordError(span, err)
 	}
 
 	if result, deleted, cleanupErr := r.deleteSuccessfulStoreDebugInstanceIfCleanupDue(ctx, storeDebugInstance); deleted || cleanupErr != nil {
 		if cleanupErr != nil {
 			log.Errorw("failed to cleanup successful store debug instance", zap.Error(cleanupErr))
+			tracing.RecordError(span, cleanupErr)
 			skipStatusUpdate = true
 			return rr, nil
 		}
@@ -99,6 +107,7 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return rr, nil
 		}
 		log.Errorw("get CR store", zap.Error(err))
+		tracing.RecordError(span, err)
 		return rr, nil
 	}
 
@@ -106,18 +115,21 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 		pod := pod.DebugPod(*store, *storeDebugInstance)
 		if err := r.Delete(ctx, pod); err != nil && !k8serrors.IsNotFound(err) {
 			log.Errorw("failed to delete pod", zap.Error(err))
+			tracing.RecordError(span, err)
 			return rr, nil
 		}
 
 		svc := service.DebugService(*store, *storeDebugInstance)
 		if err := r.Delete(ctx, svc); err != nil && !k8serrors.IsNotFound(err) {
 			log.Errorw("failed to delete service", zap.Error(err))
+			tracing.RecordError(span, err)
 			return rr, nil
 		}
 
 		if result, handled, cleanupErr := r.reconcileSuccessfulStoreDebugInstanceCleanup(ctx, storeDebugInstance); handled || cleanupErr != nil {
 			if cleanupErr != nil {
 				log.Errorw("failed to cleanup successful store debug instance", zap.Error(cleanupErr))
+				tracing.RecordError(span, cleanupErr)
 				return rr, nil
 			}
 			skipStatusUpdate = true
@@ -152,11 +164,13 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	if err := r.reconcilePod(ctx, store, storeDebugInstance); err != nil {
 		log.Errorw("exec error", zap.Error(err))
+		tracing.RecordError(span, err)
 		return rr, nil
 	}
 
 	if err := r.reconcileService(ctx, store, storeDebugInstance); err != nil {
 		log.Errorw("failed to reconcile service", zap.Error(err))
+		tracing.RecordError(span, err)
 		return rr, nil
 	}
 

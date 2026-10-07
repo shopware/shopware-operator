@@ -16,7 +16,8 @@ type Event struct {
 	// Current Running image tag
 	DeployedImage string `json:"deployedImage"`
 	// Labels of the store custom resource
-	Labels map[string]string `json:"storeLabels"`
+	Labels  map[string]string `json:"storeLabels"`
+	TraceID string            `json:"traceId,omitempty"`
 }
 
 type EventHandler interface {

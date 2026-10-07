@@ -10,6 +10,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/job"
 	"github.com/shopware/shopware-operator/internal/k8s"
 	"github.com/shopware/shopware-operator/internal/logging"
+	"github.com/shopware/shopware-operator/internal/tracing"
 	"go.uber.org/zap"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -35,10 +36,14 @@ type StoreExecReconciler struct {
 // +kubebuilder:rbac:groups="batch",namespace=default,resources=jobs,verbs=get;list;watch;create;delete
 
 func (r *StoreExecReconciler) Reconcile(ctx context.Context, req ctrl.Request) (rr ctrl.Result, err error) {
+	ctx, span := tracing.StartReconcile(ctx, "StoreExec", req)
+	defer func() { tracing.EndReconcile(span, rr, &err) }()
+
 	log := r.Logger.
 		With(zap.String("namespace", req.Namespace)).
 		With(zap.String("name", req.Name))
 	ctx = logging.WithLogger(ctx, log)
+	log = logging.FromContext(ctx)
 
 	rr = ctrl.Result{RequeueAfter: 10 * time.Second}
 
@@ -51,6 +56,7 @@ func (r *StoreExecReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		if err := r.reconcileCRStatus(ctx, store, ex, err); err != nil {
 			log.Errorw("failed to update status", zap.Error(err))
+			tracing.RecordError(span, err)
 		}
 	}()
 
@@ -60,12 +66,14 @@ func (r *StoreExecReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return rr, nil
 		}
 		log.Errorw("get CR exec", zap.Error(err))
+		tracing.RecordError(span, err)
 		return rr, nil
 	}
 
 	if result, handled, cleanupErr := r.reconcileStoreExecCleanup(ctx, ex); handled || cleanupErr != nil {
 		if cleanupErr != nil {
 			log.Errorw("failed to cleanup finished store-exec", zap.Error(cleanupErr))
+			tracing.RecordError(span, cleanupErr)
 			skipStatusUpdate = true
 			return rr, nil
 		}
@@ -83,6 +91,7 @@ func (r *StoreExecReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return rr, nil
 		}
 		log.Errorw("get CR store", zap.Error(err))
+		tracing.RecordError(span, err)
 		return rr, nil
 	}
 
@@ -102,6 +111,7 @@ func (r *StoreExecReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if ex.Spec.CronSchedule != "" {
 		if err := r.reconcileCronJob(ctx, store, ex); err != nil {
 			log.Errorw("exec error", zap.Error(err))
+			tracing.RecordError(span, err)
 			return rr, nil
 		}
 	} else {
@@ -110,6 +120,7 @@ func (r *StoreExecReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		if err := r.reconcileJob(ctx, store, ex); err != nil {
 			log.Errorw("exec error", zap.Error(err))
+			tracing.RecordError(span, err)
 			return rr, nil
 		}
 	}
