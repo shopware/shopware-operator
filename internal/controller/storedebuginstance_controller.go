@@ -233,7 +233,8 @@ func (r *StoreDebugInstanceReconciler) isStoreDebugInstanceCleanupEligible(
 ) bool {
 	return storeDebugInstance.Spec.Duration.Duration > 0 &&
 		storeDebugInstance.DeletionTimestamp == nil &&
-		storeDebugInstance.IsState(shopv1.StoreDebugInstanceStateDone)
+		(storeDebugInstance.IsState(shopv1.StoreDebugInstanceStateDone) ||
+			storeDebugInstance.IsState(shopv1.StoreDebugInstanceStateError))
 }
 
 func (r *StoreDebugInstanceReconciler) storeDebugInstanceCleanupRemaining(
