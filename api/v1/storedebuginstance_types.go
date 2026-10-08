@@ -29,9 +29,12 @@ type StoreDebugInstanceSpec struct {
 	// StoreRef is the reference to the store to debug
 	StoreRef string `json:"storeRef,omitempty"`
 	// Duration is the duration of the debug instance after which it will be deleted
-	// e.g. 1h or 30m
+	// e.g. 1h or 30m. Zero keeps the instance until it is deleted manually.
+	// The pattern is enforced by the API server: a value the Go duration parser
+	// rejects would otherwise break the informer for every StoreDebugInstance.
 	// +default="1h"
-	Duration string `json:"duration,omitempty"`
+	// +kubebuilder:validation:XValidation:rule="self.matches('^(0|([0-9]+([.][0-9]+)?(ns|us|ms|s|m|h))+)$')",message="must be a valid duration, e.g. 30s, 5m or 1h"
+	Duration metav1.Duration `json:"duration,omitempty"`
 	// ExtraLabels is the extra labels to add to the debug instance
 	ExtraLabels map[string]string `json:"extraLabels,omitempty"`
 	// ExtraContainerPorts is the extra ports to add to the debug instance

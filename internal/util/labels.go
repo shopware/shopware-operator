@@ -3,7 +3,6 @@ package util
 import (
 	"fmt"
 	"maps"
-	"time"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 )
@@ -52,9 +51,7 @@ func GetDefaultStoreSnapshotLabels(store v1.Store, overwrite map[string]string, 
 func GetDefaultStoreInstanceDebugLabels(store v1.Store, storeDebugInstance v1.StoreDebugInstance) map[string]string {
 	labels := GetDefaultContainerStoreLabels(store, storeDebugInstance.Spec.ExtraLabels)
 
-	// we don't need to check for errors here, because the duration is validated in the controller
-	duration, _ := time.ParseDuration(storeDebugInstance.Spec.Duration)
-	validUntil := storeDebugInstance.CreationTimestamp.Add(duration)
+	validUntil := storeDebugInstance.CreationTimestamp.Add(storeDebugInstance.Spec.Duration.Duration)
 
 	labels[ShopwareKey("store.debug")] = "true"
 	labels[ShopwareKey("store.debug.instance")] = storeDebugInstance.Name

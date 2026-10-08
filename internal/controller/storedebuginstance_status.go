@@ -99,8 +99,8 @@ func (r *StoreDebugInstanceReconciler) stateRunning(ctx context.Context, store *
 		storeDebugInstance.Status.AddCondition(con)
 	}()
 
-	duration, _ := time.ParseDuration(storeDebugInstance.Spec.Duration)
-	if time.Now().After(storeDebugInstance.CreationTimestamp.Add(duration)) {
+	duration := storeDebugInstance.Spec.Duration.Duration
+	if duration > 0 && time.Now().After(storeDebugInstance.CreationTimestamp.Add(duration)) {
 		con.Message = "Store debug instance expired"
 		con.Status = string(v1.StoreDebugInstanceStateDone)
 		return v1.StoreDebugInstanceStateDone
