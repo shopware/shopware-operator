@@ -17,7 +17,7 @@ const (
 	startServersRatio    = 0.25
 	minSpareServersRatio = 0.2
 	maxSpareServersRatio = 0.375
-	memoryPerChildMiB    = 80 //Every PHP-FPM process in an empty shop uses 70.6MiB
+	memoryPerChildMiB    = 80 // Every PHP-FPM process in an empty shop uses 70.6MiB
 )
 
 func progressDeadlineExceeded(deployment *appsv1.Deployment) bool {
@@ -28,6 +28,18 @@ func progressDeadlineExceeded(deployment *appsv1.Deployment) bool {
 		}
 	}
 	return false
+}
+
+func getCaddyGracefulShutdownLifecycleHook(preStopDelaySeconds int64) *corev1.Lifecycle {
+	return &corev1.Lifecycle{
+		PreStop: &corev1.LifecycleHandler{
+			Exec: &corev1.ExecAction{
+				Command: []string{
+					"/bin/sh", "-c", fmt.Sprintf("/bin/sleep %d; pkill -TERM caddy", preStopDelaySeconds),
+				},
+			},
+		},
+	}
 }
 
 func getDeploymentCondition(

@@ -60,6 +60,7 @@ type StoreSpec struct {
 	// +kubebuilder:default={}
 	MigrationJobContainer ContainerMergeSpec `json:"migrationJobContainer,omitempty"`
 
+	// +kubebuilder:default={"enabledIngress":false,"enabledGateway":false}
 	Network                 NetworkSpec   `json:"network,omitempty"`
 	S3Storage               S3Storage     `json:"s3Storage,omitempty"`
 	CDNURL                  string        `json:"cdnURL"`
@@ -249,6 +250,16 @@ type NetworkSpec struct {
 
 	// +kubebuilder:default=store-tls
 	TLSSecretName string `json:"tlsSecretName,omitempty"`
+
+	// PreStopDelaySeconds is how long storefront and admin pods keep serving
+	// requests after termination starts, before Caddy is stopped. Ingress
+	// controllers and load balancers need time to remove a terminating pod from
+	// their backends; stopping Caddy earlier causes 502s and connect timeouts
+	// during rolling updates. Increase it for slow load balancers (e.g. cloud
+	// LBs). Must be lower than terminationGracePeriodSeconds.
+	// +kubebuilder:default=15
+	// +kubebuilder:validation:Minimum=1
+	PreStopDelaySeconds int64 `json:"preStopDelaySeconds,omitempty"`
 }
 
 type ContainerSpec struct {
