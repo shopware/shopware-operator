@@ -122,6 +122,8 @@ type StoreSpec struct {
 	// +kubebuilder:default={timeZone: "Etc/UTC", schedule: "0 * * * *", command: "bin/console scheduled-task:run -v -n --no-wait"}
 	ScheduledTask ScheduledTaskSpec `json:"scheduledTask,omitempty"`
 
+	// +kubebuilder:validation:MaxProperties=64
+	// +kubebuilder:validation:XValidation:rule="self.all(k, size(self[k]) <= 63)",message="label values must be no more than 63 characters"
 	ScheduledTaskLabels map[string]string `json:"scheduledTaskLabels,omitempty"`
 }
 
@@ -236,17 +238,23 @@ type NetworkSpec struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
 	// +kubebuilder:description="Only for Ingress, but use ingressLabels to set labels"
 	// +kubebuilder:validation:deprecatedversion
+	// +kubebuilder:validation:MaxProperties=64
+	// +kubebuilder:validation:XValidation:rule="self.all(k, size(self[k]) <= 63)",message="label values must be no more than 63 characters"
 	Labels map[string]string `json:"labels,omitempty"`
 
 	IngressClassName   string            `json:"ingressClassName,omitempty"`
 	IngressAnnotations map[string]string `json:"ingressAnnotations,omitempty"`
-	IngressLabels      map[string]string `json:"ingressLabels,omitempty"`
+	// +kubebuilder:validation:MaxProperties=64
+	// +kubebuilder:validation:XValidation:rule="self.all(k, size(self[k]) <= 63)",message="label values must be no more than 63 characters"
+	IngressLabels map[string]string `json:"ingressLabels,omitempty"`
 
 	GatewayName        string            `json:"gatewayName,omitempty"`
 	GatewayNamespace   string            `json:"gatewayNamespace,omitempty"`
 	GatewaySectionName string            `json:"gatewaySectionName,omitempty"`
 	GatewayAnnotations map[string]string `json:"gatewayAnnotations,omitempty"`
-	GatewayLabels      map[string]string `json:"gatewayLabels,omitempty"`
+	// +kubebuilder:validation:MaxProperties=64
+	// +kubebuilder:validation:XValidation:rule="self.all(k, size(self[k]) <= 63)",message="label values must be no more than 63 characters"
+	GatewayLabels map[string]string `json:"gatewayLabels,omitempty"`
 
 	// +kubebuilder:default=store-tls
 	TLSSecretName string `json:"tlsSecretName,omitempty"`
@@ -294,7 +302,9 @@ type ContainerSpec struct {
 	// ReadinessProbe corev1.Probe `json:"readinessProbe,omitempty"`
 	// LivenessProbe  corev1.Probe `json:"livenessProbe,omitempty"`
 
-	Annotations               map[string]string                 `json:"annotations,omitempty"`
+	Annotations map[string]string `json:"annotations,omitempty"`
+	// +kubebuilder:validation:MaxProperties=64
+	// +kubebuilder:validation:XValidation:rule="self.all(k, size(self[k]) <= 63)",message="label values must be no more than 63 characters"
 	Labels                    map[string]string                 `json:"labels,omitempty"`
 	NodeSelector              map[string]string                 `json:"nodeSelector,omitempty"`
 	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
