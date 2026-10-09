@@ -50,6 +50,34 @@ func TestStorefrontDeployment(t *testing.T) {
 		assert.Equal(t, "added", result.Annotations["storefront.only"], "Storefront-only annotation should be added")
 	})
 
+	t.Run("test pre stop delay and termination grace period", func(t *testing.T) {
+		store := v1.Store{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-store",
+				Namespace: "test",
+			},
+			Spec: v1.StoreSpec{
+				Container: v1.ContainerSpec{
+					Image:                         "shopware:latest",
+					TerminationGracePeriodSeconds: 30,
+				},
+				StorefrontDeploymentContainer: v1.ContainerMergeSpec{
+					TerminationGracePeriodSeconds: 60,
+				},
+				Network: v1.NetworkSpec{
+					PreStopDelaySeconds: 40,
+				},
+				SecretName: "store-secret",
+			},
+		}
+
+		result := deployment.StorefrontDeployment(store)
+
+		assert.Equal(t, int64(60), *result.Spec.Template.Spec.TerminationGracePeriodSeconds)
+		container := result.Spec.Template.Spec.Containers[len(result.Spec.Template.Spec.Containers)-1]
+		assert.Equal(t, []string{"/bin/sh", "-c", "/bin/sleep 40; pkill -TERM caddy"}, container.Lifecycle.PreStop.Exec.Command)
+	})
+
 	t.Run("test container merge spec", func(t *testing.T) {
 		store := v1.Store{
 			ObjectMeta: metav1.ObjectMeta{

@@ -89,6 +89,7 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 	}
 
 	containers := append(util.DefaultContainerSecurityContexts(containerSpec.ExtraContainers), corev1.Container{
+		Lifecycle: getCaddyGracefulShutdownLifecycleHook(store.Spec.Network.PreStopDelaySeconds),
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
@@ -166,15 +167,16 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
-					Volumes:                   containerSpec.Volumes,
-					TopologySpreadConstraints: containerSpec.TopologySpreadConstraints,
-					NodeSelector:              containerSpec.NodeSelector,
-					ImagePullSecrets:          containerSpec.ImagePullSecrets,
-					EnableServiceLinks:        containerSpec.EnableServiceLinks,
-					RestartPolicy:             containerSpec.RestartPolicy,
-					Containers:                containers,
-					SecurityContext:           util.DefaultPodSecurityContext(containerSpec.SecurityContext),
-					InitContainers:            util.DefaultContainerSecurityContexts(containerSpec.InitContainers),
+					Volumes:                       containerSpec.Volumes,
+					TopologySpreadConstraints:     containerSpec.TopologySpreadConstraints,
+					NodeSelector:                  containerSpec.NodeSelector,
+					ImagePullSecrets:              containerSpec.ImagePullSecrets,
+					EnableServiceLinks:            containerSpec.EnableServiceLinks,
+					RestartPolicy:                 containerSpec.RestartPolicy,
+					TerminationGracePeriodSeconds: &containerSpec.TerminationGracePeriodSeconds,
+					Containers:                    containers,
+					SecurityContext:               util.DefaultPodSecurityContext(containerSpec.SecurityContext),
+					InitContainers:                util.DefaultContainerSecurityContexts(containerSpec.InitContainers),
 				},
 			},
 		},
