@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.11.0](https://github.com/shopware/shopware-operator/compare/1.10.0...v1.11.0) (2026-10-09)
+
+
+### Features
+
+* add lifecycle for gracefull shutdown ([ec03012](https://github.com/shopware/shopware-operator/commit/ec0301201c8ddea94582d940e40772402b66feb3))
+* make cleanup of StoreExecs configurable in CR ([ffb863d](https://github.com/shopware/shopware-operator/commit/ffb863df3194b990e2ebdbecad504d7070cfaffc))
+* make StoreExec and StoreDebugInstance cleanup configurable per CR ([0be3597](https://github.com/shopware/shopware-operator/commit/0be35973f3f2340487b372ee899cd25d7effdf03))
+* remove CleanupGracePeriod and streamline behaviour of StoreDebugInstance with StoreExecs ([e6fa02e](https://github.com/shopware/shopware-operator/commit/e6fa02e1b337f7c87715e934a5f0b49ac32ee7d0))
+
+
+### Bug Fixes
+
+* add debug instances in error state to cleanup cycle ([a314be6](https://github.com/shopware/shopware-operator/commit/a314be66cf76c2d9a73f300328a4578497ba64dc))
+* add duration validation to prevent nonsense ([a203ad0](https://github.com/shopware/shopware-operator/commit/a203ad00dd12a21376b99018603e722339d5abc0))
+* long reconcile after migration ([0400c12](https://github.com/shopware/shopware-operator/commit/0400c1289ccef9904064971bd01eddf9f8c51663))
+* Review comments ([4d0f90d](https://github.com/shopware/shopware-operator/commit/4d0f90d8ad1f45b50b99dfae94060450508c16c9))
+
 ## [1.10.0](https://github.com/shopware/shopware-operator/compare/1.9.0...v1.10.0) (2026-10-07)
 
 
