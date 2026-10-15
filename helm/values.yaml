@@ -71,7 +71,7 @@ serviceAccount:
 # These are the defaults of the operator SDK. Feel free to adjust to your needs.
 resources:
   limits:
-    cpu: 500m
+    cpu: 100m
     memory: 128Mi
   requests:
     cpu: 10m
