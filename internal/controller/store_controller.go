@@ -175,7 +175,7 @@ func (r *StoreReconciler) findStoreForReconcile(
 //+kubebuilder:rbac:groups="batch",namespace=default,resources=jobs,verbs=get;list;watch;create;delete
 //+kubebuilder:rbac:groups="networking.k8s.io",namespace=default,resources=ingresses,verbs=get;list;watch;create;patch;delete
 //+kubebuilder:rbac:groups="gateway.networking.k8s.io",namespace=default,resources=httproutes,verbs=get;list;watch;create;patch;delete
-//+kubebuilder:rbac:groups="policy",namespace=default,resources=poddisruptionbudgets,verbs=get;list;watch;create;patch
+//+kubebuilder:rbac:groups="policy",namespace=default,resources=poddisruptionbudgets,verbs=get;list;watch;create;patch;delete
 //+kubebuilder:rbac:groups="batch",namespace=default,resources=cronjobs,verbs=get;patch;list;watch;create;delete
 //+kubebuilder:rbac:groups="keda.sh",namespace=default,resources=scaledobjects,verbs=get;list;watch;create;patch;delete
 

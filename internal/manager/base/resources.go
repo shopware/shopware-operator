@@ -20,6 +20,7 @@ import (
 	policy "k8s.io/api/policy/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func (b *Base) EnsureAppSecrets(ctx context.Context, store *v1.Store) error {
@@ -124,7 +125,14 @@ func (b *Base) ReconcilePDB(ctx context.Context, store *v1.Store) (err error) {
 	objs := []*policy.PodDisruptionBudget{
 		pdb.AdminPDB(*store),
 		pdb.StorefrontPDB(*store),
-		pdb.WorkerPDB(*store),
+	}
+
+	if store.Spec.Worker.EnableKedaScaling {
+		if err := client.IgnoreNotFound(b.Delete(ctx, pdb.WorkerPDB(*store))); err != nil {
+			return fmt.Errorf("cleanup worker pdb: %w", err)
+		}
+	} else {
+		objs = append(objs, pdb.WorkerPDB(*store))
 	}
 
 	for _, obj := range objs {

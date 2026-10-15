@@ -13,6 +13,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/manager"
 	"github.com/shopware/shopware-operator/internal/manager/base"
+	"github.com/shopware/shopware-operator/internal/pdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
@@ -555,6 +556,64 @@ func TestReconcileResourcesCreatesScaledObjectsWhenKedaEnabled(t *testing.T) {
 	list := &kedav1alpha1.ScaledObjectList{}
 	require.NoError(t, c.List(context.Background(), list, client.InNamespace("test")))
 	assert.Len(t, list.Items, 2)
+}
+
+func TestReconcileResourcesRemovesWorkerPDBWhenKedaEnabled(t *testing.T) {
+	store := testStore()
+	store.Status.State = v1.StateReady
+	store.Status.CurrentImageTag = store.Spec.Container.Image
+	store.Spec.Worker.EnableKedaScaling = true
+
+	scheme := testScheme(t)
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(dbSecret(), pdb.WorkerPDB(*store)).
+		Build()
+	m := manager.NewStoreStateManager(&base.Base{
+		Client:             c,
+		Scheme:             scheme,
+		Recorder:           record.NewFakeRecorder(100),
+		EnableKeda:         true,
+		OperatorMetricsURL: "http://shopware-operator.operator.svc.cluster.local:8080",
+	})
+
+	require.NoError(t, m.ReconcileResources(context.Background(), store))
+
+	pdbs := &policy.PodDisruptionBudgetList{}
+	require.NoError(t, c.List(context.Background(), pdbs, client.InNamespace("test")))
+	names := make([]string, 0, len(pdbs.Items))
+	for _, p := range pdbs.Items {
+		names = append(names, p.Name)
+	}
+	assert.ElementsMatch(t, []string{
+		pdb.GetAdminPDBName(*store),
+		pdb.GetStorefrontPDBName(*store),
+	}, names)
+}
+
+func TestReconcileResourcesKeepsWorkerPDBWhenStoreKedaScalingDisabled(t *testing.T) {
+	store := testStore()
+	store.Status.State = v1.StateReady
+	store.Status.CurrentImageTag = store.Spec.Container.Image
+
+	scheme := testScheme(t)
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(dbSecret()).
+		Build()
+	m := manager.NewStoreStateManager(&base.Base{
+		Client:             c,
+		Scheme:             scheme,
+		Recorder:           record.NewFakeRecorder(100),
+		EnableKeda:         true,
+		OperatorMetricsURL: "http://shopware-operator.operator.svc.cluster.local:8080",
+	})
+
+	require.NoError(t, m.ReconcileResources(context.Background(), store))
+
+	workerPDB := &policy.PodDisruptionBudget{}
+	require.NoError(t, c.Get(context.Background(),
+		types.NamespacedName{Namespace: "test", Name: pdb.GetWorkerPDBName(*store)}, workerPDB))
 }
 
 func TestReconcileResourcesNoScaledObjectsWhenKedaDisabled(t *testing.T) {
