@@ -59,6 +59,43 @@ func TestParseMessengerStats(t *testing.T) {
 			expectedUncountable: []string{"webhook", "scheduler_shopware"},
 		},
 		{
+			name: "json log lines on stdout before the stats document",
+			input: `{"message":"User Deprecated: bundle missing","context":{},"level":200,"level_name":"INFO","channel":"php","extra":{}}
+{"message":"User Deprecated: bundle missing","context":{},"level":200,"level_name":"INFO","channel":"php","extra":{}}
+{
+    "transports": {
+        "failed": {"count": 0},
+        "async": {"count": 2396}
+    },
+    "uncountable_transports": ["scheduler_shopware"]
+}`,
+			expected: []v1.QueueTransportStats{
+				{Name: "async", Count: 2396},
+				{Name: "failed", Count: 0},
+			},
+			expectedUncountable: []string{"scheduler_shopware"},
+		},
+		{
+			name: "plain text garbage before and after the stats document",
+			input: `PHP Warning: something {odd} happened
+{"message":"log record","context":{},"level":200}
+{"transports":{"async":{"count":5}},"uncountable_transports":["scheduler_shopware"]}
+trailing garbage {`,
+			expected: []v1.QueueTransportStats{
+				{Name: "async", Count: 5},
+			},
+			expectedUncountable: []string{"scheduler_shopware"},
+		},
+		{
+			name: "log record with nested transports field before the stats document",
+			input: `{"message":"configuration","context":{"transports":[]}}
+{"transports":{"async":{"count":7}},"uncountable_transports":["webhook"]}`,
+			expected: []v1.QueueTransportStats{
+				{Name: "async", Count: 7},
+			},
+			expectedUncountable: []string{"webhook"},
+		},
+		{
 			name:  "plain map",
 			input: `{"async":1,"failed":2}`,
 			expected: []v1.QueueTransportStats{
