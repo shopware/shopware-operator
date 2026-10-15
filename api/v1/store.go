@@ -451,7 +451,6 @@ type TidewaysSpec struct {
 	// +kubebuilder:default=9135
 	Port int `json:"port,omitempty"`
 
-	// +kubebuilder:default=shopware
 	Service string `json:"service,omitempty"`
 
 	APIKeyRef SecretRef `json:"apiKeyRef,omitempty"`

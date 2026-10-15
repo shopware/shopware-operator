@@ -718,3 +718,31 @@ func TestOverriddenOperatorEnvsDoesNotChangeGetEnv(t *testing.T) {
 	assert.Equal(t, 1, appURLs, "APP_URL must be replaced, not duplicated")
 	assert.Contains(t, env, corev1.EnvVar{Name: "MY_CUSTOM_ENV", Value: "custom"})
 }
+
+func TestTidewaysServiceEnv(t *testing.T) {
+	newStore := func(service string) *v1.Store {
+		return &v1.Store{
+			Spec: v1.StoreSpec{
+				Tideways: v1.TidewaysSpec{
+					Enabled: true,
+					Host:    "tideways",
+					Port:    9135,
+					Service: service,
+				},
+			},
+		}
+	}
+
+	t.Run("omitted when service is empty", func(t *testing.T) {
+		env := newStore("").GetEnv()
+		assert.Contains(t, env, corev1.EnvVar{Name: "TIDEWAYS_CONNECTION", Value: "tcp://tideways:9135"})
+		for _, envVar := range env {
+			assert.NotEqual(t, "TIDEWAYS_SERVICE", envVar.Name)
+		}
+	})
+
+	t.Run("set when service is configured", func(t *testing.T) {
+		env := newStore("checkout").GetEnv()
+		assert.Contains(t, env, corev1.EnvVar{Name: "TIDEWAYS_SERVICE", Value: "checkout"})
+	})
+}

@@ -434,10 +434,13 @@ func (s *Store) getTideways() []corev1.EnvVar {
 				s.Spec.Tideways.Port,
 			),
 		},
-		{
+	}
+
+	if s.Spec.Tideways.Service != "" {
+		envVars = append(envVars, corev1.EnvVar{
 			Name:  "TIDEWAYS_SERVICE",
 			Value: s.Spec.Tideways.Service,
-		},
+		})
 	}
 
 	if s.Spec.Tideways.APIKeyRef.Name != "" && s.Spec.Tideways.APIKeyRef.Key != "" {
