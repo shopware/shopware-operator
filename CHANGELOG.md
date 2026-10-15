@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.11.1](https://github.com/shopware/shopware-operator/compare/1.11.0...v1.11.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* add type and status to condiction for execs ([899c117](https://github.com/shopware/shopware-operator/commit/899c1179c56c7c7e8fbf5a6b41d13b88aac2eb7e))
+* add type and status to condiction for execs ([6d2a728](https://github.com/shopware/shopware-operator/commit/6d2a728ba379a906b2a0aab1d87fe85e885d9eba))
+* Stop defaulting TIDEWAYS_SERVICE to shopware ([cd12919](https://github.com/shopware/shopware-operator/commit/cd12919b4bcbb12e8119ac8483076475c9ab42c0))
+* Stop defaulting TIDEWAYS_SERVICE to shopware ([25a1fbc](https://github.com/shopware/shopware-operator/commit/25a1fbc9f3829a83db72cfc8597c71d6a4262a4b))
+
 ## [1.11.0](https://github.com/shopware/shopware-operator/compare/1.10.0...v1.11.0) (2026-10-09)
 
 
