@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 )
@@ -35,17 +36,11 @@ type StoreSnapshotCreateReconciler struct {
 	StoreSnapshotBaseReconciler
 }
 
-// TODO: Filter if the state is failed or succeeded, because then we don't reconcile finished snapshots
-// SetupWithManager sets up the controller with the Manager.
 func (r *StoreSnapshotCreateReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	skipStatusUpdates, err := NewSkipStatusUpdates(r.Logger)
-	if err != nil {
-		return err
-	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1.StoreSnapshotCreate{}).
 		Owns(&batchv1.Job{}).
-		WithEventFilter(skipStatusUpdates).
+		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
 }
 
