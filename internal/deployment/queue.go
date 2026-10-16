@@ -159,11 +159,45 @@ func getRunningAdminPod(
 	return nil, fmt.Errorf("no ready admin pod found for store %s/%s", store.Namespace, store.Name)
 }
 
+// extractStatsDocument skips any output around the stats document (e.g. monolog records or
+// PHP warnings written to stdout) and returns the JSON object containing the "transports" key.
+// Falls back to the raw input.
+func extractStatsDocument(raw []byte) []byte {
+	for offset := 0; offset < len(raw); {
+		relativeStart := bytes.IndexByte(raw[offset:], '{')
+		if relativeStart < 0 {
+			break
+		}
+		start := offset + relativeStart
+
+		decoder := json.NewDecoder(bytes.NewReader(raw[start:]))
+		var document json.RawMessage
+		if err := decoder.Decode(&document); err != nil {
+			offset = start + 1
+			continue
+		}
+		if hasTransports(document) {
+			return document
+		}
+		offset = start + int(decoder.InputOffset())
+	}
+	return raw
+}
+
+func hasTransports(document json.RawMessage) bool {
+	var probe struct {
+		Transports json.RawMessage `json:"transports"`
+	}
+	return json.Unmarshal(document, &probe) == nil && len(probe.Transports) > 0
+}
+
 func parseMessengerStats(raw []byte) ([]v1.QueueTransportStats, []string, error) {
 	raw = bytes.TrimSpace(raw)
 	if len(raw) == 0 {
 		return nil, nil, fmt.Errorf("empty messenger:stats output")
 	}
+
+	raw = extractStatsDocument(raw)
 
 	var uncountable []string
 	var wrapper struct {
