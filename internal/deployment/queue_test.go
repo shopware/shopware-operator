@@ -1,6 +1,8 @@
 package deployment
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
@@ -96,4 +98,31 @@ func TestSelectStatsOutput(t *testing.T) {
 	assert.Equal(t, `{"transports":{}}`, selectStatsOutput(`{"transports":{}}`, "warning"))
 	assert.Equal(t, `{"transports":{}}`, selectStatsOutput("  \n", `{"transports":{}}`))
 	assert.Equal(t, "", selectStatsOutput("", ""))
+}
+
+func TestRedactQueueStatsOutputOmitsPodOutput(t *testing.T) {
+	cause := errors.New("exec failed: command terminated with exit code 1")
+	err := fmt.Errorf("queue stats: %w", &QueueStatsError{
+		Pod:       "admin-0",
+		Container: adminContainerName,
+		Command:   "php bin/console messenger:stats",
+		Stdout:    "DATABASE_URL=mysql://user:hunter2@db",
+		Stderr:    "secret stderr",
+		Err:       cause,
+	})
+
+	redacted := RedactQueueStatsOutput(err)
+
+	assert.NotContains(t, redacted.Error(), "hunter2")
+	assert.NotContains(t, redacted.Error(), "secret stderr")
+	assert.Contains(t, redacted.Error(), "admin-0")
+	assert.ErrorIs(t, redacted, cause)
+	assert.Contains(t, err.Error(), "hunter2")
+	assert.Contains(t, err.Error(), "secret stderr")
+}
+
+func TestRedactQueueStatsOutputKeepsOtherErrors(t *testing.T) {
+	err := errors.New("find admin pod")
+	assert.Same(t, err, RedactQueueStatsOutput(err))
+	assert.NoError(t, RedactQueueStatsOutput(nil))
 }
