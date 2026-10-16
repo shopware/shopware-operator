@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.11.2](https://github.com/shopware/shopware-operator/compare/1.11.1...v1.11.2) (2026-10-16)
+
+
+### Bug Fixes
+
+* add gomemlimit to deployment ([1789b23](https://github.com/shopware/shopware-operator/commit/1789b23c6b573b5a5ff93efa2951667e30453d5b))
+* pdb issue when keda is enabled ([2bbdafe](https://github.com/shopware/shopware-operator/commit/2bbdafe44a4411fcfe7188fc6db3bf88ae67ec78))
+* pdb issue when keda is enabled ([d86e18c](https://github.com/shopware/shopware-operator/commit/d86e18cddf3d45549060453b640ee681f8818a9c))
+
 ## [1.11.1](https://github.com/shopware/shopware-operator/compare/1.11.0...v1.11.1) (2026-10-15)
 
 
