@@ -34,6 +34,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,6 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	"github.com/go-logr/logr"
 	"github.com/go-logr/zapr"
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	shopv1 "github.com/shopware/shopware-operator/api/v1"
@@ -51,6 +53,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/event/nats"
 	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/metrics"
+	"github.com/shopware/shopware-operator/internal/tracing"
 	shopwebhook "github.com/shopware/shopware-operator/internal/webhook"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	//+kubebuilder:scaffold:imports
@@ -84,11 +87,15 @@ func init() {
 }
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	// Load configuration and set up flags
 	cfg, err := config.LoadStoreConfig(context.Background())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 
 	shopv1.SetOperatorServiceURL(cfg.OperatorServiceURL)
@@ -105,14 +112,14 @@ func main() {
 
 	if cfg.Namespace == "" {
 		setupLog.Error(fmt.Errorf("namespace is not set correctly"), "missing env `NAMESPACE`")
-		os.Exit(3)
+		return 3
 	}
 
 	if cfg.EnableKeda && (cfg.MetricsAddr == "0" || cfg.MetricsAddr == "" || cfg.OperatorServiceURL == "") {
 		setupLog.Error(fmt.Errorf("keda is enabled but metrics are not configured"),
 			"ENABLE_KEDA requires the metrics endpoint: "+
 				"set METRICS_BIND_ADDRESS and OPERATOR_SERVICE_URL (helm: metrics.enabled=true)")
-		os.Exit(3)
+		return 3
 	}
 
 	var queueStats *metrics.QueueStats
@@ -127,7 +134,10 @@ func main() {
 		})
 	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	restConfig := ctrl.GetConfigOrDie()
+	defer setupTracing(cfg.EnableTracing, restConfig, setupLog)()
+
+	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
 			BindAddress:   cfg.MetricsAddr,
@@ -157,13 +167,13 @@ func main() {
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
-		os.Exit(1)
+		return 1
 	}
 
 	if cfg.EnableKeda {
 		if err := requireAPI(mgr.GetRESTMapper(), kedav1alpha1.SchemeGroupVersion.WithKind("ScaledObject")); err != nil {
 			setupLog.Error(err, "ENABLE_KEDA requires KEDA to be installed in the cluster (helm: keda.enabled=true)")
-			os.Exit(4)
+			return 4
 		}
 	}
 
@@ -172,7 +182,7 @@ func main() {
 			setupLog.Error(err,
 				"ENABLE_SERVICE_MONITOR requires the Prometheus Operator CRDs to be installed in the cluster "+
 					"(helm: metrics.serviceMonitor.enabled=true)")
-			os.Exit(6)
+			return 6
 		}
 	}
 
@@ -180,7 +190,7 @@ func main() {
 		if err := requireAPI(mgr.GetRESTMapper(), cm.SchemeGroupVersion.WithKind("Certificate")); err != nil {
 			setupLog.Error(err,
 				"ENABLE_WEBHOOK requires cert-manager to be installed in the cluster (helm: webhook.enabled=true)")
-			os.Exit(5)
+			return 5
 		}
 		mgr.GetWebhookServer().Register(
 			shopwebhook.StoreValidationPath,
@@ -237,7 +247,7 @@ func main() {
 		OperatorMetricsURL:   cfg.OperatorServiceURL,
 	}).SetupWithManager(mgr, logger); err != nil {
 		setupLog.Error(err, "unable to create store controller", "controller", "Store")
-		os.Exit(1)
+		return 1
 	}
 	if err = (&controller.StoreExecReconciler{
 		Client:   nsClient,
@@ -246,7 +256,7 @@ func main() {
 		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create exec controller", "controller", "StoreExec")
-		os.Exit(1)
+		return 1
 	}
 	if err = (&controller.StoreSnapshotCreateReconciler{
 		StoreSnapshotBaseReconciler: controller.StoreSnapshotBaseReconciler{
@@ -258,7 +268,7 @@ func main() {
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create snapshot create controller", "controller", "StoreSnapshot")
-		os.Exit(1)
+		return 1
 	}
 	if err = (&controller.StoreSnapshotRestoreReconciler{
 		StoreSnapshotBaseReconciler: controller.StoreSnapshotBaseReconciler{
@@ -270,7 +280,7 @@ func main() {
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create snapshot restore controller", "controller", "StoreSnapshot")
-		os.Exit(1)
+		return 1
 	}
 	if err = (&controller.StoreDebugInstanceReconciler{
 		Client:   nsClient,
@@ -279,7 +289,7 @@ func main() {
 		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create instance controller", "controller", "StoreDebugInstance")
-		os.Exit(1)
+		return 1
 	}
 	//+kubebuilder:scaffold:builder
 
@@ -291,17 +301,37 @@ func main() {
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
-		os.Exit(1)
+		return 1
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
-		os.Exit(1)
+		return 1
 	}
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
+		return 1
+	}
+	return 0
+}
+
+func setupTracing(enabled bool, restConfig *rest.Config, setupLog logr.Logger) func() {
+	shutdown, err := tracing.Setup(context.Background(), enabled, version)
+	if err != nil {
+		setupLog.Error(err, "unable to set up tracing")
 		os.Exit(1)
+	}
+	if enabled {
+		tracing.WrapKubernetesClient(restConfig)
+	}
+
+	return func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdown(ctx); err != nil {
+			setupLog.Error(err, "unable to flush traces")
+		}
 	}
 }
 

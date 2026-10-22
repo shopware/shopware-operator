@@ -13,6 +13,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/manager"
 	"github.com/shopware/shopware-operator/internal/manager/base"
 	"github.com/shopware/shopware-operator/internal/metrics"
+	"github.com/shopware/shopware-operator/internal/tracing"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -183,12 +184,16 @@ func (r *StoreReconciler) Reconcile(
 	ctx context.Context,
 	req ctrl.Request,
 ) (rr ctrl.Result, err error) {
+	ctx, span := tracing.StartReconcile(ctx, "Store", req)
+	defer func() { tracing.EndReconcile(span, rr, &err) }()
+
 	log := r.Logger.
 		With(zap.String("namespace", req.Namespace)).
 		With(zap.String("name", req.Name))
 
 	// Put logger in context for this reconcile
 	ctx = logging.WithLogger(ctx, log)
+	log = logging.FromContext(ctx)
 	log.Info("Reconciling store")
 
 	store, err := k8s.GetStore(ctx, r.Client, req.NamespacedName)
@@ -198,8 +203,10 @@ func (r *StoreReconciler) Reconcile(
 			return ctrl.Result{}, nil
 		}
 		log.Errorw("get CR", zap.Error(err))
+		tracing.RecordError(span, err)
 		return rr, nil
 	}
+	span.SetAttributes(tracing.AttrState.String(string(store.Status.State)))
 
 	if !store.DeletionTimestamp.IsZero() {
 		metrics.RemoveStoreMetrics(store)
@@ -208,6 +215,7 @@ func (r *StoreReconciler) Reconcile(
 
 	if err := r.stateManager().ReconcileResources(ctx, store); err != nil {
 		log.Errorw("reconcile", zap.Error(err))
+		tracing.RecordError(span, err)
 		return rr, nil
 	}
 
@@ -215,6 +223,7 @@ func (r *StoreReconciler) Reconcile(
 
 	if err := r.stateManager().ReconcileStatus(ctx, store, err); err != nil {
 		log.Errorw("failed to update status", zap.Error(err))
+		tracing.RecordError(span, err)
 	}
 
 	if !store.IsState(v1.StateReady) {

@@ -7,6 +7,8 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/shopware/shopware-operator/internal/event"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 var _ event.EventHandler = (*NatsEventServer)(nil)
@@ -23,7 +25,17 @@ func (w *NatsEventServer) Send(ctx context.Context, event event.Event) error {
 		return fmt.Errorf("failed to marshal event data in nats handler: %w", err)
 	}
 
-	err = w.conn.Publish(w.topic, data)
+	msg := nats.NewMsg(w.topic)
+	msg.Data = data
+	if w.conn.HeadersSupported() {
+		carrier := propagation.MapCarrier{}
+		otel.GetTextMapPropagator().Inject(ctx, carrier)
+		for key, value := range carrier {
+			msg.Header.Set(key, value)
+		}
+	}
+
+	err = w.conn.PublishMsg(msg)
 	if err != nil {
 		return fmt.Errorf("failed to publish event to NATS: %w", err)
 	}

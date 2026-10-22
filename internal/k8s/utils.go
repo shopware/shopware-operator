@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -36,6 +37,7 @@ import (
 	"github.com/pkg/errors"
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/logging"
+	"github.com/shopware/shopware-operator/internal/tracing"
 	"github.com/shopware/shopware-operator/internal/util"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
@@ -380,11 +382,40 @@ func EnsureDeployment(
 	return EnsureObjectWithHash(ctx, cl, owner, deployment, s)
 }
 
+const (
+	ChangeReasonNotFound    = "object does not exist yet"
+	ChangeReasonHashMissing = "deployed object has no config hash annotation"
+	ChangeReasonHashChanged = "desired config differs from deployed config (config hash changed)"
+	ChangeReasonMetadata    = "labels or annotations differ from deployed object"
+)
+
+type ObjectChange struct {
+	Reason      string
+	ChangedKeys []string
+}
+
+func (c ObjectChange) Changed() bool {
+	return c.Reason != ""
+}
+
 func HasObjectChanged(
 	ctx context.Context,
 	cl client.Client,
 	obj client.Object,
 ) (bool, error) {
+	change, err := DetectObjectChange(ctx, cl, obj)
+	if err != nil {
+		return true, err
+	}
+	tracing.RecordObjectChange(ctx, objectKind(obj), obj.GetName(), change.Reason, change.ChangedKeys)
+	return change.Changed(), nil
+}
+
+func DetectObjectChange(
+	ctx context.Context,
+	cl client.Client,
+	obj client.Object,
+) (ObjectChange, error) {
 	if obj.GetAnnotations() == nil {
 		obj.SetAnnotations(make(map[string]string))
 	}
@@ -395,7 +426,7 @@ func HasObjectChanged(
 
 	hash, err := ObjectHash(obj)
 	if err != nil {
-		return true, errors.Wrap(err, "calculate object hash")
+		return ObjectChange{}, errors.Wrap(err, "calculate object hash")
 	}
 
 	val := reflect.ValueOf(obj)
@@ -410,13 +441,17 @@ func HasObjectChanged(
 	}
 	if err = cl.Get(ctx, nn, oldObject); err != nil {
 		if !k8serrors.IsNotFound(err) {
-			return true, errors.Wrapf(err, "get %v", nn.String())
+			return ObjectChange{}, errors.Wrapf(err, "get %v", nn.String())
 		}
+		return ObjectChange{Reason: ChangeReasonNotFound}, nil
 	}
 
 	oldHash, ok := oldObject.GetAnnotations()["shopware.com/last-config-hash"]
-	if !ok || oldHash != hash {
-		return true, nil
+	if !ok {
+		return ObjectChange{Reason: ChangeReasonHashMissing}, nil
+	}
+	if oldHash != hash {
+		return ObjectChange{Reason: ChangeReasonHashChanged}, nil
 	}
 
 	ignoreAnnotations := []string{"shopware.com/last-config-hash"}
@@ -433,7 +468,39 @@ func HasObjectChanged(
 		}
 	}
 	obj.SetAnnotations(annotations)
-	return !objectMetaEqual(obj, oldObject), nil
+
+	if objectMetaEqual(obj, oldObject) {
+		return ObjectChange{}, nil
+	}
+	return ObjectChange{Reason: ChangeReasonMetadata, ChangedKeys: changedMetaKeys(oldObject, obj)}, nil
+}
+
+func changedMetaKeys(old, new metav1.Object) []string {
+	keys := diffKeys("label", old.GetLabels(), new.GetLabels())
+	return append(keys, diffKeys("annotation", old.GetAnnotations(), new.GetAnnotations())...)
+}
+
+func diffKeys(prefix string, old, new map[string]string) []string {
+	var keys []string
+	for k, v := range new {
+		if oldValue, ok := old[k]; !ok || oldValue != v {
+			keys = append(keys, prefix+":"+k)
+		}
+	}
+	for k := range old {
+		if _, ok := new[k]; !ok {
+			keys = append(keys, prefix+":"+k)
+		}
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+func objectKind(obj client.Object) string {
+	if kind := obj.GetObjectKind().GroupVersionKind().Kind; kind != "" {
+		return kind
+	}
+	return reflect.Indirect(reflect.ValueOf(obj)).Type().Name()
 }
 
 func EnsureObjectWithHash(

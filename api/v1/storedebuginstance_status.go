@@ -58,3 +58,10 @@ func (s *StoreDebugInstanceStatus) AddCondition(c StoreDebugInstanceCondition) {
 func (s *StoreDebugInstance) IsState(states ...StoreDebugInstanceState) bool {
 	return slices.Contains(states, s.Status.State)
 }
+
+func (s *StoreDebugInstanceStatus) GetLastCondition() StoreDebugInstanceCondition {
+	if len(s.Conditions) == 0 {
+		return StoreDebugInstanceCondition{}
+	}
+	return s.Conditions[len(s.Conditions)-1]
+}
