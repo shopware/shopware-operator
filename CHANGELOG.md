@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.12.0](https://github.com/shopware/shopware-operator/compare/1.11.2...v1.12.0) (2026-10-22)
+
+
+### Features
+
+* add tracing ([cf6f303](https://github.com/shopware/shopware-operator/commit/cf6f303d6bafab2e49b3a0891c37001c62180bba))
+* add tracing ([bdf702d](https://github.com/shopware/shopware-operator/commit/bdf702dd26983d5a37437e5b0366ca4b41b20b27))
+
+
+### Bug Fixes
+
+* use opensearch enable spec to add secret ([46a8f11](https://github.com/shopware/shopware-operator/commit/46a8f110519a707ad3dccb5d34ec36fdd10c1adb))
+
 ## [1.11.2](https://github.com/shopware/shopware-operator/compare/1.11.1...v1.11.2) (2026-10-19)
 
 
