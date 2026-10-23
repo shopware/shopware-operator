@@ -13,7 +13,9 @@ import (
 	"github.com/shopware/shopware-operator/internal/manager"
 	"github.com/shopware/shopware-operator/internal/manager/base"
 	"github.com/shopware/shopware-operator/internal/metrics"
+	"github.com/shopware/shopware-operator/internal/secret"
 	"github.com/shopware/shopware-operator/internal/tracing"
+	"github.com/shopware/shopware-operator/internal/util"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -76,23 +78,17 @@ func (r *StoreReconciler) stateManager() *manager.StoreStateManager {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager, logger *zap.SugaredLogger) error {
-	skipStatusUpdates, err := NewSkipStatusUpdates(logger, &appsv1.Deployment{})
-	if err != nil {
-		return err
-	}
-	controllerBuilder := ctrl.NewControllerManagedBy(mgr).
-		For(&v1.Store{}).
-		// We get triggered by every update on the created resources, this leads to high reconciles at the start.
-		Owns(&corev1.Secret{}).
-		Owns(&corev1.Service{}).
-		Owns(&networkingv1.Ingress{})
+	ownedPredicate := builder.WithPredicates(util.HashAnnotationChangedPredicate())
 
-	_, err = mgr.GetRESTMapper().RESTMapping(
+	controllerBuilder := ctrl.NewControllerManagedBy(mgr).
+		For(&v1.Store{})
+
+	_, err := mgr.GetRESTMapper().RESTMapping(
 		gatewayv1.SchemeGroupVersion.WithKind("HTTPRoute").GroupKind(),
 		gatewayv1.SchemeGroupVersion.Version,
 	)
 	if err == nil {
-		controllerBuilder = controllerBuilder.Owns(&gatewayv1.HTTPRoute{})
+		controllerBuilder = controllerBuilder.Owns(&gatewayv1.HTTPRoute{}, ownedPredicate)
 	} else if !meta.IsNoMatchError(err) {
 		return fmt.Errorf("resolve HTTPRoute REST mapping: %w", err)
 	}
@@ -103,21 +99,25 @@ func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager, logger *zap.Sugared
 			kedav1alpha1.SchemeGroupVersion.Version,
 		)
 		if err == nil {
-			controllerBuilder = controllerBuilder.Owns(&kedav1alpha1.ScaledObject{})
+			controllerBuilder = controllerBuilder.Owns(&kedav1alpha1.ScaledObject{}, ownedPredicate)
 		} else if !meta.IsNoMatchError(err) {
 			return fmt.Errorf("resolve ScaledObject REST mapping: %w", err)
 		}
 	}
 
 	return controllerBuilder.
-		Owns(&policy.PodDisruptionBudget{}).
-		Owns(&appsv1.Deployment{}).
-		Owns(&batchv1.Job{}).
-		Owns(&batchv1.CronJob{}).
-		// Skip status updates of all resources
-		WithEventFilter(skipStatusUpdates).
-		// This will watch the db secret and run a reconcile if the db secret will change.
+		Owns(&policy.PodDisruptionBudget{}, ownedPredicate).
+		Owns(&appsv1.Deployment{}, builder.WithPredicates(predicate.Or(
+			util.HashAnnotationChangedPredicate(),
+			util.DeploymentStatusChangedPredicate(),
+		))).
+		Owns(&batchv1.Job{}, ownedPredicate).
+		Owns(&batchv1.CronJob{}, ownedPredicate).
+		Owns(&corev1.Service{}, ownedPredicate).
+		Owns(&networkingv1.Ingress{}, ownedPredicate).
 		Watches(
+			// Doesn't have a ownerReference, because this would then be deleted and breaks shops
+			// if the store gets deleted
 			&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.findStoreForReconcile),
 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
@@ -127,39 +127,29 @@ func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager, logger *zap.Sugared
 
 func (r *StoreReconciler) findStoreForReconcile(
 	ctx context.Context,
-	secret client.Object,
+	obj client.Object,
 ) []reconcile.Request {
 	stores := &v1.StoreList{}
-	err := r.List(ctx, stores)
-	if err != nil {
+	if err := r.List(ctx, stores, client.InNamespace(obj.GetNamespace())); err != nil {
 		return []reconcile.Request{}
 	}
 
 	var requests []reconcile.Request
 	for _, store := range stores.Items {
-		if store.Namespace != secret.GetNamespace() {
+		if !secret.IsReferencedByStore(&store, obj) {
 			continue
 		}
-		if store.Spec.Database.PasswordSecretRef.Name == secret.GetName() ||
-			store.Spec.Database.TLS.SecretName == secret.GetName() ||
-			store.Spec.OpensearchSpec.PasswordSecretRef.Name == secret.GetName() ||
-			store.Spec.ShopConfiguration.Fastly.TokenRef.Name == secret.GetName() ||
-			store.Spec.AdminCredentials.UsernameSecretRef.Name == secret.GetName() ||
-			store.Spec.AdminCredentials.PasswordSecretRef.Name == secret.GetName() {
-			r.Logger.
-				Infow(
-					"Do reconcile on store because db/opensearch/fastly secret has changed",
-					zap.String("store", store.Name),
-					zap.String("secret", secret.GetName()),
-					zap.String("secret-namespace", secret.GetNamespace()),
-				)
-			requests = append(requests, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Namespace: store.Namespace,
-					Name:      store.Name,
-				},
-			})
-		}
+		r.Logger.Infow("Do reconcile on store because referenced secret has changed",
+			zap.String("store", store.Name),
+			zap.String("secret", obj.GetName()),
+			zap.String("secret-namespace", obj.GetNamespace()),
+		)
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Namespace: store.Namespace,
+				Name:      store.Name,
+			},
+		})
 	}
 
 	return requests
