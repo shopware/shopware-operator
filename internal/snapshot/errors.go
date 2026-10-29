@@ -3,7 +3,32 @@ package snapshot
 import (
 	"context"
 	"errors"
+	"os"
+	"strings"
+	"syscall"
 )
+
+// ExitCodeNoSpace is used when a snapshot fails because the temp volume is full.
+// The Job podFailurePolicy maps this code to FailJob so Kubernetes does not retry.
+const ExitCodeNoSpace = 16
+
+func IsNoSpaceError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, syscall.ENOSPC) {
+		return true
+	}
+	var errno syscall.Errno
+	if errors.As(err, &errno) && errno == syscall.ENOSPC {
+		return true
+	}
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) && IsNoSpaceError(pathErr.Err) {
+		return true
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "no space left on device")
+}
 
 func joinSnapshotErrors(errs []error) error {
 	if len(errs) == 0 {

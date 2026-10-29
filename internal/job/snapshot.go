@@ -2,13 +2,11 @@ package job
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
 	"sort"
-	"time"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
+	snapshottool "github.com/shopware/shopware-operator/internal/snapshot"
 	"github.com/shopware/shopware-operator/internal/util"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -163,6 +161,7 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 		Spec: batchv1.JobSpec{
 			BackoffLimit:            &snapshot.MaxRetries,
 			TTLSecondsAfterFinished: func(i int32) *int32 { return &i }(60),
+			PodFailurePolicy:        snapshotNoSpaceFailurePolicy(),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
@@ -187,6 +186,22 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 	}
 
 	return job
+}
+
+func snapshotNoSpaceFailurePolicy() *batchv1.PodFailurePolicy {
+	containerName := CONTAINER_NAME_SNAPSHOT
+	return &batchv1.PodFailurePolicy{
+		Rules: []batchv1.PodFailurePolicyRule{
+			{
+				Action: batchv1.PodFailurePolicyActionFailJob,
+				OnExitCodes: &batchv1.PodFailurePolicyOnExitCodesRequirement{
+					ContainerName: &containerName,
+					Operator:      batchv1.PodFailurePolicyOnExitCodesOpIn,
+					Values:        []int32{snapshottool.ExitCodeNoSpace},
+				},
+			},
+		},
+	}
 }
 
 func SnapshotJobName(snap metav1.ObjectMeta, subCommand string) string {

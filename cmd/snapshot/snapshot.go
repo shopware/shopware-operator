@@ -92,6 +92,7 @@ func main() {
 					snapshotDir, err := os.MkdirTemp(tempDir, "snapshot-")
 					if err != nil {
 						logger.Errorw("TempDir creation failed", zap.Error(err))
+						exitOnFatalSnapshotError(logger, err)
 						os.Exit(14)
 					}
 					//nolint: errcheck
@@ -139,6 +140,7 @@ func main() {
 						Labels:         parsedLabels,
 					}); err != nil {
 						logger.Errorw("Backup failed", zap.Error(err))
+						exitOnFatalSnapshotError(logger, err)
 						return fmt.Errorf("backup failed: %w", err)
 					}
 
@@ -156,6 +158,7 @@ func main() {
 					snapshotTempDir, err := os.MkdirTemp(tempDir, "snapshot-")
 					if err != nil {
 						logger.Errorw("TempDir creation failed", zap.Error(err))
+						exitOnFatalSnapshotError(logger, err)
 						os.Exit(14)
 					}
 					//nolint: errcheck
@@ -190,6 +193,7 @@ func main() {
 						IncludeS3:      includeS3,
 					}); err != nil {
 						logger.Errorw("Restore failed", zap.Error(err))
+						exitOnFatalSnapshotError(logger, err)
 						return fmt.Errorf("restore failed: %w", err)
 					}
 
@@ -204,6 +208,18 @@ func main() {
 
 	if err := cmd.Run(ctx, os.Args); err != nil {
 		fmt.Fprintf(os.Stderr, "Error running command: %v\n", err)
+		exitOnFatalSnapshotError(logger, err)
 		os.Exit(1)
 	}
+}
+
+func exitOnFatalSnapshotError(logger *zap.SugaredLogger, err error) {
+	if !snapshot.IsNoSpaceError(err) {
+		return
+	}
+	logger.Errorw("No space left on device, failing without retry",
+		zap.Error(err),
+		zap.Int("exitCode", snapshot.ExitCodeNoSpace),
+	)
+	os.Exit(snapshot.ExitCodeNoSpace)
 }
