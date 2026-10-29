@@ -1,0 +1,153 @@
+package snapshot
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	aconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
+	cwtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
+	"github.com/shopware/shopware-operator/internal/config"
+	"github.com/shopware/shopware-operator/internal/logging"
+	"go.uber.org/zap"
+)
+
+const (
+	s3SizeLookback      = 7 * 24 * time.Hour
+	s3SizePeriodSeconds = 86400
+	dbDumpHeadroom      = 1.1
+)
+
+// StandardStorage only: one GetMetricStatistics call per bucket.
+// Requires cloudwatch:GetMetricStatistics.
+var s3BucketSizeStorageTypes = []string{"StandardStorage"}
+
+// MetricStatisticsAPI is the CloudWatch surface used by the S3 size precheck.
+type MetricStatisticsAPI interface {
+	GetMetricStatistics(ctx context.Context, params *cloudwatch.GetMetricStatisticsInput, optFns ...func(*cloudwatch.Options)) (*cloudwatch.GetMetricStatisticsOutput, error)
+}
+
+func NewCloudWatchMetrics(ctx context.Context, cfg *config.SnapshotConfig) (MetricStatisticsAPI, error) {
+	awsCfg, err := aconfig.LoadDefaultConfig(ctx, aconfig.WithRegion(cfg.S3.Region))
+	if err != nil {
+		return nil, err
+	}
+	return cloudwatch.NewFromConfig(awsCfg), nil
+}
+
+func (s *SnapshotService) precheckTempStorage(ctx context.Context, cfg *config.SnapshotConfig, snapshotCtx *SnapshotContext) error {
+	if !snapshotCtx.IncludeS3 {
+		return nil
+	}
+	if snapshotCtx.TempSizeBytes <= 0 {
+		return fmt.Errorf("s3 size precheck: temp size must be positive")
+	}
+
+	if s.metrics == nil {
+		return fmt.Errorf("s3 size precheck: metrics client is required")
+	}
+
+	logger := logging.FromContext(ctx)
+	client := s.metrics
+
+	end := time.Now().UTC()
+	start := end.Add(-s3SizeLookback)
+	var total int64
+	var anyDatapoints bool
+
+	for _, bucket := range []string{cfg.S3.PrivateBucket, cfg.S3.PublicBucket} {
+		if bucket == "" {
+			continue
+		}
+		size, datapoints, err := averageBucketSize(ctx, client, bucket, start, end)
+		if err != nil {
+			return fmt.Errorf("s3 size precheck: bucket %s: %w", bucket, err)
+		}
+		if datapoints == 0 {
+			return fmt.Errorf("s3 size precheck: no CloudWatch BucketSizeBytes datapoints for bucket %s (enable daily metrics, check region, or grant cloudwatch:GetMetricStatistics)", bucket)
+		}
+		anyDatapoints = true
+		total += size
+		logger.Infow("S3 bucket size from CloudWatch",
+			zap.String("bucket", bucket),
+			zap.Int64("averageBytes", size),
+			zap.Int("datapoints", datapoints),
+		)
+	}
+
+	if !anyDatapoints {
+		return fmt.Errorf("s3 size precheck: no buckets configured")
+	}
+
+	required := requiredTempBytes(total, snapshotCtx.IncludeDB)
+	logger.Infow("Snapshot temp storage precheck",
+		zap.Int64("s3AverageBytes", total),
+		zap.Int64("requiredBytes", required),
+		zap.Int64("tempSizeBytes", snapshotCtx.TempSizeBytes),
+		zap.Bool("includeDB", snapshotCtx.IncludeDB),
+	)
+	if required > snapshotCtx.TempSizeBytes {
+		return fmt.Errorf("%w: estimated %d bytes (S3 7-day average, includeDB=%t) exceeds temp size %d bytes",
+			ErrInsufficientTempSpace, required, snapshotCtx.IncludeDB, snapshotCtx.TempSizeBytes)
+	}
+	return nil
+}
+
+func averageBucketSize(ctx context.Context, client MetricStatisticsAPI, bucket string, start, end time.Time) (int64, int, error) {
+	var sum float64
+	var typesWithData int
+	totalPoints := 0
+	for _, storageType := range s3BucketSizeStorageTypes {
+		avg, n, err := averageStorageTypeSize(ctx, client, bucket, storageType, start, end)
+		if err != nil {
+			return 0, 0, err
+		}
+		if n == 0 {
+			continue
+		}
+		sum += avg
+		typesWithData++
+		totalPoints += n
+	}
+	if typesWithData == 0 {
+		return 0, 0, nil
+	}
+	return int64(sum), totalPoints, nil
+}
+
+func averageStorageTypeSize(ctx context.Context, client MetricStatisticsAPI, bucket, storageType string, start, end time.Time) (float64, int, error) {
+	out, err := client.GetMetricStatistics(ctx, &cloudwatch.GetMetricStatisticsInput{
+		Namespace:  aws.String("AWS/S3"),
+		MetricName: aws.String("BucketSizeBytes"),
+		Dimensions: []cwtypes.Dimension{
+			{Name: aws.String("BucketName"), Value: aws.String(bucket)},
+			{Name: aws.String("StorageType"), Value: aws.String(storageType)},
+		},
+		StartTime:  aws.Time(start),
+		EndTime:    aws.Time(end),
+		Period:     aws.Int32(s3SizePeriodSeconds),
+		Statistics: []cwtypes.Statistic{cwtypes.StatisticAverage},
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+	if len(out.Datapoints) == 0 {
+		return 0, 0, nil
+	}
+	var total float64
+	for _, dp := range out.Datapoints {
+		if dp.Average != nil {
+			total += *dp.Average
+		}
+	}
+	return total / float64(len(out.Datapoints)), len(out.Datapoints), nil
+}
+
+func requiredTempBytes(s3AverageBytes int64, includeDB bool) int64 {
+	if !includeDB {
+		return s3AverageBytes
+	}
+	return int64(float64(s3AverageBytes) * dbDumpHeadroom)
+}

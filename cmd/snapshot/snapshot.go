@@ -14,6 +14,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/util"
 	"github.com/urfave/cli/v3"
 	"go.uber.org/zap"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var (
@@ -24,6 +25,7 @@ var (
 	tempDir    = os.TempDir()
 	includeDB  = true
 	includeS3  = true
+	tempSize   = "100Gi"
 	labels     []string
 )
 
@@ -76,6 +78,12 @@ func main() {
 				Value:       true,
 				Destination: &includeS3,
 			},
+			&cli.StringFlag{
+				Name:        "temp-size",
+				Value:       tempSize,
+				Usage:       "Allocated temp volume size for the S3 size precheck (Kubernetes quantity, default 100Gi)",
+				Destination: &tempSize,
+			},
 			&cli.StringSliceFlag{
 				Name:        "label",
 				Usage:       "Labels to attach to the snapshot (format: key=value)",
@@ -112,7 +120,11 @@ func main() {
 						logger.Warnw("Write metadata.json failed, skip metadata creation", zap.Error(err))
 					}
 
-					snapshotService := snapshot.NewSnapshotService(cfg)
+					metrics, err := snapshot.NewCloudWatchMetrics(ctx, cfg)
+					if err != nil {
+						return fmt.Errorf("create cloudwatch client: %w", err)
+					}
+					snapshotService := snapshot.NewSnapshotService(cfg, metrics)
 					logger.Infow("Starting snapshot create process",
 						zap.String("backupFile", backupFile),
 						zap.String("temp", snapshotDir),
@@ -131,12 +143,18 @@ func main() {
 						parsedLabels[util.NormalizeSnapshotLabelKey(parts[0])] = parts[1]
 					}
 
+					tempSizeBytes, err := parseTempSize(tempSize)
+					if err != nil {
+						return err
+					}
+
 					now := time.Now()
 					if err := snapshotService.CreateBackup(ctx, cfg, &snapshot.SnapshotContext{
 						BackupFile:     backupFile,
 						TempArchiveDir: snapshotDir,
 						IncludeDB:      includeDB,
 						IncludeS3:      includeS3,
+						TempSizeBytes:  tempSizeBytes,
 						Labels:         parsedLabels,
 					}); err != nil {
 						logger.Errorw("Backup failed", zap.Error(err))
@@ -177,7 +195,7 @@ func main() {
 						logger.Warnw("Write metadata.json failed, skip metadata creation", zap.Error(err))
 					}
 
-					snapshotService := snapshot.NewSnapshotService(cfg)
+					snapshotService := snapshot.NewSnapshotService(cfg, nil)
 					logger.Infow("Starting snapshot restore process",
 						zap.String("backupFile", backupFile),
 						zap.String("temp", snapshotTempDir),
@@ -211,6 +229,18 @@ func main() {
 		exitOnFatalSnapshotError(logger, err)
 		os.Exit(1)
 	}
+}
+
+func parseTempSize(value string) (int64, error) {
+	qty, err := resource.ParseQuantity(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid --temp-size %q: %w", value, err)
+	}
+	bytes, ok := qty.AsInt64()
+	if !ok || bytes <= 0 {
+		return 0, fmt.Errorf("invalid --temp-size %q: must be a positive quantity", value)
+	}
+	return bytes, nil
 }
 
 func exitOnFatalSnapshotError(logger *zap.SugaredLogger, err error) {

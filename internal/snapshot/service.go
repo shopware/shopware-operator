@@ -22,7 +22,9 @@ type SnapshotContext struct {
 	BackupFile     string
 	IncludeDB      bool
 	IncludeS3      bool
-	Labels         map[string]string
+	// TempSizeBytes is the allocated temp volume cap from --temp-size (default 100Gi).
+	TempSizeBytes int64
+	Labels        map[string]string
 }
 
 type TarEntry struct {
@@ -33,13 +35,14 @@ type TarEntry struct {
 
 // SnapshotService handles backup operations
 type SnapshotService struct {
-	config *config.SnapshotConfig
+	config  *config.SnapshotConfig
+	metrics MetricStatisticsAPI
 }
 
-// NewSnapshotService creates a new snapshot service
-func NewSnapshotService(cfg *config.SnapshotConfig) *SnapshotService {
+func NewSnapshotService(cfg *config.SnapshotConfig, metrics MetricStatisticsAPI) *SnapshotService {
 	return &SnapshotService{
-		config: cfg,
+		config:  cfg,
+		metrics: metrics,
 	}
 }
 

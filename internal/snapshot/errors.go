@@ -8,13 +8,21 @@ import (
 	"syscall"
 )
 
-// ExitCodeNoSpace is used when a snapshot fails because the temp volume is full.
-// The Job podFailurePolicy maps this code to FailJob so Kubernetes does not retry.
+// ExitCodeNoSpace is used when a snapshot fails because the temp volume is full
+// or CloudWatch estimates the S3 payload will not fit. The Job podFailurePolicy
+// maps this code to FailJob so Kubernetes does not retry.
 const ExitCodeNoSpace = 16
+
+// ErrInsufficientTempSpace is returned when the S3 size precheck estimates the
+// snapshot will not fit in --temp-size.
+var ErrInsufficientTempSpace = errors.New("insufficient temp storage for snapshot")
 
 func IsNoSpaceError(err error) bool {
 	if err == nil {
 		return false
+	}
+	if errors.Is(err, ErrInsufficientTempSpace) {
+		return true
 	}
 	if errors.Is(err, syscall.ENOSPC) {
 		return true

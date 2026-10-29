@@ -31,6 +31,7 @@ func TestIsNoSpaceErrorDetectsWrappedENOSPC(t *testing.T) {
 
 	assert.True(t, IsNoSpaceError(err))
 	assert.False(t, IsNoSpaceError(errors.New("the provided token has expired")))
+	assert.True(t, IsNoSpaceError(fmt.Errorf("wrap: %w", ErrInsufficientTempSpace)))
 }
 
 func TestJoinSnapshotErrorsKeepsCanceledWhenItIsOnlyError(t *testing.T) {
