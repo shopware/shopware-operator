@@ -19,7 +19,7 @@ import (
 const (
 	CONTAINER_NAME_SNAPSHOT = "operator-snapshot"
 	DEFAULT_TEMP_SIZE       = "20Gi"
-	TTLSecondsAfterFinished = 18*60*60 // 15 minutes
+	TTLSecondsAfterFinished = 18 * 60 * 60 // 15 minutes
 )
 
 func GetSnapshotCreateJob(
