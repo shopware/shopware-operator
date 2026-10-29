@@ -195,12 +195,18 @@ func main() {
 						logger.Warnw("Write metadata.json failed, skip metadata creation", zap.Error(err))
 					}
 
+					tempSizeBytes, err := parseTempSize(tempSize)
+					if err != nil {
+						return err
+					}
+
 					snapshotService := snapshot.NewSnapshotService(cfg, nil)
 					logger.Infow("Starting snapshot restore process",
 						zap.String("backupFile", backupFile),
 						zap.String("temp", snapshotTempDir),
 						zap.Bool("includeDB", includeDB),
 						zap.Bool("includeS3", includeS3),
+						zap.Int64("tempSizeBytes", tempSizeBytes),
 					)
 
 					now := time.Now()
@@ -209,6 +215,7 @@ func main() {
 						TempArchiveDir: snapshotTempDir,
 						IncludeDB:      includeDB,
 						IncludeS3:      includeS3,
+						TempSizeBytes:  tempSizeBytes,
 					}); err != nil {
 						logger.Errorw("Restore failed", zap.Error(err))
 						exitOnFatalSnapshotError(logger, err)

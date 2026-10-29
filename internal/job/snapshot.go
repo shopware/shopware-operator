@@ -16,7 +16,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const CONTAINER_NAME_SNAPSHOT = "operator-snapshot"
+const (
+	CONTAINER_NAME_SNAPSHOT = "operator-snapshot"
+	DEFAULT_TEMP_SIZE       = "20Gi"
+)
 
 func GetSnapshotCreateJob(
 	ctx context.Context,
@@ -62,7 +65,7 @@ func SnapshotRestoreJob(store v1.Store, snapshot v1.StoreSnapshotRestore) *batch
 
 func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapshotSpec, subCommand string) *batchv1.Job {
 	sharedProcessNamespace := true
-	res := resource.MustParse("20Gi")
+	res := resource.MustParse(DEFAULT_TEMP_SIZE)
 	tempDirMountPath := "/temp"
 	addDefaultTempDir := true
 
@@ -93,11 +96,15 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 			MountPath: tempDirMountPath,
 		})
 	}
-	// Build args with labels
 	args := []string{
 		subCommand,
 		"--backup-file", snapshot.Path,
 		"--tempdir", tempDirMountPath,
+	}
+	if addDefaultTempDir {
+		args = append(args, "--temp-size", res.String())
+	} else if qty, ok := ephemeralVolumeStorageRequest(snapshot); ok {
+		args = append(args, "--temp-size", qty.String())
 	}
 	// Add labels from meta
 	// We sort the labels to ensure consistent ordering, so we don't trigger unnecessary job restarts due to label order changes
@@ -186,6 +193,19 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 	}
 
 	return job
+}
+
+func ephemeralVolumeStorageRequest(spec v1.StoreSnapshotSpec) (resource.Quantity, bool) {
+	for _, volume := range spec.Container.Volumes {
+		if volume.Ephemeral == nil || volume.Ephemeral.VolumeClaimTemplate == nil {
+			continue
+		}
+		qty, ok := volume.Ephemeral.VolumeClaimTemplate.Spec.Resources.Requests[corev1.ResourceStorage]
+		if ok && !qty.IsZero() {
+			return qty, true
+		}
+	}
+	return resource.Quantity{}, false
 }
 
 func snapshotNoSpaceFailurePolicy() *batchv1.PodFailurePolicy {

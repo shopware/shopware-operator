@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -251,6 +252,11 @@ func TestSnapshotRestoreJobUsesEphemeralVolumeTempDir(t *testing.T) {
 								VolumeClaimTemplate: &corev1.PersistentVolumeClaimTemplate{
 									Spec: corev1.PersistentVolumeClaimSpec{
 										AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+										Resources: corev1.VolumeResourceRequirements{
+											Requests: corev1.ResourceList{
+												corev1.ResourceStorage: resource.MustParse("100Gi"),
+											},
+										},
 									},
 								},
 							},
@@ -279,5 +285,33 @@ func TestSnapshotRestoreJobUsesEphemeralVolumeTempDir(t *testing.T) {
 	assert.NotNil(t, container)
 	assert.Contains(t, container.Args, "--tempdir")
 	assert.Contains(t, container.Args, "/snapshot-storage")
-	assert.Equal(t, []string{"restore", "--backup-file", "s3://bucket/snapshot.zip", "--tempdir", "/snapshot-storage", "--label", "namespace=test"}, container.Args)
+	assert.Equal(t, []string{
+		"restore",
+		"--backup-file", "s3://bucket/snapshot.zip",
+		"--tempdir", "/snapshot-storage",
+		"--temp-size", "100Gi",
+		"--label", "namespace=test",
+	}, container.Args)
+}
+
+func TestSnapshotCreateJobPassesDefaultTempSize(t *testing.T) {
+	store := v1.Store{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-store", Namespace: "test"},
+	}
+	snapshot := v1.StoreSnapshotCreate{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-snapshot", Namespace: "test"},
+		Spec: v1.StoreSnapshotSpec{
+			Path:      "/tmp/snapshot.zip",
+			Container: v1.ContainerSpec{Image: "shopware:snapshot"},
+		},
+	}
+
+	result := job.SnapshotCreateJob(store, snapshot)
+	assert.Equal(t, []string{
+		"create",
+		"--backup-file", "/tmp/snapshot.zip",
+		"--tempdir", "/temp",
+		"--temp-size", "20Gi",
+		"--label", "namespace=test",
+	}, result.Spec.Template.Spec.Containers[0].Args)
 }
