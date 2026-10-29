@@ -11,6 +11,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/config"
 	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/snapshot"
+	"github.com/shopware/shopware-operator/internal/util"
 	"github.com/urfave/cli/v3"
 	"go.uber.org/zap"
 )
@@ -126,7 +127,7 @@ func main() {
 							logger.Warnw("Invalid label format, skipping", zap.String("label", label))
 							continue
 						}
-						parsedLabels[parts[0]] = parts[1]
+						parsedLabels[util.NormalizeSnapshotLabelKey(parts[0])] = parts[1]
 					}
 
 					now := time.Now()

@@ -177,5 +177,5 @@ func TestSnapshotRestoreJobUsesEphemeralVolumeTempDir(t *testing.T) {
 	assert.NotNil(t, container)
 	assert.Contains(t, container.Args, "--tempdir")
 	assert.Contains(t, container.Args, "/snapshot-storage")
-	assert.Equal(t, []string{"restore", "--backup-file", "s3://bucket/snapshot.zip", "--tempdir", "/snapshot-storage"}, container.Args)
+	assert.Equal(t, []string{"restore", "--backup-file", "s3://bucket/snapshot.zip", "--tempdir", "/snapshot-storage", "--label", "namespace=test"}, container.Args)
 }

@@ -2,8 +2,11 @@ package job
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
+	"time"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
@@ -108,9 +111,15 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 		sort.Strings(labelKeys)
 
 		for _, key := range labelKeys {
+			if util.NormalizeSnapshotLabelKey(key) == "namespace" {
+				continue
+			}
 			value := meta.Labels[key]
-			args = append(args, "--label", fmt.Sprintf("%s=%s", key, value))
+			args = append(args, "--label", fmt.Sprintf("%s=%s", util.NormalizeSnapshotLabelKey(key), value))
 		}
+	}
+	if meta.Namespace != "" {
+		args = append(args, "--label", fmt.Sprintf("namespace=%s", meta.Namespace))
 	}
 
 	containers := append(util.DefaultContainerSecurityContexts(snapshot.Container.ExtraContainers), corev1.Container{
