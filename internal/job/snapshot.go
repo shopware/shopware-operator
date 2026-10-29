@@ -19,6 +19,7 @@ import (
 const (
 	CONTAINER_NAME_SNAPSHOT = "operator-snapshot"
 	DEFAULT_TEMP_SIZE       = "20Gi"
+	TTLSecondsAfterFinished = 18*60*60 // 15 minutes
 )
 
 func GetSnapshotCreateJob(
@@ -167,7 +168,7 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 		},
 		Spec: batchv1.JobSpec{
 			BackoffLimit:            &snapshot.MaxRetries,
-			TTLSecondsAfterFinished: func(i int32) *int32 { return &i }(60),
+			TTLSecondsAfterFinished: func(i int32) *int32 { return &i }(TTLSecondsAfterFinished),
 			PodFailurePolicy:        snapshotNoSpaceFailurePolicy(),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
