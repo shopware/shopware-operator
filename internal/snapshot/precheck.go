@@ -65,7 +65,10 @@ func (s *SnapshotService) precheckTempStorage(ctx context.Context, cfg *config.S
 			return fmt.Errorf("s3 size precheck: bucket %s: %w", bucket, err)
 		}
 		if datapoints == 0 {
-			return fmt.Errorf("s3 size precheck: no CloudWatch BucketSizeBytes datapoints for bucket %s (enable daily metrics, check region, or grant cloudwatch:GetMetricStatistics)", bucket)
+			logger.Warnw("S3 size precheck: no CloudWatch BucketSizeBytes datapoints, skipping bucket",
+				zap.String("bucket", bucket),
+			)
+			continue
 		}
 		anyDatapoints = true
 		total += size
@@ -77,7 +80,8 @@ func (s *SnapshotService) precheckTempStorage(ctx context.Context, cfg *config.S
 	}
 
 	if !anyDatapoints {
-		return fmt.Errorf("s3 size precheck: no buckets configured")
+		logger.Warnw("S3 size precheck: no CloudWatch datapoints, continuing without size estimate")
+		return nil
 	}
 
 	required := requiredTempBytes(total)

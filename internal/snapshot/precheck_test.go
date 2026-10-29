@@ -120,9 +120,7 @@ func TestPrecheckTempStorageNoDatapoints(t *testing.T) {
 		IncludeS3:     true,
 		TempSizeBytes: 100,
 	})
-	require.Error(t, err)
-	assert.NotErrorIs(t, err, ErrInsufficientTempSpace)
-	assert.Contains(t, err.Error(), "no CloudWatch BucketSizeBytes datapoints")
+	assert.NoError(t, err)
 }
 
 func TestPrecheckTempStorageCloudWatchError(t *testing.T) {
