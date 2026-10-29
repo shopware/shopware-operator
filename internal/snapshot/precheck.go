@@ -17,7 +17,6 @@ import (
 const (
 	s3SizeLookback      = 7 * 24 * time.Hour
 	s3SizePeriodSeconds = 86400
-	dbDumpHeadroom      = 1.1
 )
 
 // StandardStorage only: one GetMetricStatistics call per bucket.
@@ -81,16 +80,15 @@ func (s *SnapshotService) precheckTempStorage(ctx context.Context, cfg *config.S
 		return fmt.Errorf("s3 size precheck: no buckets configured")
 	}
 
-	required := requiredTempBytes(total, snapshotCtx.IncludeDB)
+	required := requiredTempBytes(total)
 	logger.Infow("Snapshot temp storage precheck",
 		zap.Int64("s3AverageBytes", total),
 		zap.Int64("requiredBytes", required),
 		zap.Int64("tempSizeBytes", snapshotCtx.TempSizeBytes),
-		zap.Bool("includeDB", snapshotCtx.IncludeDB),
 	)
 	if required > snapshotCtx.TempSizeBytes {
-		return fmt.Errorf("%w: estimated %d bytes (S3 7-day average, includeDB=%t) exceeds temp size %d bytes",
-			ErrInsufficientTempSpace, required, snapshotCtx.IncludeDB, snapshotCtx.TempSizeBytes)
+		return fmt.Errorf("%w: estimated %d bytes (S3 7-day average + archive) exceeds temp size %d bytes",
+			ErrInsufficientTempSpace, required, snapshotCtx.TempSizeBytes)
 	}
 	return nil
 }
@@ -145,9 +143,7 @@ func averageStorageTypeSize(ctx context.Context, client MetricStatisticsAPI, buc
 	return total / float64(len(out.Datapoints)), len(out.Datapoints), nil
 }
 
-func requiredTempBytes(s3AverageBytes int64, includeDB bool) int64 {
-	if !includeDB {
-		return s3AverageBytes
-	}
-	return int64(float64(s3AverageBytes) * dbDumpHeadroom)
+func requiredTempBytes(s3AverageBytes int64) int64 {
+	// Peak on --tempdir is extracted objects plus the zip written next to them.
+	return s3AverageBytes * 2
 }

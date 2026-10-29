@@ -44,8 +44,7 @@ func (s *stubMetrics) GetMetricStatistics(_ context.Context, params *cloudwatch.
 }
 
 func TestRequiredTempBytes(t *testing.T) {
-	assert.Equal(t, int64(100), requiredTempBytes(100, false))
-	assert.Equal(t, int64(110), requiredTempBytes(100, true))
+	assert.Equal(t, int64(200), requiredTempBytes(100))
 }
 
 func TestPrecheckTempStorageRequiresMetricsClient(t *testing.T) {
@@ -103,7 +102,6 @@ func TestPrecheckTempStorageInsufficient(t *testing.T) {
 	)
 	err := svc.precheckTempStorage(context.Background(), svc.config, &SnapshotContext{
 		IncludeS3:     true,
-		IncludeDB:     true,
 		TempSizeBytes: 100,
 	})
 	require.Error(t, err)

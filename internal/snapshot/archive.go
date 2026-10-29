@@ -194,7 +194,7 @@ func (s *SnapshotService) createLocalArchive(ctx context.Context, snapshotCtx *S
 func (s *SnapshotService) createArchiveAndUploadToS3(ctx context.Context, cfg *config.SnapshotConfig, snapshotCtx *SnapshotContext) error {
 	logger := logging.FromContext(ctx)
 
-	tempFile, err := os.CreateTemp("", "snapshot-archive-*.zip")
+	tempFile, err := os.CreateTemp(filepath.Dir(snapshotCtx.TempArchiveDir), "snapshot-archive-*.zip")
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
