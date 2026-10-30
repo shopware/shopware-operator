@@ -37,8 +37,8 @@ func (s *stubMetrics) GetMetricStatistics(_ context.Context, params *cloudwatch.
 	values := s.series[bucket][storageType]
 	out := &cloudwatch.GetMetricStatisticsOutput{}
 	for _, v := range values {
-		avg := v
-		out.Datapoints = append(out.Datapoints, cwtypes.Datapoint{Average: &avg})
+		maxVal := v
+		out.Datapoints = append(out.Datapoints, cwtypes.Datapoint{Maximum: &maxVal})
 	}
 	return out, nil
 }
@@ -86,6 +86,26 @@ func TestPrecheckTempStorageFits(t *testing.T) {
 		TempSizeBytes: 100,
 	})
 	require.NoError(t, err)
+}
+
+func TestPrecheckTempStorageUsesMaxNotAverage(t *testing.T) {
+	svc := NewSnapshotService(
+		&config.SnapshotConfig{
+			S3: config.S3Config{PrivateBucket: "priv", PublicBucket: "pub"},
+		},
+		&stubMetrics{
+			series: map[string]map[string][]float64{
+				"priv": {"StandardStorage": {10, 60}},
+				"pub":  {"StandardStorage": {10}},
+			},
+		},
+	)
+	err := svc.precheckTempStorage(context.Background(), svc.config, &SnapshotContext{
+		IncludeS3:     true,
+		TempSizeBytes: 100,
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInsufficientTempSpace)
 }
 
 func TestPrecheckTempStorageInsufficient(t *testing.T) {
@@ -138,7 +158,7 @@ func TestPrecheckTempStorageCloudWatchError(t *testing.T) {
 	assert.NotErrorIs(t, err, ErrInsufficientTempSpace)
 }
 
-func TestAverageBucketSizeUsesStandardStorage(t *testing.T) {
+func TestMaxBucketSizeUsesStandardStoragePeak(t *testing.T) {
 	client := &stubMetrics{
 		series: map[string]map[string][]float64{
 			"b": {
@@ -147,9 +167,9 @@ func TestAverageBucketSizeUsesStandardStorage(t *testing.T) {
 			},
 		},
 	}
-	size, points, err := averageBucketSize(context.Background(), client, "b", time.Now().Add(-time.Hour), time.Now())
+	size, points, err := maxBucketSize(context.Background(), client, "b", time.Now().Add(-time.Hour), time.Now())
 	require.NoError(t, err)
-	assert.Equal(t, int64(20), size)
+	assert.Equal(t, int64(30), size)
 	assert.Equal(t, 2, points)
 }
 

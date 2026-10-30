@@ -60,7 +60,7 @@ func (s *SnapshotService) precheckTempStorage(ctx context.Context, cfg *config.S
 		if bucket == "" {
 			continue
 		}
-		size, datapoints, err := averageBucketSize(ctx, client, bucket, start, end)
+		size, datapoints, err := maxBucketSize(ctx, client, bucket, start, end)
 		if err != nil {
 			return fmt.Errorf("s3 size precheck: bucket %s: %w", bucket, err)
 		}
@@ -74,7 +74,7 @@ func (s *SnapshotService) precheckTempStorage(ctx context.Context, cfg *config.S
 		total += size
 		logger.Infow("S3 bucket size from CloudWatch",
 			zap.String("bucket", bucket),
-			zap.Int64("averageBytes", size),
+			zap.Int64("maxBytes", size),
 			zap.Int("datapoints", datapoints),
 		)
 	}
@@ -86,30 +86,30 @@ func (s *SnapshotService) precheckTempStorage(ctx context.Context, cfg *config.S
 
 	required := requiredTempBytes(total)
 	logger.Infow("Snapshot temp storage precheck",
-		zap.Int64("s3AverageBytes", total),
+		zap.Int64("s3MaxBytes", total),
 		zap.Int64("requiredBytes", required),
 		zap.Int64("tempSizeBytes", snapshotCtx.TempSizeBytes),
 	)
 	if required > snapshotCtx.TempSizeBytes {
-		return fmt.Errorf("%w: estimated %d bytes (S3 7-day average + archive) exceeds temp size %d bytes",
+		return fmt.Errorf("%w: estimated %d bytes (S3 7-day max + archive) exceeds temp size %d bytes",
 			ErrInsufficientTempSpace, required, snapshotCtx.TempSizeBytes)
 	}
 	return nil
 }
 
-func averageBucketSize(ctx context.Context, client MetricStatisticsAPI, bucket string, start, end time.Time) (int64, int, error) {
+func maxBucketSize(ctx context.Context, client MetricStatisticsAPI, bucket string, start, end time.Time) (int64, int, error) {
 	var sum float64
 	var typesWithData int
 	totalPoints := 0
 	for _, storageType := range s3BucketSizeStorageTypes {
-		avg, n, err := averageStorageTypeSize(ctx, client, bucket, storageType, start, end)
+		maxSize, n, err := maxStorageTypeSize(ctx, client, bucket, storageType, start, end)
 		if err != nil {
 			return 0, 0, err
 		}
 		if n == 0 {
 			continue
 		}
-		sum += avg
+		sum += maxSize
 		typesWithData++
 		totalPoints += n
 	}
@@ -119,7 +119,7 @@ func averageBucketSize(ctx context.Context, client MetricStatisticsAPI, bucket s
 	return int64(sum), totalPoints, nil
 }
 
-func averageStorageTypeSize(ctx context.Context, client MetricStatisticsAPI, bucket, storageType string, start, end time.Time) (float64, int, error) {
+func maxStorageTypeSize(ctx context.Context, client MetricStatisticsAPI, bucket, storageType string, start, end time.Time) (float64, int, error) {
 	out, err := client.GetMetricStatistics(ctx, &cloudwatch.GetMetricStatisticsInput{
 		Namespace:  aws.String("AWS/S3"),
 		MetricName: aws.String("BucketSizeBytes"),
@@ -130,7 +130,7 @@ func averageStorageTypeSize(ctx context.Context, client MetricStatisticsAPI, buc
 		StartTime:  aws.Time(start),
 		EndTime:    aws.Time(end),
 		Period:     aws.Int32(s3SizePeriodSeconds),
-		Statistics: []cwtypes.Statistic{cwtypes.StatisticAverage},
+		Statistics: []cwtypes.Statistic{cwtypes.StatisticMaximum},
 	})
 	if err != nil {
 		return 0, 0, err
@@ -138,16 +138,24 @@ func averageStorageTypeSize(ctx context.Context, client MetricStatisticsAPI, buc
 	if len(out.Datapoints) == 0 {
 		return 0, 0, nil
 	}
-	var total float64
+	var maxSize float64
+	var found bool
 	for _, dp := range out.Datapoints {
-		if dp.Average != nil {
-			total += *dp.Average
+		if dp.Maximum == nil {
+			continue
+		}
+		if !found || *dp.Maximum > maxSize {
+			maxSize = *dp.Maximum
+			found = true
 		}
 	}
-	return total / float64(len(out.Datapoints)), len(out.Datapoints), nil
+	if !found {
+		return 0, 0, nil
+	}
+	return maxSize, len(out.Datapoints), nil
 }
 
-func requiredTempBytes(s3AverageBytes int64) int64 {
+func requiredTempBytes(s3MaxBytes int64) int64 {
 	// Peak on --tempdir is extracted objects plus the zip written next to them.
-	return s3AverageBytes * 2
+	return s3MaxBytes * 2
 }
