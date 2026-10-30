@@ -174,6 +174,12 @@ func (s StoreSnapshotSpec) GetEnv(store Store) []corev1.EnvVar {
 			Value: store.Spec.S3Storage.PublicBucketName,
 		},
 	}
+	if store.Spec.S3Storage.Region != "" {
+		env = append(env,
+			corev1.EnvVar{Name: "AWS_REGION", Value: store.Spec.S3Storage.Region},
+			corev1.EnvVar{Name: "AWS_DEFAULT_REGION", Value: store.Spec.S3Storage.Region},
+		)
+	}
 
 	if s.S3BucketAuth.AccessKeyRef.Name != "" {
 		env = append(env, corev1.EnvVar{

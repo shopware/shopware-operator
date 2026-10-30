@@ -60,8 +60,8 @@ func (s *SnapshotService) extractArchiveFromS3(ctx context.Context, cfg *config.
 		}
 	}()
 
-	// Create temporary file to stream the archive to disk instead of memory
-	tempFile, err := os.CreateTemp("", "snapshot-archive-*.zip")
+	// Stream the archive onto --tempdir (parent of the extract dir), not OS /tmp.
+	tempFile, err := os.CreateTemp(filepath.Dir(snapshotCtx.TempArchiveDir), "snapshot-archive-*.zip")
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
@@ -83,6 +83,14 @@ func (s *SnapshotService) extractArchiveFromS3(ctx context.Context, cfg *config.
 	}
 
 	logger.Infow("Downloaded archive from S3 to temp file", zap.String("s3URL", snapshotCtx.BackupFile), zap.Int64("archiveSize", written), zap.String("tempFile", tempFile.Name()))
+
+	if snapshotCtx.TempSizeBytes > 0 {
+		required := requiredTempBytes(written)
+		if required > snapshotCtx.TempSizeBytes {
+			return fmt.Errorf("%w: estimated %d bytes (archive + extract) exceeds temp size %d bytes",
+				ErrInsufficientTempSpace, required, snapshotCtx.TempSizeBytes)
+		}
+	}
 
 	// Close the temp file so we can open it with zip.OpenReader
 	if err := tempFile.Close(); err != nil {
@@ -194,7 +202,7 @@ func (s *SnapshotService) createLocalArchive(ctx context.Context, snapshotCtx *S
 func (s *SnapshotService) createArchiveAndUploadToS3(ctx context.Context, cfg *config.SnapshotConfig, snapshotCtx *SnapshotContext) error {
 	logger := logging.FromContext(ctx)
 
-	tempFile, err := os.CreateTemp("", "snapshot-archive-*.zip")
+	tempFile, err := os.CreateTemp(filepath.Dir(snapshotCtx.TempArchiveDir), "snapshot-archive-*.zip")
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}

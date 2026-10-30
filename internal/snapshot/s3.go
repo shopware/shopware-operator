@@ -88,6 +88,9 @@ func (s *SnapshotService) CreateBackup(
 ) error {
 	logger := logging.FromContext(ctx)
 	logger.Infow("Creating snapshot", zap.Any("snapshot", snapshotCtx))
+	if err := s.precheckTempStorage(ctx, cfg, snapshotCtx); err != nil {
+		return err
+	}
 	cancelCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 

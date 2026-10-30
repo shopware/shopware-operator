@@ -10,6 +10,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+func TestNormalizeSnapshotLabelKey(t *testing.T) {
+	require.Equal(t, "application_id", util.NormalizeSnapshotLabelKey("application-id"))
+	require.Equal(t, "application_name", util.NormalizeSnapshotLabelKey("application-name"))
+	require.Equal(t, "application_id", util.NormalizeSnapshotLabelKey("application_id"))
+	require.Equal(t, "tags.datadoghq.com/service", util.NormalizeSnapshotLabelKey("tags.datadoghq.com/service"))
+}
+
 func TestLabelMerge(t *testing.T) {
 	store := v1.Store{
 		ObjectMeta: metav1.ObjectMeta{

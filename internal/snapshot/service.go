@@ -7,12 +7,14 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	aconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/config"
 	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/util"
+	"go.uber.org/zap"
 )
 
 type SnapshotContext struct {
@@ -20,7 +22,9 @@ type SnapshotContext struct {
 	BackupFile     string
 	IncludeDB      bool
 	IncludeS3      bool
-	Labels         map[string]string
+	// TempSizeBytes is the allocated temp volume cap from --temp-size (default 100Gi).
+	TempSizeBytes int64
+	Labels        map[string]string
 }
 
 type TarEntry struct {
@@ -31,13 +35,14 @@ type TarEntry struct {
 
 // SnapshotService handles backup operations
 type SnapshotService struct {
-	config *config.SnapshotConfig
+	config  *config.SnapshotConfig
+	metrics MetricStatisticsAPI
 }
 
-// NewSnapshotService creates a new snapshot service
-func NewSnapshotService(cfg *config.SnapshotConfig) *SnapshotService {
+func NewSnapshotService(cfg *config.SnapshotConfig, metrics MetricStatisticsAPI) *SnapshotService {
 	return &SnapshotService{
-		config: cfg,
+		config:  cfg,
+		metrics: metrics,
 	}
 }
 
@@ -70,14 +75,13 @@ func (s *SnapshotService) restoreS3(ctx context.Context, cfg config.S3Config, di
 // AWS_DEFAULT_REGION=eu-central-1
 // AWS_REGION=eu-central-1
 func getAWSKeysWithAsumeRole(ctx context.Context, cfg config.S3Config) (*credentials.Credentials, error) {
-	if cfg.AccessKeyID != "" && cfg.SecretAccessKey != "" {
+	if cfg.AccessKeyID != "" && cfg.SecretAccessKey != "" && cfg.SessionToken == "" {
 		logging.FromContext(ctx).
 			Infow("AccessKey and SecretAccessKey set, using provided AWS credentials, instead of assuming role")
-
 		return credentials.NewStaticV4(
 			cfg.AccessKeyID,
 			cfg.SecretAccessKey,
-			cfg.SessionToken,
+			"",
 		), nil
 	}
 
@@ -110,11 +114,41 @@ func getAWSKeysWithAsumeRole(ctx context.Context, cfg config.S3Config) (*credent
 		return nil, fmt.Errorf("failed to retrieve AWS credentials: %w", err)
 	}
 
-	return credentials.NewStaticV4(
-		creds.AccessKeyID,
-		creds.SecretAccessKey,
-		creds.SessionToken,
-	), nil
+	logging.FromContext(ctx).Infow("Using refreshable AWS default credential chain",
+		zap.Bool("canExpire", creds.CanExpire),
+		zap.Time("expiresAt", creds.Expires),
+		zap.Bool("hasSessionToken", creds.SessionToken != ""),
+	)
+
+	return credentials.New(&awsSDKRefreshProvider{provider: awsCfg.Credentials}), nil
+}
+
+// awsSDKRefreshProvider lets minio ask the AWS SDK for creds on each request.
+// The SDK caches until expiry and then refreshes IRSA / web-identity / IMDS tokens.
+type awsSDKRefreshProvider struct {
+	provider aws.CredentialsProvider
+}
+
+func (p *awsSDKRefreshProvider) Retrieve() (credentials.Value, error) {
+	return p.RetrieveWithCredContext(nil)
+}
+
+func (p *awsSDKRefreshProvider) RetrieveWithCredContext(_ *credentials.CredContext) (credentials.Value, error) {
+	creds, err := p.provider.Retrieve(context.Background())
+	if err != nil {
+		return credentials.Value{}, err
+	}
+	return credentials.Value{
+		AccessKeyID:     creds.AccessKeyID,
+		SecretAccessKey: creds.SecretAccessKey,
+		SessionToken:    creds.SessionToken,
+		SignerType:      credentials.SignatureV4,
+		Expiration:      creds.Expires,
+	}, nil
+}
+
+func (p *awsSDKRefreshProvider) IsExpired() bool {
+	return true
 }
 
 func parseS3URL(raw string) (bucket, object string, err error) {
