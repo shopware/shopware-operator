@@ -3,6 +3,7 @@ package base
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/cronjob"
@@ -187,7 +188,19 @@ func (b *Base) ReconcileDeployment(ctx context.Context, store *v1.Store) (err er
 	objs = append(objs, deployment.StorefrontDeployment(*store), deployment.AdminDeployment(*store))
 	objs = append(objs, workers...)
 
+	checksum, err := secret.SecretsChecksum(ctx, b.Client, store)
+	if err != nil {
+		return fmt.Errorf("secrets checksum: %w", err)
+	}
+
 	for _, obj := range objs {
+		annotations := maps.Clone(obj.Spec.Template.Annotations)
+		if annotations == nil {
+			annotations = make(map[string]string)
+		}
+		annotations[secret.ChecksumAnnotation] = checksum
+		obj.Spec.Template.Annotations = annotations
+
 		if changed, err = k8s.HasObjectChanged(ctx, b.Client, obj); err != nil {
 			return fmt.Errorf("reconcile unready deployment: %w", err)
 		}
