@@ -59,6 +59,9 @@ func appendDatadogLogNamespace(raw, namespace string) string {
 	tag := "namespace:" + namespace
 	changed := false
 	for _, cfg := range configs {
+		if cfg == nil {
+			continue
+		}
 		tags := datadogLogTags(cfg)
 		if slices.Contains(tags, tag) {
 			continue

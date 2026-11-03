@@ -41,6 +41,11 @@ func TestAppendDatadogLogNamespaceDoesNotMatchTagPrefix(t *testing.T) {
 	assert.Equal(t, true, configs[0]["extra"])
 }
 
+func TestAppendDatadogLogNamespacePassesThroughNullConfigs(t *testing.T) {
+	in := `[null]`
+	assert.Equal(t, in, appendDatadogLogNamespace(in, "shop"))
+}
+
 func TestGetDefaultContainerSnapshotAnnotationsAddsNamespaceToDatadogLogs(t *testing.T) {
 	spec := v1.StoreSnapshotSpec{
 		Container: v1.ContainerSpec{
