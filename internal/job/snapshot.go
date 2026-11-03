@@ -119,9 +119,6 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 		sort.Strings(labelKeys)
 
 		for _, key := range labelKeys {
-			if util.NormalizeSnapshotLabelKey(key) == "namespace" {
-				continue
-			}
 			value := meta.Labels[key]
 			args = append(args, "--label", fmt.Sprintf("%s=%s", util.NormalizeSnapshotLabelKey(key), value))
 		}
