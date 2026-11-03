@@ -1,10 +1,10 @@
 package util
 
 import (
+	"encoding/json"
 	"fmt"
 	"maps"
-	"strconv"
-	"strings"
+	"slices"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 )
@@ -52,24 +52,45 @@ func appendDatadogLogNamespace(raw, namespace string) string {
 	if namespace == "" {
 		return raw
 	}
+	var configs []map[string]any
+	if err := json.Unmarshal([]byte(raw), &configs); err != nil || len(configs) == 0 {
+		return raw
+	}
 	tag := "namespace:" + namespace
-	if strings.Contains(raw, tag) {
+	changed := false
+	for _, cfg := range configs {
+		tags := datadogLogTags(cfg)
+		if slices.Contains(tags, tag) {
+			continue
+		}
+		cfg["tags"] = append(tags, tag)
+		changed = true
+	}
+	if !changed {
 		return raw
 	}
-	marker := `"tags":[`
-	idx := strings.Index(raw, marker)
-	if idx == -1 {
-		marker = `"tags": [`
-		idx = strings.Index(raw, marker)
-	}
-	if idx == -1 {
+	out, err := json.Marshal(configs)
+	if err != nil {
 		return raw
 	}
-	insertAt := idx + len(marker)
-	quoted := strconv.Quote(tag)
-	rest := strings.TrimLeft(raw[insertAt:], " \t\n")
-	if strings.HasPrefix(rest, "]") {
-		return raw[:insertAt] + quoted + raw[insertAt:]
+	return string(out)
+}
+
+func datadogLogTags(cfg map[string]any) []string {
+	raw, ok := cfg["tags"]
+	if !ok || raw == nil {
+		return nil
 	}
-	return raw[:insertAt] + quoted + "," + raw[insertAt:]
+	items, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	tags := make([]string, 0, len(items)+1)
+	for _, item := range items {
+		tag, ok := item.(string)
+		if ok {
+			tags = append(tags, tag)
+		}
+	}
+	return tags
 }
