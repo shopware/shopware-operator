@@ -3,6 +3,7 @@ package snapshot
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -36,8 +37,28 @@ func NewCloudWatchMetrics(ctx context.Context, cfg *config.SnapshotConfig) (Metr
 	return cloudwatch.NewFromConfig(awsCfg), nil
 }
 
+// CloudWatchPrecheckEnabled is true only for AWS S3 (CloudWatch BucketSizeBytes).
+// Custom endpoints (MinIO and other S3-compatible stores) have no CloudWatch metrics.
+func CloudWatchPrecheckEnabled(cfg config.S3Config) bool {
+	host := strings.TrimPrefix(cfg.Endpoint, "https://")
+	host = strings.TrimPrefix(host, "http://")
+	if i := strings.IndexAny(host, "/:"); i >= 0 {
+		host = host[:i]
+	}
+	if host == "" {
+		return true
+	}
+	return strings.Contains(strings.ToLower(host), "amazonaws.com")
+}
+
 func (s *SnapshotService) precheckTempStorage(ctx context.Context, cfg *config.SnapshotConfig, snapshotCtx *SnapshotContext) error {
 	if !snapshotCtx.IncludeS3 {
+		return nil
+	}
+	if !CloudWatchPrecheckEnabled(cfg.S3) {
+		logging.FromContext(ctx).Infow("S3 size precheck skipped: non-AWS endpoint",
+			zap.String("endpoint", cfg.S3.Endpoint),
+		)
 		return nil
 	}
 	if snapshotCtx.TempSizeBytes <= 0 {

@@ -120,9 +120,13 @@ func main() {
 						logger.Warnw("Write metadata.json failed, skip metadata creation", zap.Error(err))
 					}
 
-					metrics, err := snapshot.NewCloudWatchMetrics(ctx, cfg)
-					if err != nil {
-						return fmt.Errorf("create cloudwatch client: %w", err)
+					var metrics snapshot.MetricStatisticsAPI
+					if snapshot.CloudWatchPrecheckEnabled(cfg.S3) {
+						var err error
+						metrics, err = snapshot.NewCloudWatchMetrics(ctx, cfg)
+						if err != nil {
+							return fmt.Errorf("create cloudwatch client: %w", err)
+						}
 					}
 					snapshotService := snapshot.NewSnapshotService(cfg, metrics)
 					logger.Infow("Starting snapshot create process",

@@ -59,6 +59,25 @@ func TestPrecheckTempStorageRequiresMetricsClient(t *testing.T) {
 	assert.Contains(t, err.Error(), "metrics client is required")
 }
 
+func TestCloudWatchPrecheckEnabled(t *testing.T) {
+	assert.True(t, CloudWatchPrecheckEnabled(config.S3Config{}))
+	assert.True(t, CloudWatchPrecheckEnabled(config.S3Config{Endpoint: "s3.eu-central-1.amazonaws.com"}))
+	assert.True(t, CloudWatchPrecheckEnabled(config.S3Config{Endpoint: "https://s3.eu-central-1.vpce-0123.amazonaws.com"}))
+	assert.False(t, CloudWatchPrecheckEnabled(config.S3Config{Endpoint: "minio.minio.svc.cluster.local:9000"}))
+	assert.False(t, CloudWatchPrecheckEnabled(config.S3Config{Endpoint: "https://play.min.io"}))
+}
+
+func TestPrecheckTempStorageSkipsNonAWSEndpoint(t *testing.T) {
+	svc := NewSnapshotService(&config.SnapshotConfig{
+		S3: config.S3Config{PrivateBucket: "priv", Endpoint: "minio.minio.svc:9000"},
+	}, nil)
+	err := svc.precheckTempStorage(context.Background(), svc.config, &SnapshotContext{
+		IncludeS3:     true,
+		TempSizeBytes: 100,
+	})
+	assert.NoError(t, err)
+}
+
 func TestPrecheckTempStorageSkipsWhenS3Disabled(t *testing.T) {
 	svc := NewSnapshotService(&config.SnapshotConfig{}, nil)
 	err := svc.precheckTempStorage(context.Background(), svc.config, &SnapshotContext{
