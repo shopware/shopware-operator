@@ -162,7 +162,6 @@ func main() {
 						Labels:         parsedLabels,
 					}); err != nil {
 						logger.Errorw("Backup failed", zap.Error(err))
-						exitOnFatalSnapshotError(logger, err)
 						return fmt.Errorf("backup failed: %w", err)
 					}
 
@@ -222,7 +221,6 @@ func main() {
 						TempSizeBytes:  tempSizeBytes,
 					}); err != nil {
 						logger.Errorw("Restore failed", zap.Error(err))
-						exitOnFatalSnapshotError(logger, err)
 						return fmt.Errorf("restore failed: %w", err)
 					}
 
