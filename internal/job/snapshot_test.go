@@ -52,10 +52,11 @@ func TestSnapshotCreateJobLabelHyphenUnderscoreSources(t *testing.T) {
 	assert.Empty(t, result.Spec.Template.Labels["application_id"])
 	assert.Contains(t, result.Spec.Template.Spec.Containers[0].Args, "application_id=4537857a-b727-489b-aac0-5348e179597d")
 	assert.Contains(t, result.Spec.Template.Spec.Containers[0].Args, "application_name=dbs-v5")
-	assert.Contains(t, result.Spec.Template.Spec.Containers[0].Args, "namespace=dbs-v5-67091e48-6ddb-4cc3-9b29-fc9f4d782f37")
+	assert.NotContains(t, result.Spec.Template.Spec.Containers[0].Args, "namespace=dbs-v5-67091e48-6ddb-4cc3-9b29-fc9f4d782f37")
 	assert.NotContains(t, result.Spec.Template.Spec.Containers[0].Args, "application-id=4537857a-b727-489b-aac0-5348e179597d")
 	assert.Contains(t, result.Spec.Template.Annotations["ad.datadoghq.com/operator-snapshot.logs"], "application_id:")
 	assert.Contains(t, result.Spec.Template.Annotations["ad.datadoghq.com/operator-snapshot.logs"], "application_name:")
+	assert.Contains(t, result.Spec.Template.Annotations["ad.datadoghq.com/operator-snapshot.logs"], "namespace:dbs-v5-67091e48-6ddb-4cc3-9b29-fc9f4d782f37")
 }
 
 func TestSnapshotCreateJobFailsWithoutRetryOnNoSpaceExit(t *testing.T) {
@@ -290,7 +291,6 @@ func TestSnapshotRestoreJobUsesEphemeralVolumeTempDir(t *testing.T) {
 		"--backup-file", "s3://bucket/snapshot.zip",
 		"--tempdir", "/snapshot-storage",
 		"--temp-size", "100Gi",
-		"--label", "namespace=test",
 	}, container.Args)
 }
 
@@ -312,6 +312,5 @@ func TestSnapshotCreateJobPassesDefaultTempSize(t *testing.T) {
 		"--backup-file", "/tmp/snapshot.zip",
 		"--tempdir", "/temp",
 		"--temp-size", "20Gi",
-		"--label", "namespace=test",
 	}, result.Spec.Template.Spec.Containers[0].Args)
 }

@@ -124,9 +124,6 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 			args = append(args, "--label", fmt.Sprintf("%s=%s", util.NormalizeSnapshotLabelKey(key), value))
 		}
 	}
-	if meta.Namespace != "" {
-		args = append(args, "--label", fmt.Sprintf("namespace=%s", meta.Namespace))
-	}
 
 	containers := append(util.DefaultContainerSecurityContexts(snapshot.Container.ExtraContainers), corev1.Container{
 		Name:            CONTAINER_NAME_SNAPSHOT,
@@ -153,7 +150,7 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 	}
 
 	labels := util.GetDefaultStoreSnapshotLabels(store, meta.Labels, meta.Name, subCommand)
-	annotations := util.GetDefaultContainerSnapshotAnnotations(CONTAINER_NAME_SNAPSHOT, snapshot)
+	annotations := util.GetDefaultContainerSnapshotAnnotations(CONTAINER_NAME_SNAPSHOT, snapshot, meta.Namespace)
 
 	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
