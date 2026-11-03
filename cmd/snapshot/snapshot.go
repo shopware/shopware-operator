@@ -245,11 +245,10 @@ func parseTempSize(value string) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("invalid --temp-size %q: %w", value, err)
 	}
-	bytes, ok := qty.AsInt64()
-	if !ok || bytes <= 0 {
-		return 0, fmt.Errorf("invalid --temp-size %q: must be a positive quantity", value)
+	if qty.Sign() <= 0 || qty.Cmp(*resource.NewQuantity(1<<63-1, resource.DecimalSI)) > 0 {
+		return 0, fmt.Errorf("invalid --temp-size %q: must be a positive quantity within int64 range", value)
 	}
-	return bytes, nil
+	return qty.Value(), nil
 }
 
 func exitOnFatalSnapshotError(logger *zap.SugaredLogger, err error) {
