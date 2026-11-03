@@ -294,6 +294,69 @@ func TestSnapshotRestoreJobUsesEphemeralVolumeTempDir(t *testing.T) {
 	}, container.Args)
 }
 
+func TestSnapshotJobTempSizeUsesMountedEphemeralVolume(t *testing.T) {
+	store := v1.Store{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-store", Namespace: "test"},
+	}
+	ephemeral := func(name, size string) corev1.Volume {
+		return corev1.Volume{
+			Name: name,
+			VolumeSource: corev1.VolumeSource{
+				Ephemeral: &corev1.EphemeralVolumeSource{
+					VolumeClaimTemplate: &corev1.PersistentVolumeClaimTemplate{
+						Spec: corev1.PersistentVolumeClaimSpec{
+							AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+							Resources: corev1.VolumeResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceStorage: resource.MustParse(size),
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+	snapshot := v1.StoreSnapshotCreate{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-snapshot", Namespace: "test"},
+		Spec: v1.StoreSnapshotSpec{
+			Path: "s3://bucket/snapshot.zip",
+			Container: v1.ContainerSpec{
+				Image: "shopware:snapshot",
+				Volumes: []corev1.Volume{
+					ephemeral("sidecar-scratch", "10Gi"),
+					ephemeral("snapshot-storage", "100Gi"),
+				},
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: "snapshot-storage", MountPath: "/snapshot-storage"},
+				},
+				ExtraContainers: []corev1.Container{
+					{
+						Name:         "sidecar",
+						VolumeMounts: []corev1.VolumeMount{{Name: "sidecar-scratch", MountPath: "/scratch"}},
+					},
+				},
+			},
+		},
+	}
+
+	result := job.SnapshotCreateJob(store, snapshot)
+	var container *corev1.Container
+	for i := range result.Spec.Template.Spec.Containers {
+		if result.Spec.Template.Spec.Containers[i].Name == job.CONTAINER_NAME_SNAPSHOT {
+			container = &result.Spec.Template.Spec.Containers[i]
+			break
+		}
+	}
+	require.NotNil(t, container)
+	assert.Equal(t, []string{
+		"create",
+		"--backup-file", "s3://bucket/snapshot.zip",
+		"--tempdir", "/snapshot-storage",
+		"--temp-size", "100Gi",
+	}, container.Args)
+}
+
 func TestSnapshotCreateJobPassesDefaultTempSize(t *testing.T) {
 	store := v1.Store{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-store", Namespace: "test"},

@@ -69,6 +69,7 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 	res := resource.MustParse(DEFAULT_TEMP_SIZE)
 	tempDirMountPath := "/temp"
 	addDefaultTempDir := true
+	var tempVolume corev1.Volume
 
 	for _, volume := range snapshot.Container.Volumes {
 		if volume.Ephemeral == nil {
@@ -79,6 +80,7 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 			if mount.Name == volume.Name && mount.MountPath != "" {
 				tempDirMountPath = mount.MountPath
 				addDefaultTempDir = false
+				tempVolume = volume
 				break
 			}
 		}
@@ -104,7 +106,7 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 	}
 	if addDefaultTempDir {
 		args = append(args, "--temp-size", res.String())
-	} else if qty, ok := ephemeralVolumeStorageRequest(snapshot); ok {
+	} else if qty, ok := ephemeralStorageRequest(tempVolume); ok {
 		args = append(args, "--temp-size", qty.String())
 	}
 	// Add labels from meta
@@ -193,15 +195,13 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 	return job
 }
 
-func ephemeralVolumeStorageRequest(spec v1.StoreSnapshotSpec) (resource.Quantity, bool) {
-	for _, volume := range spec.Container.Volumes {
-		if volume.Ephemeral == nil || volume.Ephemeral.VolumeClaimTemplate == nil {
-			continue
-		}
-		qty, ok := volume.Ephemeral.VolumeClaimTemplate.Spec.Resources.Requests[corev1.ResourceStorage]
-		if ok && !qty.IsZero() {
-			return qty, true
-		}
+func ephemeralStorageRequest(volume corev1.Volume) (resource.Quantity, bool) {
+	if volume.Ephemeral == nil || volume.Ephemeral.VolumeClaimTemplate == nil {
+		return resource.Quantity{}, false
+	}
+	qty, ok := volume.Ephemeral.VolumeClaimTemplate.Spec.Resources.Requests[corev1.ResourceStorage]
+	if ok && !qty.IsZero() {
+		return qty, true
 	}
 	return resource.Quantity{}, false
 }
