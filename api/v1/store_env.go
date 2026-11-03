@@ -245,6 +245,17 @@ func (f *FPMSpec) getFPMConfiguration() []corev1.EnvVar {
 			},
 		}
 	}
+
+	// Safe guard, never pass operator to a pod. Debug instance for example need them
+	if f.ProcessManagement == "operator" {
+		return []corev1.EnvVar{
+			{
+				Name:  "FPM_PM",
+				Value: "dynamic",
+			},
+		}
+	}
+
 	return []corev1.EnvVar{
 		{
 			Name:  "FPM_PM",

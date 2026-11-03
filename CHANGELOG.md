@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.1](https://github.com/shopware/shopware-operator/compare/1.12.0...v1.12.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* safe guard for fpm envs ([81eea87](https://github.com/shopware/shopware-operator/commit/81eea87ed7f3312761f0b384c6ebfd1c845c619e))
+
 ## [1.12.0](https://github.com/shopware/shopware-operator/compare/1.11.2...v1.12.0) (2026-10-22)
 
 
