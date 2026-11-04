@@ -188,9 +188,9 @@ func (r *StoreSnapshotBaseReconciler) ReconcileSnapshot(
 			logger.Warnw("snapshot not found, stop execution", zap.Error(err))
 			return noRequeue, nil
 		} else {
-			logger.Errorw("get snapshot unknown error, stop execution", zap.Error(err))
+			logger.Errorw("get snapshot unknown error, continue execution with failed requeue time", zap.Error(err))
 			tracing.RecordError(span, err)
-			return noRequeue, nil
+			return apiFailedRequeue, nil
 		}
 	}
 
@@ -220,11 +220,11 @@ func (r *StoreSnapshotBaseReconciler) reconcileSnapshotResource(
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			logger.Warnw("store not found", zap.Error(err))
-			return longRequeue
+			return shortRequeue
 		}
 		logger.Errorw("get store", zap.Error(err))
 		tracing.RecordContextError(ctx, err)
-		return longRequeue
+		return shortRequeue
 	}
 
 	// Skip reconciliation for terminal states (failed or succeeded)
@@ -260,7 +260,7 @@ func (r *StoreSnapshotBaseReconciler) reconcileSnapshotResource(
 		}
 	}
 
-	return longRequeue
+	return shortRequeue
 }
 
 func (r *StoreSnapshotBaseReconciler) reconcileSnapshotJob(ctx context.Context, snap SnapshotResource, owner metav1.Object, obj *batchv1.Job) (err error) {

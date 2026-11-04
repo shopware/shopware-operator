@@ -14,6 +14,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/manager/base"
 	"github.com/shopware/shopware-operator/internal/metrics"
 	"github.com/shopware/shopware-operator/internal/tracing"
+	"github.com/shopware/shopware-operator/internal/trigger"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -37,9 +38,10 @@ import (
 )
 
 var (
-	noRequeue    = ctrl.Result{}
-	shortRequeue = ctrl.Result{RequeueAfter: 5 * time.Second}
-	longRequeue  = ctrl.Result{RequeueAfter: 15 * time.Minute}
+	noRequeue        = ctrl.Result{}
+	shortRequeue     = ctrl.Result{RequeueAfter: 5 * time.Second}
+	apiFailedRequeue = ctrl.Result{RequeueAfter: 20 * time.Second}
+	longRequeue      = ctrl.Result{RequeueAfter: 15 * time.Minute}
 )
 
 // StoreReconciler reconciles a Store object
@@ -55,6 +57,7 @@ type StoreReconciler struct {
 	EventHandlers        []event.EventHandler
 	Logger               *zap.SugaredLogger
 	StateManager         *manager.StoreStateManager
+	Triggers             *trigger.Recorder
 }
 
 func (r *StoreReconciler) stateManager() *manager.StoreStateManager {
@@ -76,23 +79,34 @@ func (r *StoreReconciler) stateManager() *manager.StoreStateManager {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager, logger *zap.SugaredLogger) error {
-	skipStatusUpdates, err := NewSkipStatusUpdates(logger, &appsv1.Deployment{})
-	if err != nil {
-		return err
+	if r.Triggers == nil {
+		r.Triggers = trigger.NewRecorder()
 	}
-	controllerBuilder := ctrl.NewControllerManagedBy(mgr).
-		For(&v1.Store{}).
-		// We get triggered by every update on the created resources, this leads to high reconciles at the start.
-		Owns(&corev1.Secret{}).
-		Owns(&corev1.Service{}).
-		Owns(&networkingv1.Ingress{})
+	ownedBy := trigger.ControllerOwner("Store")
+	owned := func(source string) builder.Predicates {
+		return builder.WithPredicates(
+			r.Triggers.Predicate(source, ownedBy, k8s.HasObjectChangedPredicate()),
+		)
+	}
 
-	_, err = mgr.GetRESTMapper().RESTMapping(
+	controllerBuilder := ctrl.NewControllerManagedBy(mgr).
+		For(&v1.Store{}, builder.WithPredicates(
+			r.Triggers.Predicate("Store", trigger.Self, predicate.Or(
+				predicate.GenerationChangedPredicate{},
+				predicate.LabelChangedPredicate{},
+				predicate.AnnotationChangedPredicate{},
+			)),
+		)).
+		Owns(&corev1.Secret{}, owned("Secret")).
+		Owns(&corev1.Service{}, owned("Service")).
+		Owns(&networkingv1.Ingress{}, owned("Ingress"))
+
+	_, err := mgr.GetRESTMapper().RESTMapping(
 		gatewayv1.SchemeGroupVersion.WithKind("HTTPRoute").GroupKind(),
 		gatewayv1.SchemeGroupVersion.Version,
 	)
 	if err == nil {
-		controllerBuilder = controllerBuilder.Owns(&gatewayv1.HTTPRoute{})
+		controllerBuilder = controllerBuilder.Owns(&gatewayv1.HTTPRoute{}, owned("HTTPRoute"))
 	} else if !meta.IsNoMatchError(err) {
 		return fmt.Errorf("resolve HTTPRoute REST mapping: %w", err)
 	}
@@ -103,19 +117,17 @@ func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager, logger *zap.Sugared
 			kedav1alpha1.SchemeGroupVersion.Version,
 		)
 		if err == nil {
-			controllerBuilder = controllerBuilder.Owns(&kedav1alpha1.ScaledObject{})
+			controllerBuilder = controllerBuilder.Owns(&kedav1alpha1.ScaledObject{}, owned("ScaledObject"))
 		} else if !meta.IsNoMatchError(err) {
 			return fmt.Errorf("resolve ScaledObject REST mapping: %w", err)
 		}
 	}
 
 	return controllerBuilder.
-		Owns(&policy.PodDisruptionBudget{}).
-		Owns(&appsv1.Deployment{}).
-		Owns(&batchv1.Job{}).
-		Owns(&batchv1.CronJob{}).
-		// Skip status updates of all resources
-		WithEventFilter(skipStatusUpdates).
+		Owns(&policy.PodDisruptionBudget{}, owned("PodDisruptionBudget")).
+		Owns(&appsv1.Deployment{}, owned("Deployment")).
+		Owns(&batchv1.Job{}, owned("Job")).
+		Owns(&batchv1.CronJob{}, owned("CronJob")).
 		// This will watch the db secret and run a reconcile if the db secret will change.
 		Watches(
 			&corev1.Secret{},
@@ -153,12 +165,17 @@ func (r *StoreReconciler) findStoreForReconcile(
 					zap.String("secret", secret.GetName()),
 					zap.String("secret-namespace", secret.GetNamespace()),
 				)
-			requests = append(requests, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Namespace: store.Namespace,
-					Name:      store.Name,
-				},
+			key := types.NamespacedName{
+				Namespace: store.Namespace,
+				Name:      store.Name,
+			}
+			r.Triggers.Add(key, trigger.Trigger{
+				Source: "ReferencedSecret",
+				Event:  trigger.EventMapped,
+				Name:   secret.GetName(),
+				Reason: "referenced db/opensearch/fastly/admin secret changed",
 			})
+			requests = append(requests, reconcile.Request{NamespacedName: key})
 		}
 	}
 
@@ -187,6 +204,15 @@ func (r *StoreReconciler) Reconcile(
 	ctx, span := tracing.StartReconcile(ctx, "Store", req)
 	defer func() { tracing.EndReconcile(span, rr, &err) }()
 
+	var requeueReason string
+	defer func() {
+		span.SetAttributes(tracing.AttrRequeueReason.String(requeueReason))
+		r.Triggers.Finish(req.NamespacedName, requeueReason, rr, err)
+	}()
+
+	triggers := r.Triggers.Drain(req.NamespacedName)
+	trigger.RecordOnSpan(span, triggers)
+
 	log := r.Logger.
 		With(zap.String("namespace", req.Namespace)).
 		With(zap.String("name", req.Name))
@@ -194,29 +220,36 @@ func (r *StoreReconciler) Reconcile(
 	// Put logger in context for this reconcile
 	ctx = logging.WithLogger(ctx, log)
 	log = logging.FromContext(ctx)
-	log.Info("Reconciling store")
+	log.Infow("Reconciling store",
+		zap.String("cause", trigger.Cause(triggers)),
+		zap.Strings("triggers", trigger.Summaries(triggers)))
 
 	store, err := k8s.GetStore(ctx, r.Client, req.NamespacedName)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			log.Info("Don't reconcile anymore, because resource was not found")
+			r.Triggers.Forget(req.NamespacedName)
+			requeueReason = "store not found, no requeue"
 			return ctrl.Result{}, nil
 		}
 		log.Errorw("get CR", zap.Error(err))
 		tracing.RecordError(span, err)
-		return rr, nil
+		requeueReason = "getting store failed, short requeue"
+		return apiFailedRequeue, nil
 	}
 	span.SetAttributes(tracing.AttrState.String(string(store.Status.State)))
 
 	if !store.DeletionTimestamp.IsZero() {
 		metrics.RemoveStoreMetrics(store)
+		requeueReason = "store is being deleted"
 		return shortRequeue, nil
 	}
 
 	if err := r.stateManager().ReconcileResources(ctx, store); err != nil {
 		log.Errorw("reconcile", zap.Error(err))
 		tracing.RecordError(span, err)
-		return rr, nil
+		requeueReason = "reconciling resources failed, short requeue"
+		return shortRequeue, nil
 	}
 
 	log.Debug("Reconcile finished, run status update")
@@ -228,21 +261,25 @@ func (r *StoreReconciler) Reconcile(
 
 	if !store.IsState(v1.StateReady) {
 		log.Info("Schedule short Reconcile, because store is not ready yet")
+		requeueReason = "store is not ready yet"
 		return shortRequeue, nil
 	}
 
 	if len(store.Status.QueueState.Transports) == 0 {
 		log.Infow("Schedule short Reconcile, because worker queues are not known yet",
 			zap.String("queue-error", store.Status.QueueState.Error))
+		requeueReason = "worker queues are not known yet"
 		return shortRequeue, nil
 	}
 
 	if store.Status.WorkerState.State == v1.DeploymentStateNotFound {
 		log.Infow("Schedule short Reconcile, because worker deployments are not created yet",
 			zap.String("worker-message", store.Status.WorkerState.Message))
+		requeueReason = "worker deployments are not created yet"
 		return shortRequeue, nil
 	}
 
 	log.Info("Reconcile finished, schedule long Reconcile")
+	requeueReason = "store is ready, periodic long requeue"
 	return longRequeue, nil
 }
