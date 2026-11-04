@@ -79,8 +79,66 @@ func controlledDebugPod(instance *shopv1.TerminalDebugInstance, containers ...st
 	}}
 	for _, name := range containers {
 		p.Spec.Containers = append(p.Spec.Containers, corev1.Container{Name: name})
+		p.Status.ContainerStatuses = append(p.Status.ContainerStatuses, corev1.ContainerStatus{
+			Name:  name,
+			State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+		})
 	}
 	return p
+}
+
+func TestTerminalDebugStateFromPodUsesDebugContainerStatus(t *testing.T) {
+	running := corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}
+	terminated := corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 1, Reason: "Error"}}
+	waiting := corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "PodInitializing"}}
+
+	tests := []struct {
+		name     string
+		phase    corev1.PodPhase
+		statuses []corev1.ContainerStatus
+		want     shopv1.StoreDebugInstanceState
+	}{
+		{
+			name: "debug container running", phase: corev1.PodRunning,
+			statuses: []corev1.ContainerStatus{{Name: "debug", State: running}},
+			want:     shopv1.StoreDebugInstanceStateRunning,
+		},
+		{
+			name: "debug container terminated, sidecar keeps pod running", phase: corev1.PodRunning,
+			statuses: []corev1.ContainerStatus{{Name: "debug", State: terminated}, {Name: "sidecar", State: running}},
+			want:     shopv1.StoreDebugInstanceStateError,
+		},
+		{
+			name: "debug container completed, sidecar keeps pod running", phase: corev1.PodRunning,
+			statuses: []corev1.ContainerStatus{
+				{Name: "debug", State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 0}}},
+				{Name: "sidecar", State: running},
+			},
+			want: shopv1.StoreDebugInstanceStateError,
+		},
+		{
+			name: "debug container waiting, sidecar running", phase: corev1.PodRunning,
+			statuses: []corev1.ContainerStatus{{Name: "debug", State: waiting}, {Name: "sidecar", State: running}},
+			want:     shopv1.StoreDebugInstanceStatePending,
+		},
+		{
+			name: "no status for debug container yet", phase: corev1.PodRunning,
+			statuses: []corev1.ContainerStatus{{Name: "sidecar", State: running}},
+			want:     shopv1.StoreDebugInstanceStatePending,
+		},
+		{name: "pod pending", phase: corev1.PodPending, want: shopv1.StoreDebugInstanceStatePending},
+		{name: "pod failed", phase: corev1.PodFailed, want: shopv1.StoreDebugInstanceStateError},
+		{name: "pod succeeded", phase: corev1.PodSucceeded, want: shopv1.StoreDebugInstanceStateError},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &corev1.Pod{Status: corev1.PodStatus{Phase: tt.phase, ContainerStatuses: tt.statuses}}
+			state, message := terminalDebugStateFromPod(p, "debug")
+			assert.Equal(t, tt.want, state)
+			assert.NotEmpty(t, message)
+		})
+	}
 }
 
 func TestTerminalDebugExistingPodRecoversContainer(t *testing.T) {

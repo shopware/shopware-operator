@@ -160,7 +160,7 @@ func (r *TerminalDebugInstanceReconciler) reconcileDebugPod(
 			}
 			status.Container = container
 		}
-		state, message := terminalDebugStateFromPod(existing)
+		state, message := terminalDebugStateFromPod(existing, status.Container)
 		conditionStatus := "True"
 		if state == shopv1.StoreDebugInstanceStateError {
 			conditionStatus = Error
@@ -285,9 +285,33 @@ func terminalDebugInstanceExpired(instance *shopv1.TerminalDebugInstance) bool {
 	return duration > 0 && time.Now().After(instance.CreationTimestamp.Add(duration))
 }
 
-func terminalDebugStateFromPod(p *corev1.Pod) (shopv1.StoreDebugInstanceState, string) {
+// terminalDebugStateFromPod derives the state from the status of the debug
+// container. The pod phase alone is not enough: in a multi-container pod the
+// phase stays Running while a sidecar runs, even after the debug container
+// has terminated.
+func terminalDebugStateFromPod(p *corev1.Pod, container string) (shopv1.StoreDebugInstanceState, string) {
+	var containerStatus *corev1.ContainerStatus
+	for i := range p.Status.ContainerStatuses {
+		if p.Status.ContainerStatuses[i].Name == container {
+			containerStatus = &p.Status.ContainerStatuses[i]
+			break
+		}
+	}
+
+	if containerStatus != nil && containerStatus.State.Terminated != nil {
+		terminated := containerStatus.State.Terminated
+		return shopv1.StoreDebugInstanceStateError, fmt.Sprintf(
+			"Debug container %s terminated (exit code %d, reason %q)",
+			container, terminated.ExitCode, terminated.Reason)
+	}
+
 	switch p.Status.Phase {
 	case corev1.PodRunning:
+		// Other containers can run while the debug container is not up.
+		if containerStatus == nil || containerStatus.State.Running == nil {
+			return shopv1.StoreDebugInstanceStatePending,
+				fmt.Sprintf("Pod is running, waiting for debug container %s to start", container)
+		}
 		return shopv1.StoreDebugInstanceStateRunning, "Pod is running successfully"
 	case corev1.PodFailed, corev1.PodSucceeded:
 		return shopv1.StoreDebugInstanceStateError, fmt.Sprintf("Pod stopped in phase %s", p.Status.Phase)
