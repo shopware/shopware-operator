@@ -181,6 +181,14 @@ func ObjectExists(
 	return true, nil
 }
 
+// ErrNotControlledByOwner is returned when an existing object has a name we
+// want to use but is not controlled by the given owner.
+var ErrNotControlledByOwner = errors.New("object is not controlled by owner")
+
+// EnsureService creates or updates the Service. An existing Service that is not
+// controlled by owner is rejected, and the update is rejected with a conflict
+// if the Service changes between the ownership check and the patch. Both are
+// enforced in EnsureObjectWithHash, on the same object that gets patched.
 func EnsureService(
 	ctx context.Context,
 	cl client.Client,
@@ -189,16 +197,8 @@ func EnsureService(
 	s *runtime.Scheme,
 	saveOldMeta bool,
 ) error {
-	oldSvc := new(corev1.Service)
-	err := cl.Get(ctx, types.NamespacedName{
-		Name:      svc.GetName(),
-		Namespace: svc.GetNamespace(),
-	}, oldSvc)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			return EnsureObjectWithHash(ctx, cl, owner, svc, s)
-		}
-		return errors.Wrap(err, "get object")
+	if owner == nil {
+		return errors.New("service owner must not be nil")
 	}
 
 	return EnsureObjectWithHash(ctx, cl, owner, svc, s)
@@ -598,6 +598,15 @@ func EnsureObjectWithHash(
 		return nil
 	}
 
+	// Never take over a Service that is not controlled by this owner. Patching it
+	// would let us rewrite its selector and redirect live traffic.
+	if _, isService := obj.(*corev1.Service); isService && owner != nil {
+		if !metav1.IsControlledBy(oldObject, owner) {
+			return errors.Wrapf(ErrNotControlledByOwner,
+				"service %v is not controlled by %s", nn.String(), owner.GetName())
+		}
+	}
+
 	switch obj.(type) {
 	case *appsv1.Deployment:
 		annotations := obj.GetAnnotations()
@@ -695,6 +704,11 @@ func EnsureObjectWithHash(
 			// CRDs don't support strategic merge patch
 			patch = client.MergeFrom(oldObj.DeepCopy())
 			obj.(*kedav1alpha1.ScaledObject).TypeMeta = oldObj.DeepCopy().TypeMeta
+		case *corev1.Service:
+			// The resourceVersion is sent with the patch, so the update fails with a
+			// conflict if the Service was replaced or modified since we verified its
+			// ownership.
+			patch = client.StrategicMergeFrom(oldObject, client.MergeFromWithOptimisticLock{})
 		default:
 			patch = client.StrategicMergeFrom(oldObject)
 		}
