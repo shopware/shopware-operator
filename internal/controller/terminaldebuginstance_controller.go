@@ -181,8 +181,14 @@ func (r *TerminalDebugInstanceReconciler) reconcileDebugPod(
 	case errors.Is(err, pod.ErrMultipleWorkloads):
 		setState(shopv1.StoreDebugInstanceStateError, err.Error(), "MultipleWorkloads", Error)
 		return status
-	case err != nil:
+	case isInvalidTerminalDebugSource(err):
+		// Deterministic validation failure: retrying cannot help.
 		setState(shopv1.StoreDebugInstanceStateError, err.Error(), "InvalidSource", Error)
+		return status
+	case err != nil:
+		// Client and I/O failures are transient. Stay pending so the next
+		// reconcile retries instead of entering cleanup.
+		setState(shopv1.StoreDebugInstanceStatePending, err.Error(), "ReconcileError", Error)
 		return status
 	}
 
@@ -199,16 +205,27 @@ func (r *TerminalDebugInstanceReconciler) reconcileDebugPod(
 	return status
 }
 
+// errInvalidTerminalDebugSource marks a spec that can never produce a debug pod.
+var errInvalidTerminalDebugSource = errors.New("invalid debug source")
+
+// isInvalidTerminalDebugSource reports whether err is a deterministic
+// selector or container validation failure, as opposed to a client failure.
+func isInvalidTerminalDebugSource(err error) bool {
+	return errors.Is(err, errInvalidTerminalDebugSource) ||
+		errors.Is(err, pod.ErrContainerNotFound) ||
+		errors.Is(err, pod.ErrAmbiguousContainer)
+}
+
 func (r *TerminalDebugInstanceReconciler) buildDebugPod(
 	ctx context.Context,
 	instance *shopv1.TerminalDebugInstance,
 ) (*corev1.Pod, string, error) {
 	selector, err := metav1.LabelSelectorAsSelector(&instance.Spec.PodSelector)
 	if err != nil {
-		return nil, "", fmt.Errorf("parse pod selector: %w", err)
+		return nil, "", fmt.Errorf("%w: parse pod selector: %w", errInvalidTerminalDebugSource, err)
 	}
 	if selector.Empty() {
-		return nil, "", errors.New("pod selector must not be empty")
+		return nil, "", fmt.Errorf("%w: pod selector must not be empty", errInvalidTerminalDebugSource)
 	}
 
 	pods := &corev1.PodList{}

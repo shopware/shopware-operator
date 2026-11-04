@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 
 	shopv1 "github.com/shopware/shopware-operator/api/v1"
@@ -14,7 +16,9 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
 
 func terminalDebugTestScheme(t *testing.T) *runtime.Scheme {
@@ -108,6 +112,58 @@ func TestTerminalDebugExistingPodRecoversContainer(t *testing.T) {
 			status := r.reconcileDebugPod(ctx, instance)
 			assert.Equal(t, tt.wantState, status.State)
 			assert.Equal(t, tt.wantContainer, status.Container)
+		})
+	}
+}
+
+func TestTerminalDebugBuildFailureClassification(t *testing.T) {
+	listFailure := func(kind string) interceptor.Funcs {
+		return interceptor.Funcs{
+			List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+				if fmt.Sprintf("%T", list) == kind {
+					return errors.New("timeout")
+				}
+				return c.List(ctx, list, opts...)
+			},
+		}
+	}
+
+	source := unrelatedPod()
+	source.Name = "source"
+	source.Spec.Containers = []corev1.Container{{Name: "shop"}}
+
+	tests := []struct {
+		name       string
+		funcs      interceptor.Funcs
+		selector   *metav1.LabelSelector
+		container  string
+		wantState  shopv1.StoreDebugInstanceState
+		wantReason string
+	}{
+		{name: "pod list timeout", funcs: listFailure("*v1.PodList"), wantState: shopv1.StoreDebugInstanceStatePending, wantReason: "ReconcileError"},
+		{name: "replicaset list timeout", funcs: listFailure("*v1.ReplicaSetList"), wantState: shopv1.StoreDebugInstanceStatePending, wantReason: "ReconcileError"},
+		{name: "service list timeout", funcs: listFailure("*v1.ServiceList"), wantState: shopv1.StoreDebugInstanceStatePending, wantReason: "ReconcileError"},
+		{name: "empty selector", selector: &metav1.LabelSelector{}, wantState: shopv1.StoreDebugInstanceStateError, wantReason: "InvalidSource"},
+		{name: "unknown container", container: "missing", wantState: shopv1.StoreDebugInstanceStateError, wantReason: "InvalidSource"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := terminalDebugTestScheme(t)
+			instance := terminalDebugTestInstance()
+			instance.Name = "debug"
+			instance.Spec.Container = tt.container
+			if tt.selector != nil {
+				instance.Spec.PodSelector = *tt.selector
+			}
+
+			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(source).WithInterceptorFuncs(tt.funcs).Build()
+			r := &TerminalDebugInstanceReconciler{Client: cl, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+			status := r.reconcileDebugPod(context.Background(), instance)
+			assert.Equal(t, tt.wantState, status.State)
+			require.NotEmpty(t, status.Conditions)
+			assert.Equal(t, tt.wantReason, status.Conditions[len(status.Conditions)-1].Reason)
 		})
 	}
 }
