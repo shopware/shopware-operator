@@ -204,6 +204,19 @@ func TerminalDebugPod(
 	}, container.Name, nil
 }
 
+// DebugContainerName returns the name of the container that is the debug
+// container of p: the requested one, or the sole container when none is
+// requested. It applies the same selection as TerminalDebugPod. The debug pod
+// keeps the container names of its source pod, so the name can be recovered
+// from an existing debug pod.
+func DebugContainerName(p corev1.Pod, requested string) (string, error) {
+	index, err := debugContainerIndex(p.Spec.Containers, requested)
+	if err != nil {
+		return "", err
+	}
+	return p.Spec.Containers[index].Name, nil
+}
+
 func debugContainerIndex(containers []corev1.Container, name string) (int, error) {
 	if name == "" {
 		if len(containers) != 1 {

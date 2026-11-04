@@ -67,6 +67,51 @@ func TestTerminalDebugPodNameCollisionIsRejectedAndNotDeleted(t *testing.T) {
 	assert.Equal(t, types.UID("app-uid"), got.UID)
 }
 
+func controlledDebugPod(instance *shopv1.TerminalDebugInstance, containers ...string) *corev1.Pod {
+	p := unrelatedPod()
+	p.OwnerReferences = []metav1.OwnerReference{{
+		APIVersion: shopv1.GroupVersion.String(), Kind: "TerminalDebugInstance",
+		Name: instance.Name, UID: instance.UID, Controller: ptr.To(true),
+	}}
+	for _, name := range containers {
+		p.Spec.Containers = append(p.Spec.Containers, corev1.Container{Name: name})
+	}
+	return p
+}
+
+func TestTerminalDebugExistingPodRecoversContainer(t *testing.T) {
+	tests := []struct {
+		name          string
+		requested     string
+		containers    []string
+		prior         string
+		wantContainer string
+		wantState     shopv1.StoreDebugInstanceState
+	}{
+		{name: "sole container", containers: []string{"shop"}, wantContainer: "shop", wantState: shopv1.StoreDebugInstanceStateRunning},
+		{name: "explicit container", requested: "sidecar", containers: []string{"shop", "sidecar"}, wantContainer: "sidecar", wantState: shopv1.StoreDebugInstanceStateRunning},
+		{name: "recorded container is kept", requested: "other", containers: []string{"shop"}, prior: "shop", wantContainer: "shop", wantState: shopv1.StoreDebugInstanceStateRunning},
+		{name: "ambiguous container", containers: []string{"shop", "sidecar"}, wantState: shopv1.StoreDebugInstanceStateError},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			scheme := terminalDebugTestScheme(t)
+			instance := terminalDebugTestInstance()
+			instance.Spec.Container = tt.requested
+			instance.Status.Container = tt.prior
+
+			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(controlledDebugPod(instance, tt.containers...)).Build()
+			r := &TerminalDebugInstanceReconciler{Client: cl, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+			status := r.reconcileDebugPod(ctx, instance)
+			assert.Equal(t, tt.wantState, status.State)
+			assert.Equal(t, tt.wantContainer, status.Container)
+		})
+	}
+}
+
 func TestTerminalDebugCleanupDeletesControlledPod(t *testing.T) {
 	ctx := context.Background()
 	scheme := terminalDebugTestScheme(t)

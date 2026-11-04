@@ -149,6 +149,17 @@ func (r *TerminalDebugInstanceReconciler) reconcileDebugPod(
 			return status
 		}
 		status.PodName = existing.Name
+		// The pod may have been created without the status being written, for
+		// example after an operator restart or a failed status update. Recover
+		// the container name from the pod, so it does not stay empty forever.
+		if status.Container == "" {
+			container, err := pod.DebugContainerName(*existing, instance.Spec.Container)
+			if err != nil {
+				setState(shopv1.StoreDebugInstanceStateError, err.Error(), "InvalidSource", Error)
+				return status
+			}
+			status.Container = container
+		}
 		state, message := terminalDebugStateFromPod(existing)
 		conditionStatus := "True"
 		if state == shopv1.StoreDebugInstanceStateError {
