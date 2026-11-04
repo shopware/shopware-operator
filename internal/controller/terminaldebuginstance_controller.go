@@ -137,6 +137,17 @@ func (r *TerminalDebugInstanceReconciler) reconcileDebugPod(
 	existing := &corev1.Pod{}
 	err := r.Get(ctx, types.NamespacedName{Namespace: instance.Namespace, Name: instance.Name}, existing)
 	if err == nil {
+		// A pod with our name that we do not control is an unrelated pod. Never
+		// report it as the debug pod. The error state makes cleanup run, which
+		// only deletes objects controlled by this instance.
+		if !metav1.IsControlledBy(existing, instance) {
+			status.PodName = ""
+			status.Container = ""
+			setState(shopv1.StoreDebugInstanceStateError,
+				fmt.Sprintf("Pod %s already exists and is not controlled by this TerminalDebugInstance, choose a different name", existing.Name),
+				"PodNameCollision", Error)
+			return status
+		}
 		status.PodName = existing.Name
 		state, message := terminalDebugStateFromPod(existing)
 		conditionStatus := "True"
@@ -217,11 +228,13 @@ func (r *TerminalDebugInstanceReconciler) cleanup(
 	instance *shopv1.TerminalDebugInstance,
 ) (ctrl.Result, error) {
 	debugPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: instance.Namespace, Name: instance.Name}}
-	if err := r.Delete(ctx, debugPod); err != nil && !k8serrors.IsNotFound(err) {
+	// Only delete objects controlled by this instance (matched by UID). A name
+	// collision with an unrelated pod or service must never delete that object.
+	if _, err := k8s.DeleteControlledObject(ctx, r.Client, instance, debugPod); err != nil {
 		return ctrl.Result{}, fmt.Errorf("delete debug pod: %w", err)
 	}
 	svc := service.TerminalDebugService(*instance)
-	if err := r.Delete(ctx, svc); err != nil && !k8serrors.IsNotFound(err) {
+	if _, err := k8s.DeleteControlledObject(ctx, r.Client, instance, svc); err != nil {
 		return ctrl.Result{}, fmt.Errorf("delete debug service: %w", err)
 	}
 

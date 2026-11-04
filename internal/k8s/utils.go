@@ -185,6 +185,53 @@ func ObjectExists(
 // want to use but is not controlled by the given owner.
 var ErrNotControlledByOwner = errors.New("object is not controlled by owner")
 
+// DeleteControlledObject deletes the object with the name and namespace of obj,
+// but only if it is controlled by owner. An object that has the same name but a
+// different controller is left alone. The delete carries a UID precondition, so
+// an object that was replaced after the ownership check is not deleted either.
+// It reports whether an object was deleted.
+func DeleteControlledObject(
+	ctx context.Context,
+	cl client.Client,
+	owner metav1.Object,
+	obj client.Object,
+) (bool, error) {
+	if owner == nil || owner.GetUID() == "" {
+		return false, errors.New("owner must have a UID")
+	}
+
+	val := reflect.Indirect(reflect.ValueOf(obj))
+	existing := reflect.New(val.Type()).Interface().(client.Object)
+
+	nn := types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}
+	if err := cl.Get(ctx, nn, existing); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, errors.Wrapf(err, "get %v", nn.String())
+	}
+
+	if !metav1.IsControlledBy(existing, owner) {
+		logging.FromContext(ctx).Infow("Skip delete, object is not controlled by owner",
+			zap.String("kind", objectKind(obj)),
+			zap.String("obj-name", nn.String()),
+			zap.String("owner", owner.GetName()))
+		return false, nil
+	}
+
+	uid := existing.GetUID()
+	if err := cl.Delete(ctx, existing, client.Preconditions{UID: &uid}); err != nil {
+		// A failed precondition (conflict) means the object was replaced since
+		// we looked at it, so it is no longer ours to delete.
+		if k8serrors.IsNotFound(err) || k8serrors.IsConflict(err) {
+			return false, nil
+		}
+		return false, errors.Wrapf(err, "delete %v", nn.String())
+	}
+
+	return true, nil
+}
+
 // EnsureService creates or updates the Service. An existing Service that is not
 // controlled by owner is rejected, and the update is rejected with a conflict
 // if the Service changes between the ownership check and the patch. Both are

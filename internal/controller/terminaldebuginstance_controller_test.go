@@ -1,0 +1,106 @@
+package controller
+
+import (
+	"context"
+	"testing"
+
+	shopv1 "github.com/shopware/shopware-operator/api/v1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+)
+
+func terminalDebugTestScheme(t *testing.T) *runtime.Scheme {
+	t.Helper()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, shopv1.AddToScheme(scheme))
+
+	return scheme
+}
+
+func terminalDebugTestInstance() *shopv1.TerminalDebugInstance {
+	return &shopv1.TerminalDebugInstance{
+		ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "default", UID: "instance-uid"},
+		Spec: shopv1.TerminalDebugInstanceSpec{
+			PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "app"}},
+		},
+	}
+}
+
+// unrelatedPod is an application pod that happens to share the instance name.
+func unrelatedPod() *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "default", UID: "app-uid", Labels: map[string]string{"app": "app"}},
+		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+}
+
+func TestTerminalDebugPodNameCollisionIsRejectedAndNotDeleted(t *testing.T) {
+	ctx := context.Background()
+	scheme := terminalDebugTestScheme(t)
+	instance := terminalDebugTestInstance()
+
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(unrelatedPod()).Build()
+	r := &TerminalDebugInstanceReconciler{Client: cl, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+	status := r.reconcileDebugPod(ctx, instance)
+	assert.Equal(t, shopv1.StoreDebugInstanceStateError, status.State)
+	assert.Empty(t, status.PodName)
+	assert.Empty(t, status.Container)
+
+	// The error state triggers cleanup, which must leave the unrelated pod alone.
+	instance.Status = status
+	_, err := r.cleanup(ctx, instance)
+	require.NoError(t, err)
+
+	got := &corev1.Pod{}
+	require.NoError(t, cl.Get(ctx, types.NamespacedName{Namespace: "default", Name: "app"}, got))
+	assert.Equal(t, types.UID("app-uid"), got.UID)
+}
+
+func TestTerminalDebugCleanupDeletesControlledPod(t *testing.T) {
+	ctx := context.Background()
+	scheme := terminalDebugTestScheme(t)
+	instance := terminalDebugTestInstance()
+
+	owned := unrelatedPod()
+	owned.OwnerReferences = []metav1.OwnerReference{{
+		APIVersion: shopv1.GroupVersion.String(), Kind: "TerminalDebugInstance",
+		Name: instance.Name, UID: instance.UID, Controller: ptr.To(true),
+	}}
+
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(owned).Build()
+	r := &TerminalDebugInstanceReconciler{Client: cl, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+	_, err := r.cleanup(ctx, instance)
+	require.NoError(t, err)
+
+	got := &corev1.Pod{}
+	err = cl.Get(ctx, types.NamespacedName{Namespace: "default", Name: "app"}, got)
+	assert.Error(t, err)
+}
+
+func TestTerminalDebugCleanupKeepsForeignService(t *testing.T) {
+	ctx := context.Background()
+	scheme := terminalDebugTestScheme(t)
+	instance := terminalDebugTestInstance()
+
+	svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "default", UID: "svc-uid"}}
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build()
+	r := &TerminalDebugInstanceReconciler{Client: cl, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+	_, err := r.cleanup(ctx, instance)
+	require.NoError(t, err)
+
+	got := &corev1.Service{}
+	require.NoError(t, cl.Get(ctx, types.NamespacedName{Namespace: "default", Name: "app"}, got))
+}
