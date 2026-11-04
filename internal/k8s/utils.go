@@ -26,6 +26,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"reflect"
 	"slices"
@@ -38,7 +39,6 @@ import (
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/tracing"
-	"github.com/shopware/shopware-operator/internal/util"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -52,8 +52,14 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
+
+const lastConfigHashAnnotation = "shopware.com/last-config-hash"
+
+var ignoredAnnotations = []string{"deployment.kubernetes.io/revision"}
 
 func GetWatchNamespace() (string, error) {
 	ns, found := os.LookupEnv("NAMESPACE")
@@ -383,10 +389,10 @@ func EnsureDeployment(
 }
 
 const (
-	ChangeReasonNotFound    = "object does not exist yet"
-	ChangeReasonHashMissing = "deployed object has no config hash annotation"
-	ChangeReasonHashChanged = "desired config differs from deployed config (config hash changed)"
-	ChangeReasonMetadata    = "labels or annotations differ from deployed object"
+	changeReasonNotFound    = "object does not exist yet"
+	changeReasonHashMissing = "deployed object has no config hash annotation"
+	changeReasonHashChanged = "desired config differs from deployed config (config hash changed)"
+	changeReasonMetadata    = "labels or annotations differ from deployed object"
 )
 
 type ObjectChange struct {
@@ -396,6 +402,35 @@ type ObjectChange struct {
 
 func (c ObjectChange) Changed() bool {
 	return c.Reason != ""
+}
+
+// HasObjectChangedPredicate implements a default update predicate function where the operator would also change something
+//
+// This predicate will skip update events that have no change in the object's metadata.
+// Delete events will always trigger a reconcile of the resource
+func HasObjectChangedPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		// Skip creates, because they come from the operator so we don't want to trigger a reconcile on them.
+		CreateFunc: func(e event.CreateEvent) bool {
+			return false
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldObject, newObject := e.ObjectOld, e.ObjectNew
+			if oldObject == nil || newObject == nil {
+				return true
+			}
+
+			// Includes hash diff check
+			return len(ChangedMetaKeys(oldObject, newObject)) != 0
+		},
+		// On delete Always run the operator owned object
+		DeleteFunc: func(event.DeleteEvent) bool {
+			return true
+		},
+		GenericFunc: func(event.GenericEvent) bool {
+			return true
+		},
+	}
 }
 
 func HasObjectChanged(
@@ -421,13 +456,8 @@ func DetectObjectChange(
 	}
 
 	objAnnotations := obj.GetAnnotations()
-	delete(objAnnotations, "shopware.com/last-config-hash")
+	delete(objAnnotations, lastConfigHashAnnotation)
 	obj.SetAnnotations(objAnnotations)
-
-	hash, err := ObjectHash(obj)
-	if err != nil {
-		return ObjectChange{}, errors.Wrap(err, "calculate object hash")
-	}
 
 	val := reflect.ValueOf(obj)
 	if val.Kind() == reflect.Pointer {
@@ -439,45 +469,56 @@ func DetectObjectChange(
 		Name:      obj.GetName(),
 		Namespace: obj.GetNamespace(),
 	}
-	if err = cl.Get(ctx, nn, oldObject); err != nil {
+	if err := cl.Get(ctx, nn, oldObject); err != nil {
 		if !k8serrors.IsNotFound(err) {
 			return ObjectChange{}, errors.Wrapf(err, "get %v", nn.String())
 		}
-		return ObjectChange{Reason: ChangeReasonNotFound}, nil
+		return ObjectChange{Reason: changeReasonNotFound}, nil
 	}
 
-	oldHash, ok := oldObject.GetAnnotations()["shopware.com/last-config-hash"]
-	if !ok {
-		return ObjectChange{Reason: ChangeReasonHashMissing}, nil
+	hashChanged, err := objectHashChanged(oldObject, obj)
+	if err != nil {
+		return ObjectChange{}, errors.Wrap(err, "DetectObjectChange")
 	}
-	if oldHash != hash {
-		return ObjectChange{Reason: ChangeReasonHashChanged}, nil
-	}
-
-	ignoreAnnotations := []string{"shopware.com/last-config-hash"}
-	switch obj.(type) {
-	case *appsv1.Deployment:
-		ignoreAnnotations = append(ignoreAnnotations, "deployment.kubernetes.io/revision")
+	if hashChanged.Changed() {
+		return hashChanged, nil
 	}
 
-	annotations := obj.GetAnnotations()
-	for _, key := range ignoreAnnotations {
-		v, ok := oldObject.GetAnnotations()[key]
-		if ok {
-			annotations[key] = v
-		}
-	}
-	obj.SetAnnotations(annotations)
-
-	if objectMetaEqual(obj, oldObject) {
+	changedFields := ChangedMetaKeys(oldObject, obj)
+	if len(changedFields) == 0 {
 		return ObjectChange{}, nil
 	}
-	return ObjectChange{Reason: ChangeReasonMetadata, ChangedKeys: changedMetaKeys(oldObject, obj)}, nil
+	return ObjectChange{Reason: changeReasonMetadata, ChangedKeys: changedFields}, nil
 }
 
-func changedMetaKeys(old, new metav1.Object) []string {
+func ChangedMetaKeys(old, new metav1.Object) []string {
 	keys := diffKeys("label", old.GetLabels(), new.GetLabels())
-	return append(keys, diffKeys("annotation", old.GetAnnotations(), new.GetAnnotations())...)
+	return append(keys, diffKeys("annotation", filteredAnnotations(old), filteredAnnotations(new))...)
+}
+
+func filteredAnnotations(obj metav1.Object) map[string]string {
+	annotations := maps.Clone(obj.GetAnnotations())
+	delete(annotations, lastConfigHashAnnotation)
+	for _, key := range ignoredAnnotations {
+		delete(annotations, key)
+	}
+	return annotations
+}
+
+func objectHashChanged(old, new client.Object) (ObjectChange, error) {
+	hash, err := ObjectHash(new)
+	if err != nil {
+		return ObjectChange{}, errors.Wrap(err, "calculate object hash")
+	}
+
+	oldHash, ok := old.GetAnnotations()[lastConfigHashAnnotation]
+	if !ok {
+		return ObjectChange{Reason: changeReasonHashMissing}, nil
+	}
+	if oldHash != hash {
+		return ObjectChange{Reason: changeReasonHashChanged}, nil
+	}
+	return ObjectChange{}, nil
 }
 
 func diffKeys(prefix string, old, new map[string]string) []string {
@@ -523,7 +564,7 @@ func EnsureObjectWithHash(
 	}
 
 	objAnnotations := obj.GetAnnotations()
-	delete(objAnnotations, "shopware.com/last-config-hash")
+	delete(objAnnotations, lastConfigHashAnnotation)
 	obj.SetAnnotations(objAnnotations)
 
 	hash, err := ObjectHash(obj)
@@ -532,7 +573,7 @@ func EnsureObjectWithHash(
 	}
 
 	objAnnotations = obj.GetAnnotations()
-	objAnnotations["shopware.com/last-config-hash"] = hash
+	objAnnotations[lastConfigHashAnnotation] = hash
 	obj.SetAnnotations(objAnnotations)
 
 	val := reflect.ValueOf(obj)
@@ -560,8 +601,7 @@ func EnsureObjectWithHash(
 	switch obj.(type) {
 	case *appsv1.Deployment:
 		annotations := obj.GetAnnotations()
-		ignoreAnnotations := []string{"deployment.kubernetes.io/revision"}
-		for _, key := range ignoreAnnotations {
+		for _, key := range ignoredAnnotations {
 			v, ok := oldObject.GetAnnotations()[key]
 			if ok {
 				annotations[key] = v
@@ -570,10 +610,10 @@ func EnsureObjectWithHash(
 		obj.SetAnnotations(annotations)
 	}
 
-	hashChanged := oldObject.GetAnnotations()["shopware.com/last-config-hash"] != hash
-	objectMetaChanged := !objectMetaEqual(obj, oldObject)
+	hashChanged := oldObject.GetAnnotations()[lastConfigHashAnnotation] != hash
+	objectMetaChangedFields := ChangedMetaKeys(obj, oldObject)
 
-	if hashChanged || objectMetaChanged {
+	if hashChanged || len(objectMetaChangedFields) != 0 {
 		if hashChanged {
 			diff, err := ObjectDiff(oldObject, obj)
 			if err != nil {
@@ -582,18 +622,19 @@ func EnsureObjectWithHash(
 			logging.FromContext(ctx).Infow("Object last-config-hash has changed",
 				zap.String("kind", obj.GetObjectKind().GroupVersionKind().Kind),
 				zap.String("obj-name", obj.GetName()),
-				zap.String("old", oldObject.GetAnnotations()["shopware.com/last-config-hash"]),
-				zap.String("new", hash),
+				zap.String("old-hash", oldObject.GetAnnotations()[lastConfigHashAnnotation]),
+				zap.String("new-hash", hash),
 				zap.String("diff", diff))
 		} else {
 			logging.FromContext(ctx).Infow(
 				"Object meta has changed",
 				zap.String("kind", obj.GetObjectKind().GroupVersionKind().Kind),
 				zap.String("obj-name", obj.GetName()),
-				zap.Any("oldAnnotations", oldObject.GetAnnotations()),
-				zap.Any("newAnnotations", obj.GetAnnotations()),
-				zap.Any("oldLabels", oldObject.GetLabels()),
-				zap.Any("newLabels", obj.GetLabels()),
+				zap.Any("old-annotations", oldObject.GetAnnotations()),
+				zap.Any("new-annotations", obj.GetAnnotations()),
+				zap.Any("old-labels", oldObject.GetLabels()),
+				zap.Any("new-labels", obj.GetLabels()),
+				zap.Any("changed-fileds", objectMetaChangedFields),
 			)
 		}
 
@@ -666,11 +707,6 @@ func EnsureObjectWithHash(
 	return nil
 }
 
-func objectMetaEqual(old, new metav1.Object) bool {
-	return util.MapEqual(old.GetLabels(), new.GetLabels()) &&
-		util.MapEqual(old.GetAnnotations(), new.GetAnnotations())
-}
-
 type secretHashData struct {
 	Data       map[string][]byte `json:"data,omitempty"`
 	StringData map[string]string `json:"stringData,omitempty"`
@@ -734,9 +770,13 @@ func ObjectHash(obj runtime.Object) (string, error) {
 	return hex.EncodeToString(hash[:]), nil
 }
 
+const (
+	redactedValue        = "<redacted>"
+	redactedChangedValue = "<redacted, changed>"
+)
+
 func ObjectDiff(oldObj, newObj runtime.Object) (string, error) {
-	oldData := extractRelevantData(oldObj)
-	newData := extractRelevantData(newObj)
+	oldData, newData := diffData(oldObj, newObj)
 
 	oldJSON, err := json.Marshal(oldData)
 	if err != nil {
@@ -769,6 +809,48 @@ func ObjectDiff(oldObj, newObj runtime.Object) (string, error) {
 	}
 
 	return result.String(), nil
+}
+
+func diffData(oldObj, newObj runtime.Object) (any, any) {
+	oldSecret, oldIsSecret := oldObj.(*corev1.Secret)
+	newSecret, newIsSecret := newObj.(*corev1.Secret)
+	if oldIsSecret && newIsSecret {
+		return redactSecrets(oldSecret, newSecret)
+	}
+	return extractRelevantData(oldObj), extractRelevantData(newObj)
+}
+
+func redactSecrets(oldSecret, newSecret *corev1.Secret) (map[string]string, map[string]string) {
+	oldValues := secretValues(oldSecret)
+	newValues := secretValues(newSecret)
+
+	oldRedacted := make(map[string]string, len(oldValues))
+	for key := range oldValues {
+		oldRedacted[key] = redactedValue
+	}
+
+	newRedacted := make(map[string]string, len(newValues))
+	for key, value := range newValues {
+		newRedacted[key] = redactedValue
+		if oldValue, ok := oldValues[key]; ok && oldValue != value {
+			newRedacted[key] = redactedChangedValue
+		}
+	}
+	return oldRedacted, newRedacted
+}
+
+func secretValues(s *corev1.Secret) map[string]string {
+	values := make(map[string]string)
+	if s == nil {
+		return values
+	}
+	for key, value := range s.Data {
+		values["data/"+key] = string(value)
+	}
+	for key, value := range s.StringData {
+		values["stringData/"+key] = value
+	}
+	return values
 }
 
 func findChanges(old, new map[string]interface{}, prefix string) []string {

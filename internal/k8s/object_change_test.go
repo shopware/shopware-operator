@@ -1,10 +1,9 @@
-package k8s_test
+package k8s
 
 import (
 	"context"
 	"testing"
 
-	"github.com/shopware/shopware-operator/internal/k8s"
 	"github.com/shopware/shopware-operator/internal/tracing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,7 +32,7 @@ func desiredPDB() *policy.PodDisruptionBudget {
 func deployedPDB(t *testing.T, mutate func(*policy.PodDisruptionBudget)) *policy.PodDisruptionBudget {
 	t.Helper()
 	obj := desiredPDB()
-	hash, err := k8s.ObjectHash(obj)
+	hash, err := ObjectHash(obj)
 	require.NoError(t, err)
 	obj.Annotations = map[string]string{"shopware.com/last-config-hash": hash}
 	if mutate != nil {
@@ -49,20 +48,20 @@ func TestDetectObjectChange(t *testing.T) {
 		reason   string
 		keys     []string
 	}{
-		{name: "not found", reason: k8s.ChangeReasonNotFound},
+		{name: "not found", reason: changeReasonNotFound},
 		{
 			name: "no hash annotation",
 			existing: deployedPDB(t, func(p *policy.PodDisruptionBudget) {
 				p.Annotations = nil
 			}),
-			reason: k8s.ChangeReasonHashMissing,
+			reason: changeReasonHashMissing,
 		},
 		{
 			name: "hash changed",
 			existing: deployedPDB(t, func(p *policy.PodDisruptionBudget) {
 				p.Annotations["shopware.com/last-config-hash"] = "outdated"
 			}),
-			reason: k8s.ChangeReasonHashChanged,
+			reason: changeReasonHashChanged,
 		},
 		{
 			name: "label changed",
@@ -70,7 +69,7 @@ func TestDetectObjectChange(t *testing.T) {
 				p.Labels["app"] = "other"
 				p.Labels["extra"] = "x"
 			}),
-			reason: k8s.ChangeReasonMetadata,
+			reason: changeReasonMetadata,
 			keys:   []string{"label:app", "label:extra"},
 		},
 		{name: "in place", existing: deployedPDB(t, nil)},
@@ -83,7 +82,7 @@ func TestDetectObjectChange(t *testing.T) {
 				builder = builder.WithObjects(tt.existing)
 			}
 
-			change, err := k8s.DetectObjectChange(context.Background(), builder.Build(), desiredPDB())
+			change, err := DetectObjectChange(context.Background(), builder.Build(), desiredPDB())
 			require.NoError(t, err)
 			assert.Equal(t, tt.reason, change.Reason)
 			assert.Equal(t, tt.reason != "", change.Changed())
@@ -101,13 +100,13 @@ func TestHasObjectChangedRecordsSpanEvent(t *testing.T) {
 	cl := fake.NewClientBuilder().WithObjects(deployedPDB(t, nil)).Build()
 
 	ctx, span := tracing.Start(context.Background(), "Base.ReconcilePDB")
-	changed, err := k8s.HasObjectChanged(ctx, cl, desiredPDB())
+	changed, err := HasObjectChanged(ctx, cl, desiredPDB())
 	require.NoError(t, err)
 	assert.False(t, changed)
 
 	missing := desiredPDB()
 	missing.Name = "my-shop-worker"
-	changed, err = k8s.HasObjectChanged(ctx, cl, missing)
+	changed, err = HasObjectChanged(ctx, cl, missing)
 	require.NoError(t, err)
 	assert.True(t, changed)
 	span.End()
@@ -123,5 +122,5 @@ func TestHasObjectChangedRecordsSpanEvent(t *testing.T) {
 
 	assert.Equal(t, tracing.EventObjectChanged, events[1].Name)
 	assert.Contains(t, events[1].Attributes, tracing.AttrObjectName.String("my-shop-worker"))
-	assert.Contains(t, events[1].Attributes, tracing.AttrObjectReason.String(k8s.ChangeReasonNotFound))
+	assert.Contains(t, events[1].Attributes, tracing.AttrObjectReason.String(changeReasonNotFound))
 }

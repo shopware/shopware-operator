@@ -33,6 +33,7 @@ const (
 	AttrStateTo       = attribute.Key("shopware.state.to")
 	AttrMessage       = attribute.Key("shopware.status.message")
 	AttrRequeueAfter  = attribute.Key("reconcile.requeue_after")
+	AttrRequeueReason = attribute.Key("reconcile.requeue_reason")
 	AttrRedacted      = attribute.Key("shopware.error.redacted")
 	RedactedMessage   = "error message redacted because it could reveal secrets"
 	EventStateChanged = "state changed"
@@ -46,6 +47,17 @@ const (
 	EventObjectChanged  = "object changed"
 	EventObjectInPlace  = "object in place"
 	EventObjectDisabled = "object disabled"
+
+	AttrTriggerCause      = attribute.Key("reconcile.trigger")
+	AttrTriggerCount      = attribute.Key("reconcile.trigger_count")
+	AttrTriggerSources    = attribute.Key("reconcile.trigger_sources")
+	AttrTriggers          = attribute.Key("reconcile.triggers")
+	AttrTriggerSource     = attribute.Key("shopware.trigger.source")
+	AttrTriggerEvent      = attribute.Key("shopware.trigger.event")
+	AttrTriggerReason     = attribute.Key("shopware.trigger.reason")
+	AttrTriggerChanges    = attribute.Key("shopware.trigger.changes")
+	AttrTriggerDelay      = attribute.Key("shopware.trigger.delay")
+	EventReconcileTrigger = "reconcile trigger"
 )
 
 type Shutdown func(context.Context) error
