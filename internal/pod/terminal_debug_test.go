@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -121,34 +122,60 @@ func TestTerminalDebugPodContainer(t *testing.T) {
 }
 
 func TestSelectTerminalDebugSource(t *testing.T) {
-	running := func(name string, owner types.UID, labels map[string]string) corev1.Pod {
+	running := func(name, ownerKind string, owner types.UID, labels map[string]string) corev1.Pod {
 		return corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            name,
 				Labels:          labels,
-				OwnerReferences: []metav1.OwnerReference{{UID: owner, Controller: ptr.To(true)}},
+				OwnerReferences: []metav1.OwnerReference{{Kind: ownerKind, UID: owner, Controller: ptr.To(true)}},
 			},
 			Status: corev1.PodStatus{Phase: corev1.PodRunning},
 		}
 	}
-	pending := running("a-pending", "rs", nil)
+	replicaSet := func(uid, deployment types.UID, revision string) appsv1.ReplicaSet {
+		return appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{
+			UID:             uid,
+			Annotations:     map[string]string{"deployment.kubernetes.io/revision": revision},
+			OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", UID: deployment, Controller: ptr.To(true)}},
+		}}
+	}
+	pending := running("a-pending", "ReplicaSet", "rs-old", nil)
 	pending.Status.Phase = corev1.PodPending
-	debug := running("a-debug", "tdi", map[string]string{util.TerminalDebugLabelKey: "true"})
+	debug := running("a-debug", "TerminalDebugInstance", "tdi", map[string]string{util.TerminalDebugLabelKey: "true"})
+	replicaSets := []appsv1.ReplicaSet{
+		replicaSet("rs-old", "admin", "1"),
+		replicaSet("rs-new", "admin", "2"),
+		replicaSet("rs-worker", "worker", "1"),
+	}
 
 	tests := map[string]struct {
 		pods    []corev1.Pod
 		want    string
 		wantErr error
 	}{
-		"no pods":               {wantErr: pod.ErrNoSourcePod},
-		"only pending pods":     {pods: []corev1.Pod{pending}, wantErr: pod.ErrNoSourcePod},
-		"only debug pods":       {pods: []corev1.Pod{debug}, wantErr: pod.ErrNoSourcePod},
-		"multiple owners":       {pods: []corev1.Pod{running("a", "rs-1", nil), running("b", "rs-2", nil)}, wantErr: pod.ErrMultipleOwners},
-		"first running by name": {pods: []corev1.Pod{pending, debug, running("c", "rs", nil), running("b", "rs", nil)}, want: "b"},
+		"no pods":           {wantErr: pod.ErrNoSourcePod},
+		"only pending pods": {pods: []corev1.Pod{pending}, wantErr: pod.ErrNoSourcePod},
+		"only debug pods":   {pods: []corev1.Pod{debug}, wantErr: pod.ErrNoSourcePod},
+		"two deployments": {
+			pods:    []corev1.Pod{running("admin-a", "ReplicaSet", "rs-new", nil), running("worker-a", "ReplicaSet", "rs-worker", nil)},
+			wantErr: pod.ErrMultipleWorkloads,
+		},
+		"deployment and statefulset": {
+			pods:    []corev1.Pod{running("admin-a", "ReplicaSet", "rs-new", nil), running("db-0", "StatefulSet", "db", nil)},
+			wantErr: pod.ErrMultipleWorkloads,
+		},
+		"rollout picks the newest replica set": {
+			pods: []corev1.Pod{pending, debug, running("admin-a", "ReplicaSet", "rs-old", nil), running("admin-c", "ReplicaSet", "rs-new", nil), running("admin-b", "ReplicaSet", "rs-new", nil)},
+			want: "admin-b",
+		},
+		"statefulset replicas pick the first by name": {
+			pods: []corev1.Pod{running("db-1", "StatefulSet", "db", nil), running("db-0", "StatefulSet", "db", nil)},
+			want: "db-0",
+		},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := pod.SelectTerminalDebugSource(tc.pods)
+			got, err := pod.SelectTerminalDebugSource(tc.pods, replicaSets)
 			if tc.wantErr != nil {
 				require.ErrorIs(t, err, tc.wantErr)
 				return

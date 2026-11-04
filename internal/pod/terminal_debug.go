@@ -1,12 +1,15 @@
 package pod
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -20,11 +23,13 @@ const (
 	// TerminalMountPath is writable in every debug container, so the terminal
 	// server can be copied into images that have no writable path of their own.
 	TerminalMountPath = "/terminal"
+
+	deploymentRevisionAnnotation = "deployment.kubernetes.io/revision"
 )
 
 var (
 	ErrNoSourcePod        = errors.New("no running pod matches the pod selector")
-	ErrMultipleOwners     = errors.New("running pods matching the pod selector belong to more than one controller")
+	ErrMultipleWorkloads  = errors.New("running pods matching the pod selector belong to more than one workload")
 	ErrContainerNotFound  = errors.New("container not found in the selected pod")
 	ErrAmbiguousContainer = errors.New("container must be set because the selected pod has more than one container")
 )
@@ -42,11 +47,50 @@ var controllerLabelKeys = []string{
 	"job-name",
 }
 
+// terminalDebugCandidate is a source pod with the workload it belongs to.
+type terminalDebugCandidate struct {
+	pod corev1.Pod
+	// workload is the UID of the top-level controller: the Deployment for
+	// ReplicaSet pods, the direct controller otherwise, empty for bare pods.
+	workload types.UID
+	// revision orders the ReplicaSets of one Deployment, zero otherwise.
+	revision int64
+}
+
+func newTerminalDebugCandidate(p corev1.Pod, replicaSets map[types.UID]appsv1.ReplicaSet) terminalDebugCandidate {
+	candidate := terminalDebugCandidate{pod: p}
+	ref := metav1.GetControllerOf(&p)
+	if ref == nil {
+		return candidate
+	}
+	candidate.workload = ref.UID
+	if ref.Kind != "ReplicaSet" {
+		return candidate
+	}
+
+	rs, ok := replicaSets[ref.UID]
+	if !ok {
+		return candidate
+	}
+	if deployment := metav1.GetControllerOf(&rs); deployment != nil {
+		candidate.workload = deployment.UID
+	}
+	candidate.revision, _ = strconv.ParseInt(rs.Annotations[deploymentRevisionAnnotation], 10, 64)
+	return candidate
+}
+
 // SelectTerminalDebugSource picks the running pod to copy from the pods that
-// match the instance pod selector. Debug pods are never copied.
-func SelectTerminalDebugSource(pods []corev1.Pod) (corev1.Pod, error) {
-	candidates := make([]corev1.Pod, 0, len(pods))
-	owners := make(map[types.UID]struct{})
+// match the instance pod selector. Debug pods are never copied. Pods of one
+// Deployment count as one workload, and only the newest ReplicaSet is copied,
+// so a rolling update does not look like two workloads.
+func SelectTerminalDebugSource(pods []corev1.Pod, replicaSets []appsv1.ReplicaSet) (corev1.Pod, error) {
+	replicaSetsByUID := make(map[types.UID]appsv1.ReplicaSet, len(replicaSets))
+	for _, rs := range replicaSets {
+		replicaSetsByUID[rs.UID] = rs
+	}
+
+	candidates := make([]terminalDebugCandidate, 0, len(pods))
+	workloads := make(map[types.UID]struct{})
 	for _, p := range pods {
 		if p.Status.Phase != corev1.PodRunning || p.DeletionTimestamp != nil {
 			continue
@@ -54,25 +98,29 @@ func SelectTerminalDebugSource(pods []corev1.Pod) (corev1.Pod, error) {
 		if _, debug := p.Labels[util.TerminalDebugLabelKey]; debug {
 			continue
 		}
-		var owner types.UID
-		if ref := metav1.GetControllerOf(&p); ref != nil {
-			owner = ref.UID
-		}
-		owners[owner] = struct{}{}
-		candidates = append(candidates, p)
+		candidate := newTerminalDebugCandidate(p, replicaSetsByUID)
+		workloads[candidate.workload] = struct{}{}
+		candidates = append(candidates, candidate)
 	}
 
 	if len(candidates) == 0 {
 		return corev1.Pod{}, ErrNoSourcePod
 	}
-	if len(owners) > 1 {
-		return corev1.Pod{}, ErrMultipleOwners
+	if len(workloads) > 1 {
+		return corev1.Pod{}, ErrMultipleWorkloads
 	}
 
-	slices.SortFunc(candidates, func(a, b corev1.Pod) int {
-		return strings.Compare(a.Name, b.Name)
+	newest := slices.MaxFunc(candidates, func(a, b terminalDebugCandidate) int {
+		return cmp.Compare(a.revision, b.revision)
+	}).revision
+	candidates = slices.DeleteFunc(candidates, func(c terminalDebugCandidate) bool {
+		return c.revision != newest
 	})
-	return candidates[0], nil
+
+	slices.SortFunc(candidates, func(a, b terminalDebugCandidate) int {
+		return strings.Compare(a.pod.Name, b.pod.Name)
+	})
+	return candidates[0].pod, nil
 }
 
 // ServiceSelectorKeys returns every label key used by a Service selector.

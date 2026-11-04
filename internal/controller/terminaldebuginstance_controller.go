@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,6 +39,7 @@ type TerminalDebugInstanceReconciler struct {
 // +kubebuilder:rbac:groups=shop.shopware.com,namespace=default,resources=terminaldebuginstances/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",namespace=default,resources=pods,verbs=get;list;watch;create;delete;
 // +kubebuilder:rbac:groups="",namespace=default,resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="apps",namespace=default,resources=replicasets,verbs=get;list;watch
 
 func (r *TerminalDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (rr ctrl.Result, err error) {
 	ctx, span := tracing.StartReconcile(ctx, "TerminalDebugInstance", req)
@@ -154,6 +156,9 @@ func (r *TerminalDebugInstanceReconciler) reconcileDebugPod(
 	case errors.Is(err, pod.ErrNoSourcePod):
 		setState(shopv1.StoreDebugInstanceStateWait, err.Error(), "NoSourcePod", Error)
 		return status
+	case errors.Is(err, pod.ErrMultipleWorkloads):
+		setState(shopv1.StoreDebugInstanceStateError, err.Error(), "MultipleWorkloads", Error)
+		return status
 	case err != nil:
 		setState(shopv1.StoreDebugInstanceStateError, err.Error(), "InvalidSource", Error)
 		return status
@@ -188,7 +193,11 @@ func (r *TerminalDebugInstanceReconciler) buildDebugPod(
 	if err := r.List(ctx, pods, client.InNamespace(instance.Namespace), client.MatchingLabelsSelector{Selector: selector}); err != nil {
 		return nil, "", fmt.Errorf("list source pods: %w", err)
 	}
-	source, err := pod.SelectTerminalDebugSource(pods.Items)
+	replicaSets := &appsv1.ReplicaSetList{}
+	if err := r.List(ctx, replicaSets, client.InNamespace(instance.Namespace)); err != nil {
+		return nil, "", fmt.Errorf("list replica sets: %w", err)
+	}
+	source, err := pod.SelectTerminalDebugSource(pods.Items, replicaSets.Items)
 	if err != nil {
 		return nil, "", err
 	}
