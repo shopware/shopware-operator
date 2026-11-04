@@ -1,8 +1,8 @@
 package k8s_test
 
 import (
-	"encoding/base64"
 	"context"
+	"encoding/base64"
 	"testing"
 
 	"github.com/shopware/shopware-operator/internal/k8s"
