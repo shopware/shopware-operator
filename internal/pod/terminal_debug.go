@@ -51,14 +51,15 @@ var controllerLabelKeys = []string{
 type terminalDebugCandidate struct {
 	pod corev1.Pod
 	// workload is the UID of the top-level controller: the Deployment for
-	// ReplicaSet pods, the direct controller otherwise, empty for bare pods.
+	// ReplicaSet pods, the direct controller otherwise, and the pod itself for
+	// bare pods, so unrelated standalone pods are never one workload.
 	workload types.UID
 	// revision orders the ReplicaSets of one Deployment, zero otherwise.
 	revision int64
 }
 
 func newTerminalDebugCandidate(p corev1.Pod, replicaSets map[types.UID]appsv1.ReplicaSet) terminalDebugCandidate {
-	candidate := terminalDebugCandidate{pod: p}
+	candidate := terminalDebugCandidate{pod: p, workload: p.UID}
 	ref := metav1.GetControllerOf(&p)
 	if ref == nil {
 		return candidate

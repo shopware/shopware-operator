@@ -139,6 +139,12 @@ func TestSelectTerminalDebugSource(t *testing.T) {
 			OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", UID: deployment, Controller: ptr.To(true)}},
 		}}
 	}
+	bare := func(name string, uid types.UID) corev1.Pod {
+		return corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: name, UID: uid},
+			Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+		}
+	}
 	pending := running("a-pending", "ReplicaSet", "rs-old", nil)
 	pending.Status.Phase = corev1.PodPending
 	debug := running("a-debug", "TerminalDebugInstance", "tdi", map[string]string{util.TerminalDebugLabelKey: "true"})
@@ -163,6 +169,18 @@ func TestSelectTerminalDebugSource(t *testing.T) {
 		"deployment and statefulset": {
 			pods:    []corev1.Pod{running("admin-a", "ReplicaSet", "rs-new", nil), running("db-0", "StatefulSet", "db", nil)},
 			wantErr: pod.ErrMultipleWorkloads,
+		},
+		"two standalone pods are two workloads": {
+			pods:    []corev1.Pod{bare("a", "uid-a"), bare("b", "uid-b")},
+			wantErr: pod.ErrMultipleWorkloads,
+		},
+		"standalone pod and deployment": {
+			pods:    []corev1.Pod{bare("a", "uid-a"), running("admin-a", "ReplicaSet", "rs-new", nil)},
+			wantErr: pod.ErrMultipleWorkloads,
+		},
+		"single standalone pod": {
+			pods: []corev1.Pod{bare("a", "uid-a")},
+			want: "a",
 		},
 		"rollout picks the newest replica set": {
 			pods: []corev1.Pod{pending, debug, running("admin-a", "ReplicaSet", "rs-old", nil), running("admin-c", "ReplicaSet", "rs-new", nil), running("admin-b", "ReplicaSet", "rs-new", nil)},
