@@ -9,7 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -73,6 +75,58 @@ func TestEnsureServiceUpdatesOwnedService(t *testing.T) {
 	got := new(corev1.Service)
 	require.NoError(t, cl.Get(context.Background(), client.ObjectKeyFromObject(existing), got))
 	assert.Equal(t, map[string]string{"app": "new"}, got.Spec.Selector)
+}
+
+func TestDeleteControlledObject(t *testing.T) {
+	owner := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "debug", Namespace: "ns", UID: "owner-uid"}}
+	controlledBy := func(uid string) []metav1.OwnerReference {
+		return []metav1.OwnerReference{{
+			APIVersion: "v1", Kind: "ConfigMap", Name: "debug", UID: types.UID(uid),
+			Controller: ptr.To(true),
+		}}
+	}
+
+	tests := []struct {
+		name        string
+		owners      []metav1.OwnerReference
+		wantDeleted bool
+	}{
+		{name: "controlled by owner", owners: controlledBy("owner-uid"), wantDeleted: true},
+		{name: "controlled by other uid", owners: controlledBy("other-uid")},
+		{name: "same name and kind but not controller", owners: []metav1.OwnerReference{{
+			APIVersion: "v1", Kind: "ConfigMap", Name: "debug", UID: "owner-uid",
+		}}},
+		{name: "no owner"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			existing := newTestService(nil)
+			existing.OwnerReferences = tt.owners
+			cl := fake.NewClientBuilder().WithObjects(existing).Build()
+
+			deleted, err := k8s.DeleteControlledObject(context.Background(), cl, owner, newTestService(nil))
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantDeleted, deleted)
+
+			err = cl.Get(context.Background(), client.ObjectKeyFromObject(existing), new(corev1.Service))
+			assert.Equal(t, tt.wantDeleted, k8serrors.IsNotFound(err))
+		})
+	}
+
+	t.Run("missing object", func(t *testing.T) {
+		cl := fake.NewClientBuilder().Build()
+		deleted, err := k8s.DeleteControlledObject(context.Background(), cl, owner, newTestService(nil))
+		require.NoError(t, err)
+		assert.False(t, deleted)
+	})
+
+	t.Run("owner without uid", func(t *testing.T) {
+		cl := fake.NewClientBuilder().WithObjects(newTestService(nil)).Build()
+		noUID := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "debug", Namespace: "ns"}}
+		_, err := k8s.DeleteControlledObject(context.Background(), cl, noUID, newTestService(nil))
+		require.Error(t, err)
+	})
 }
 
 func TestObjectHashConfigMapBinaryData(t *testing.T) {
