@@ -69,6 +69,7 @@ type StoreStatus struct {
 	State           StatefulAppState `json:"state,omitempty"`
 	Message         string           `json:"message,omitempty"`
 	CurrentImageTag string           `json:"currentImageTag,omitempty"`
+	SecretHash      string           `json:"secretHash,omitempty"`
 
 	WorkerState     DeploymentCondition `json:"workerState,omitempty"`
 	AdminState      DeploymentCondition `json:"adminState,omitempty"`

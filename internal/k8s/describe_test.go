@@ -3,6 +3,7 @@ package k8s
 import (
 	"testing"
 
+	"github.com/shopware/shopware-operator/internal/util"
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,7 +16,7 @@ func describedDeployment() *appsv1.Deployment {
 		ResourceVersion: "1",
 		Generation:      1,
 		Labels:          map[string]string{"app": "storefront"},
-		Annotations:     map[string]string{lastConfigHashAnnotation: "a"},
+		Annotations:     map[string]string{util.LastConfigHashAnnotation: "a"},
 	}}
 }
 
@@ -40,7 +41,7 @@ func TestDescribeUpdate(t *testing.T) {
 		},
 		{
 			name:    "config hash",
-			mutate:  func(d *appsv1.Deployment) { d.Annotations["shopware.com/last-config-hash"] = "b" },
+			mutate:  func(d *appsv1.Deployment) { d.Annotations[util.LastConfigHashAnnotation] = "b" },
 			reason:  "config hash annotation changed",
 			changes: []string{"hash:a->b"},
 		},
