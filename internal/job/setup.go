@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
+	"github.com/shopware/shopware-operator/internal/secret/keys"
 	"github.com/shopware/shopware-operator/internal/util"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -51,7 +52,7 @@ func SetupJob(store v1.Store) *batchv1.Job {
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: store.GetSecretName(),
 					},
-					Key: "admin-password",
+					Key: keys.AdminPassword,
 				},
 			},
 		},
@@ -62,7 +63,7 @@ func SetupJob(store v1.Store) *batchv1.Job {
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: store.GetSecretName(),
 					},
-					Key: "admin-username",
+					Key: keys.AdminUsername,
 				},
 			},
 		},

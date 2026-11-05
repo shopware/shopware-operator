@@ -15,6 +15,7 @@ import (
 
 	"github.com/pkg/errors"
 	v1 "github.com/shopware/shopware-operator/api/v1"
+	"github.com/shopware/shopware-operator/internal/secret/keys"
 	"github.com/shopware/shopware-operator/internal/util"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -132,67 +133,67 @@ func generateStoreSecret(store *v1.Store, secret *corev1.Secret, dbSpec *util.Da
 		secret.Data = make(map[string][]byte)
 	}
 
-	if _, ok := secret.Data["app-secret"]; !ok {
+	if _, ok := secret.Data[keys.AppSecret]; !ok {
 		pass, err := generatePass(128)
 		if err != nil {
 			return fmt.Errorf("generate app secret: %w", err)
 		}
-		secret.Data["app-secret"] = pass
+		secret.Data[keys.AppSecret] = pass
 	}
 
 	if store.Spec.AdminCredentials.PasswordSecretRef.IsSet() {
-		secret.Data["admin-password"] = values.AdminPassword
-	} else if _, ok := secret.Data["admin-password"]; !ok {
+		secret.Data[keys.AdminPassword] = values.AdminPassword
+	} else if _, ok := secret.Data[keys.AdminPassword]; !ok {
 		if store.Spec.AdminCredentials.Password != "" {
-			secret.Data["admin-password"] = []byte(store.Spec.AdminCredentials.Password)
+			secret.Data[keys.AdminPassword] = []byte(store.Spec.AdminCredentials.Password)
 		} else {
 			admin, err := generatePass(20)
 			if err != nil {
 				return fmt.Errorf("generate admin secret: %w", err)
 			}
-			secret.Data["admin-password"] = admin
+			secret.Data[keys.AdminPassword] = admin
 		}
 	}
 
 	if store.Spec.AdminCredentials.UsernameSecretRef.IsSet() {
-		secret.Data["admin-username"] = values.AdminUsername
+		secret.Data[keys.AdminUsername] = values.AdminUsername
 	} else {
-		setOrDelete(secret.Data, "admin-username", []byte(store.Spec.AdminCredentials.Username))
+		setOrDelete(secret.Data, keys.AdminUsername, []byte(store.Spec.AdminCredentials.Username))
 	}
 
-	if _, ok := secret.Data["jwt-private-key"]; !ok {
+	if _, ok := secret.Data[keys.JWTPrivateKey]; !ok {
 		privateKey, publicKey, err := generatePrivatePublicKey(rsaKeySize)
 		if err != nil {
 			return fmt.Errorf("create jwt keys: %w", err)
 		}
-		secret.Data["jwt-private-key"] = []byte(base64.StdEncoding.EncodeToString(privateKey))
-		secret.Data["jwt-public-key"] = []byte(base64.StdEncoding.EncodeToString(publicKey))
+		secret.Data[keys.JWTPrivateKey] = []byte(base64.StdEncoding.EncodeToString(privateKey))
+		secret.Data[keys.JWTPublicKey] = []byte(base64.StdEncoding.EncodeToString(publicKey))
 	}
 
 	// Used for snapshot controller
-	secret.Data["database-password"] = []byte(url.QueryEscape(string(dbSpec.Password)))
-	secret.Data["database-user"] = []byte(dbSpec.User)
-	secret.Data["database-host"] = []byte(dbSpec.Host)
+	secret.Data[keys.DatabasePassword] = []byte(url.QueryEscape(string(dbSpec.Password)))
+	secret.Data[keys.DatabaseUser] = []byte(dbSpec.User)
+	secret.Data[keys.DatabaseHost] = []byte(dbSpec.Host)
 
-	secret.Data["database-url"] = util.GenerateDatabaseURLForShopware(dbSpec)
+	secret.Data[keys.DatabaseURL] = util.GenerateDatabaseURLForShopware(dbSpec)
 
 	if store.Spec.OpensearchSpec.Enabled {
-		secret.Data["opensearch-url"] = util.GenerateOpensearchURLForShopware(&store.Spec.OpensearchSpec, values.OpensearchPassword)
+		secret.Data[keys.OpensearchURL] = util.GenerateOpensearchURLForShopware(&store.Spec.OpensearchSpec, values.OpensearchPassword)
 	} else {
-		delete(secret.Data, "opensearch-url")
+		delete(secret.Data, keys.OpensearchURL)
 	}
 
 	if len(values.FastlyServiceID) > 0 && len(values.FastlyToken) > 0 {
-		secret.Data["fastly-token"] = values.FastlyToken
-		secret.Data["fastly-service-id"] = values.FastlyServiceID
+		secret.Data[keys.FastlyToken] = values.FastlyToken
+		secret.Data[keys.FastlyServiceID] = values.FastlyServiceID
 	} else {
-		delete(secret.Data, "fastly-token")
-		delete(secret.Data, "fastly-service-id")
+		delete(secret.Data, keys.FastlyToken)
+		delete(secret.Data, keys.FastlyServiceID)
 	}
 
-	setOrDelete(secret.Data, "tideways-api-key", values.TidewaysAPIKey)
-	setOrDelete(secret.Data, "s3-access-key-id", values.S3AccessKeyID)
-	setOrDelete(secret.Data, "s3-secret-access-key", values.S3SecretAccessKey)
+	setOrDelete(secret.Data, keys.TidewaysAPIKey, values.TidewaysAPIKey)
+	setOrDelete(secret.Data, keys.S3AccessKeyID, values.S3AccessKeyID)
+	setOrDelete(secret.Data, keys.S3SecretAccessKey, values.S3SecretAccessKey)
 
 	return nil
 }

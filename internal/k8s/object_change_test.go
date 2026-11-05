@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/shopware/shopware-operator/internal/tracing"
+	"github.com/shopware/shopware-operator/internal/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -34,7 +35,7 @@ func deployedPDB(t *testing.T, mutate func(*policy.PodDisruptionBudget)) *policy
 	obj := desiredPDB()
 	hash, err := ObjectHash(obj)
 	require.NoError(t, err)
-	obj.Annotations = map[string]string{"shopware.com/last-config-hash": hash}
+	obj.Annotations = map[string]string{util.LastConfigHashAnnotation: hash}
 	if mutate != nil {
 		mutate(obj)
 	}
@@ -59,7 +60,7 @@ func TestDetectObjectChange(t *testing.T) {
 		{
 			name: "hash changed",
 			existing: deployedPDB(t, func(p *policy.PodDisruptionBudget) {
-				p.Annotations["shopware.com/last-config-hash"] = "outdated"
+				p.Annotations[util.LastConfigHashAnnotation] = "outdated"
 			}),
 			reason: changeReasonHashChanged,
 		},

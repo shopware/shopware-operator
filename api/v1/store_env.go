@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/shopware/shopware-operator/internal/secret/keys"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -321,7 +322,7 @@ func (s *Store) getOpensearch() []corev1.EnvVar {
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: s.Spec.SecretName,
 						},
-						Key: "opensearch-url",
+						Key: keys.OpensearchURL,
 					},
 				},
 			},
@@ -332,7 +333,7 @@ func (s *Store) getOpensearch() []corev1.EnvVar {
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: s.Spec.SecretName,
 						},
-						Key: "opensearch-url",
+						Key: keys.OpensearchURL,
 					},
 				},
 			},
@@ -462,7 +463,7 @@ func (s *Store) getTideways() []corev1.EnvVar {
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: s.Spec.SecretName,
 					},
-					Key: "tideways-api-key",
+					Key: keys.TidewaysAPIKey,
 				},
 			},
 		})
@@ -507,7 +508,7 @@ func (s *Store) getStorage() []corev1.EnvVar {
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: s.Spec.SecretName,
 					},
-					Key: "s3-access-key-id",
+					Key: keys.S3AccessKeyID,
 				},
 			},
 		})
@@ -521,7 +522,7 @@ func (s *Store) getStorage() []corev1.EnvVar {
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: s.Spec.SecretName,
 					},
-					Key: "s3-secret-access-key",
+					Key: keys.S3SecretAccessKey,
 				},
 			},
 		})
@@ -543,7 +544,7 @@ func (s *Store) getFastly() []corev1.EnvVar {
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: s.Spec.SecretName,
 						},
-						Key: "fastly-service-id",
+						Key: keys.FastlyServiceID,
 					},
 				},
 			},
@@ -554,7 +555,7 @@ func (s *Store) getFastly() []corev1.EnvVar {
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: s.Spec.SecretName,
 						},
-						Key: "fastly-token",
+						Key: keys.FastlyToken,
 					},
 				},
 			},
@@ -592,7 +593,7 @@ func (s *Store) operatorEnv() []corev1.EnvVar {
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: s.Spec.SecretName,
 					},
-					Key: "database-url",
+					Key: keys.DatabaseURL,
 				},
 			},
 		},
@@ -603,7 +604,7 @@ func (s *Store) operatorEnv() []corev1.EnvVar {
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: s.Spec.SecretName,
 					},
-					Key: "app-secret",
+					Key: keys.AppSecret,
 				},
 			},
 		},
@@ -614,7 +615,7 @@ func (s *Store) operatorEnv() []corev1.EnvVar {
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: s.Spec.SecretName,
 					},
-					Key: "jwt-private-key",
+					Key: keys.JWTPrivateKey,
 				},
 			},
 		},
@@ -625,7 +626,7 @@ func (s *Store) operatorEnv() []corev1.EnvVar {
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: s.Spec.SecretName,
 					},
-					Key: "jwt-public-key",
+					Key: keys.JWTPublicKey,
 				},
 			},
 		},
