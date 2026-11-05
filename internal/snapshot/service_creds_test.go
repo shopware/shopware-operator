@@ -29,7 +29,7 @@ func (c *countingCreds) Retrieve(ctx context.Context) (aws.Credentials, error) {
 
 func TestAWSSDKRefreshProviderAsksSDKAgain(t *testing.T) {
 	src := &countingCreds{}
-	provider := &awsSDKRefreshProvider{provider: src}
+	provider := &awsSDKRefreshProvider{provider: src, ctx: context.Background()}
 
 	require.True(t, provider.IsExpired(), "minio must treat provider as expired so it re-retrieves")
 
@@ -42,4 +42,14 @@ func TestAWSSDKRefreshProviderAsksSDKAgain(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, first.AccessKeyID, second.AccessKeyID)
 	require.Equal(t, int64(2), src.n.Load(), "refresh provider must call AWS SDK on every Retrieve")
+}
+
+func TestAWSSDKRefreshProviderUsesOperationContext(t *testing.T) {
+	src := &countingCreds{}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	provider := &awsSDKRefreshProvider{provider: src, ctx: ctx}
+
+	_, err := provider.Retrieve()
+	require.ErrorIs(t, err, context.Canceled)
 }

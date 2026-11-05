@@ -120,13 +120,14 @@ func getAWSKeysWithAsumeRole(ctx context.Context, cfg config.S3Config) (*credent
 		zap.Bool("hasSessionToken", creds.SessionToken != ""),
 	)
 
-	return credentials.New(&awsSDKRefreshProvider{provider: awsCfg.Credentials}), nil
+	return credentials.New(&awsSDKRefreshProvider{provider: awsCfg.Credentials, ctx: ctx}), nil
 }
 
 // awsSDKRefreshProvider lets minio ask the AWS SDK for creds on each request.
 // The SDK caches until expiry and then refreshes IRSA / web-identity / IMDS tokens.
 type awsSDKRefreshProvider struct {
 	provider aws.CredentialsProvider
+	ctx      context.Context
 }
 
 func (p *awsSDKRefreshProvider) Retrieve() (credentials.Value, error) {
@@ -134,7 +135,11 @@ func (p *awsSDKRefreshProvider) Retrieve() (credentials.Value, error) {
 }
 
 func (p *awsSDKRefreshProvider) RetrieveWithCredContext(_ *credentials.CredContext) (credentials.Value, error) {
-	creds, err := p.provider.Retrieve(context.Background())
+	ctx := p.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	creds, err := p.provider.Retrieve(ctx)
 	if err != nil {
 		return credentials.Value{}, err
 	}
