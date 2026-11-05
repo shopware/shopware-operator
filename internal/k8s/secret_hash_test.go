@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/shopware/shopware-operator/internal/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -38,25 +39,25 @@ func deployedDeployment(t *testing.T, secretHash string) *appsv1.Deployment {
 	dep := desiredDeployment(secretHash)
 	hash, err := ObjectHash(dep)
 	require.NoError(t, err)
-	dep.Annotations = map[string]string{"custom": "value", lastConfigHashAnnotation: hash}
+	dep.Annotations = map[string]string{"custom": "value", util.LastConfigHashAnnotation: hash}
 	return dep
 }
 
 func TestSetSecretHash(t *testing.T) {
 	dep := desiredDeployment("abc")
-	assert.Equal(t, "abc", dep.Spec.Template.Annotations[StoreSecretHashAnnotation])
-	assert.NotContains(t, dep.Annotations, StoreSecretHashAnnotation)
+	assert.Equal(t, "abc", dep.Spec.Template.Annotations[util.StoreSecretHashAnnotation])
+	assert.NotContains(t, dep.Annotations, util.StoreSecretHashAnnotation)
 
 	job := &batchv1.Job{}
 	SetSecretHash(job, "abc")
-	assert.Equal(t, "abc", job.Spec.Template.Annotations[StoreSecretHashAnnotation])
+	assert.Equal(t, "abc", job.Spec.Template.Annotations[util.StoreSecretHashAnnotation])
 
 	cronJob := &batchv1.CronJob{}
 	SetSecretHash(cronJob, "abc")
-	assert.Equal(t, "abc", cronJob.Spec.JobTemplate.Spec.Template.Annotations[StoreSecretHashAnnotation])
+	assert.Equal(t, "abc", cronJob.Spec.JobTemplate.Spec.Template.Annotations[util.StoreSecretHashAnnotation])
 
 	empty := desiredDeployment("")
-	assert.NotContains(t, empty.Spec.Template.Annotations, StoreSecretHashAnnotation)
+	assert.NotContains(t, empty.Spec.Template.Annotations, util.StoreSecretHashAnnotation)
 }
 
 func TestSecretHashIsNotPartOfConfigHash(t *testing.T) {
@@ -99,5 +100,5 @@ func TestEnsureObjectWithHashUpdatesOnSecretChange(t *testing.T) {
 
 	live := &appsv1.Deployment{}
 	require.NoError(t, cl.Get(context.Background(), types.NamespacedName{Namespace: "shopware", Name: "my-shop-storefront"}, live))
-	assert.Equal(t, "def", live.Spec.Template.Annotations[StoreSecretHashAnnotation])
+	assert.Equal(t, "def", live.Spec.Template.Annotations[util.StoreSecretHashAnnotation])
 }

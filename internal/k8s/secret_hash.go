@@ -3,16 +3,14 @@ package k8s
 import (
 	"maps"
 
+	"github.com/shopware/shopware-operator/internal/util"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-const (
-	StoreSecretHashAnnotation = "shopware.com/store-secret-hash"
-	changeReasonSecretChanged = "store secret differs from deployed object (secret hash changed)"
-)
+const changeReasonSecretChanged = "store secret differs from deployed object (secret hash changed)"
 
 func SecretHash(secret *corev1.Secret) (string, error) {
 	return ObjectHash(secret)
@@ -27,7 +25,7 @@ func SetSecretHash(obj runtime.Object, hash string) {
 	if annotations == nil {
 		annotations = make(map[string]string)
 	}
-	annotations[StoreSecretHashAnnotation] = hash
+	annotations[util.StoreSecretHashAnnotation] = hash
 	template.Annotations = annotations
 }
 
@@ -41,7 +39,7 @@ func secretHashOf(obj runtime.Object) string {
 	if template == nil {
 		return ""
 	}
-	return template.Annotations[StoreSecretHashAnnotation]
+	return template.Annotations[util.StoreSecretHashAnnotation]
 }
 
 func withoutSecretHash(obj runtime.Object) runtime.Object {
@@ -51,7 +49,7 @@ func withoutSecretHash(obj runtime.Object) runtime.Object {
 	copied := obj.DeepCopyObject()
 	template := podTemplate(copied)
 	template.Annotations = maps.Clone(template.Annotations)
-	delete(template.Annotations, StoreSecretHashAnnotation)
+	delete(template.Annotations, util.StoreSecretHashAnnotation)
 	return copied
 }
 
