@@ -121,7 +121,7 @@ func main() {
 					}
 
 					var metrics snapshot.MetricStatisticsAPI
-					if snapshot.CloudWatchPrecheckEnabled(cfg.S3) {
+					if includeS3 && snapshot.CloudWatchPrecheckEnabled(cfg.S3) {
 						var err error
 						metrics, err = snapshot.NewCloudWatchMetrics(ctx, cfg)
 						if err != nil {
