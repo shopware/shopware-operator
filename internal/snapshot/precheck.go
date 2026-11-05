@@ -30,9 +30,12 @@ type MetricStatisticsAPI interface {
 }
 
 func NewCloudWatchMetrics(ctx context.Context, cfg *config.SnapshotConfig) (MetricStatisticsAPI, error) {
-	awsCfg, err := aconfig.LoadDefaultConfig(ctx, aconfig.WithRegion(cfg.S3.Region))
+	awsCfg, err := aconfig.LoadDefaultConfig(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if awsCfg.Region == "" {
+		awsCfg.Region = cfg.S3.Region
 	}
 	return cloudwatch.NewFromConfig(awsCfg), nil
 }
