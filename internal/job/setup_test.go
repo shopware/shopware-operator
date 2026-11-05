@@ -21,12 +21,13 @@ func TestStoreContainer(t *testing.T) {
 }
 
 func TestSetupJob(t *testing.T) {
-	t.Run("uses admin username secret ref", func(t *testing.T) {
+	t.Run("reads admin username from store secret", func(t *testing.T) {
 		store := v1.Store{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-store", Namespace: "test"},
 			Spec: v1.StoreSpec{
 				Container:   v1.ContainerSpec{Image: "shopware:latest"},
 				SetupScript: "/setup.sh",
+				SecretName:  "store-secret",
 				AdminCredentials: v1.Credentials{
 					UsernameSecretRef: v1.SecretRef{Name: "admin-credentials", Key: "username"},
 				},
@@ -40,8 +41,8 @@ func TestSetupJob(t *testing.T) {
 				username = env
 			}
 		}
-		assert.Equal(t, "admin-credentials", username.ValueFrom.SecretKeyRef.Name)
-		assert.Equal(t, "username", username.ValueFrom.SecretKeyRef.Key)
+		assert.Equal(t, "store-secret", username.ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, "admin-username", username.ValueFrom.SecretKeyRef.Key)
 		assert.Empty(t, username.Value)
 	})
 

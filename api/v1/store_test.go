@@ -746,3 +746,37 @@ func TestTidewaysServiceEnv(t *testing.T) {
 		assert.Contains(t, env, corev1.EnvVar{Name: "TIDEWAYS_SERVICE", Value: "checkout"})
 	})
 }
+
+func TestReferencedSecretsReadFromStoreSecret(t *testing.T) {
+	store := v1.Store{
+		Spec: v1.StoreSpec{
+			SecretName: "store-secret",
+			Tideways: v1.TidewaysSpec{
+				Enabled:   true,
+				APIKeyRef: v1.SecretRef{Name: "tideways", Key: "api-key"},
+			},
+			S3Storage: v1.S3Storage{
+				AccessKeyRef:       v1.SecretRef{Name: "s3", Key: "access"},
+				SecretAccessKeyRef: v1.SecretRef{Name: "s3", Key: "secret"},
+			},
+		},
+	}
+
+	expected := map[string]string{
+		"TIDEWAYS_APIKEY":       "tideways-api-key",
+		"AWS_ACCESS_KEY_ID":     "s3-access-key-id",
+		"AWS_SECRET_ACCESS_KEY": "s3-secret-access-key",
+	}
+
+	found := map[string]string{}
+	for _, env := range store.GetEnv() {
+		if _, ok := expected[env.Name]; !ok {
+			continue
+		}
+		require.NotNil(t, env.ValueFrom)
+		require.NotNil(t, env.ValueFrom.SecretKeyRef)
+		assert.Equal(t, "store-secret", env.ValueFrom.SecretKeyRef.Name)
+		found[env.Name] = env.ValueFrom.SecretKeyRef.Key
+	}
+	assert.Equal(t, expected, found)
+}

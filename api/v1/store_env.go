@@ -454,15 +454,15 @@ func (s *Store) getTideways() []corev1.EnvVar {
 		})
 	}
 
-	if s.Spec.Tideways.APIKeyRef.Name != "" && s.Spec.Tideways.APIKeyRef.Key != "" {
+	if s.Spec.Tideways.APIKeyRef.IsSet() {
 		envVars = append(envVars, corev1.EnvVar{
 			Name: "TIDEWAYS_APIKEY",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: s.Spec.Tideways.APIKeyRef.Name,
+						Name: s.Spec.SecretName,
 					},
-					Key: s.Spec.Tideways.APIKeyRef.Key,
+					Key: "tideways-api-key",
 				},
 			},
 		})
@@ -499,29 +499,29 @@ func (s *Store) getStorage() []corev1.EnvVar {
 		},
 	}
 
-	if s.Spec.S3Storage.AccessKeyRef.Name != "" {
+	if s.Spec.S3Storage.AccessKeyRef.IsSet() {
 		envVars = append(envVars, corev1.EnvVar{
 			Name: "AWS_ACCESS_KEY_ID",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: s.Spec.S3Storage.AccessKeyRef.Name,
+						Name: s.Spec.SecretName,
 					},
-					Key: s.Spec.S3Storage.AccessKeyRef.Key,
+					Key: "s3-access-key-id",
 				},
 			},
 		})
 	}
 
-	if s.Spec.S3Storage.SecretAccessKeyRef.Key != "" {
+	if s.Spec.S3Storage.SecretAccessKeyRef.IsSet() {
 		envVars = append(envVars, corev1.EnvVar{
 			Name: "AWS_SECRET_ACCESS_KEY",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: s.Spec.S3Storage.SecretAccessKeyRef.Name,
+						Name: s.Spec.SecretName,
 					},
-					Key: s.Spec.S3Storage.SecretAccessKeyRef.Key,
+					Key: "s3-secret-access-key",
 				},
 			},
 		})
@@ -532,10 +532,8 @@ func (s *Store) getStorage() []corev1.EnvVar {
 
 func (s *Store) getFastly() []corev1.EnvVar {
 	envVars := []corev1.EnvVar{}
-	if s.Spec.ShopConfiguration.Fastly.ServiceRef.Name != "" &&
-		s.Spec.ShopConfiguration.Fastly.ServiceRef.Key != "" &&
-		s.Spec.ShopConfiguration.Fastly.TokenRef.Name != "" &&
-		s.Spec.ShopConfiguration.Fastly.TokenRef.Key != "" {
+	if s.Spec.ShopConfiguration.Fastly.ServiceRef.IsSet() &&
+		s.Spec.ShopConfiguration.Fastly.TokenRef.IsSet() {
 		envVars = append(
 			envVars,
 			corev1.EnvVar{
