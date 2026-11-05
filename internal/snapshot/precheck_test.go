@@ -37,8 +37,8 @@ func (s *stubMetrics) GetMetricStatistics(_ context.Context, params *cloudwatch.
 	values := s.series[bucket][storageType]
 	out := &cloudwatch.GetMetricStatisticsOutput{}
 	for _, v := range values {
-		maxVal := v
-		out.Datapoints = append(out.Datapoints, cwtypes.Datapoint{Maximum: &maxVal})
+		avg := v
+		out.Datapoints = append(out.Datapoints, cwtypes.Datapoint{Average: &avg})
 	}
 	return out, nil
 }

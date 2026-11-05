@@ -154,7 +154,7 @@ func maxStorageTypeSize(ctx context.Context, client MetricStatisticsAPI, bucket,
 		StartTime:  aws.Time(start),
 		EndTime:    aws.Time(end),
 		Period:     aws.Int32(s3SizePeriodSeconds),
-		Statistics: []cwtypes.Statistic{cwtypes.StatisticMaximum},
+		Statistics: []cwtypes.Statistic{cwtypes.StatisticAverage},
 	})
 	if err != nil {
 		return 0, 0, err
@@ -165,11 +165,11 @@ func maxStorageTypeSize(ctx context.Context, client MetricStatisticsAPI, bucket,
 	var maxSize float64
 	var found bool
 	for _, dp := range out.Datapoints {
-		if dp.Maximum == nil {
+		if dp.Average == nil {
 			continue
 		}
-		if !found || *dp.Maximum > maxSize {
-			maxSize = *dp.Maximum
+		if !found || *dp.Average > maxSize {
+			maxSize = *dp.Average
 			found = true
 		}
 	}
