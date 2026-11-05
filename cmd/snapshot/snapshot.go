@@ -11,8 +11,10 @@ import (
 	"github.com/shopware/shopware-operator/internal/config"
 	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/snapshot"
+	"github.com/shopware/shopware-operator/internal/util"
 	"github.com/urfave/cli/v3"
 	"go.uber.org/zap"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var (
@@ -23,6 +25,7 @@ var (
 	tempDir    = os.TempDir()
 	includeDB  = true
 	includeS3  = true
+	tempSize   = "100Gi"
 	labels     []string
 )
 
@@ -75,6 +78,12 @@ func main() {
 				Value:       true,
 				Destination: &includeS3,
 			},
+			&cli.StringFlag{
+				Name:        "temp-size",
+				Value:       tempSize,
+				Usage:       "Allocated temp volume size for the S3 size precheck (Kubernetes quantity, default 100Gi)",
+				Destination: &tempSize,
+			},
 			&cli.StringSliceFlag{
 				Name:        "label",
 				Usage:       "Labels to attach to the snapshot (format: key=value)",
@@ -91,6 +100,7 @@ func main() {
 					snapshotDir, err := os.MkdirTemp(tempDir, "snapshot-")
 					if err != nil {
 						logger.Errorw("TempDir creation failed", zap.Error(err))
+						exitOnFatalSnapshotError(logger, err)
 						os.Exit(14)
 					}
 					//nolint: errcheck
@@ -110,7 +120,15 @@ func main() {
 						logger.Warnw("Write metadata.json failed, skip metadata creation", zap.Error(err))
 					}
 
-					snapshotService := snapshot.NewSnapshotService(cfg)
+					var metrics snapshot.MetricStatisticsAPI
+					if includeS3 && snapshot.CloudWatchPrecheckEnabled(cfg.S3) {
+						var err error
+						metrics, err = snapshot.NewCloudWatchMetrics(ctx, cfg)
+						if err != nil {
+							return fmt.Errorf("create cloudwatch client: %w", err)
+						}
+					}
+					snapshotService := snapshot.NewSnapshotService(cfg, metrics)
 					logger.Infow("Starting snapshot create process",
 						zap.String("backupFile", backupFile),
 						zap.String("temp", snapshotDir),
@@ -126,7 +144,12 @@ func main() {
 							logger.Warnw("Invalid label format, skipping", zap.String("label", label))
 							continue
 						}
-						parsedLabels[parts[0]] = parts[1]
+						parsedLabels[util.NormalizeSnapshotLabelKey(parts[0])] = parts[1]
+					}
+
+					tempSizeBytes, err := parseTempSize(tempSize)
+					if err != nil {
+						return err
 					}
 
 					now := time.Now()
@@ -135,6 +158,7 @@ func main() {
 						TempArchiveDir: snapshotDir,
 						IncludeDB:      includeDB,
 						IncludeS3:      includeS3,
+						TempSizeBytes:  tempSizeBytes,
 						Labels:         parsedLabels,
 					}); err != nil {
 						logger.Errorw("Backup failed", zap.Error(err))
@@ -155,6 +179,7 @@ func main() {
 					snapshotTempDir, err := os.MkdirTemp(tempDir, "snapshot-")
 					if err != nil {
 						logger.Errorw("TempDir creation failed", zap.Error(err))
+						exitOnFatalSnapshotError(logger, err)
 						os.Exit(14)
 					}
 					//nolint: errcheck
@@ -173,12 +198,18 @@ func main() {
 						logger.Warnw("Write metadata.json failed, skip metadata creation", zap.Error(err))
 					}
 
-					snapshotService := snapshot.NewSnapshotService(cfg)
+					tempSizeBytes, err := parseTempSize(tempSize)
+					if err != nil {
+						return err
+					}
+
+					snapshotService := snapshot.NewSnapshotService(cfg, nil)
 					logger.Infow("Starting snapshot restore process",
 						zap.String("backupFile", backupFile),
 						zap.String("temp", snapshotTempDir),
 						zap.Bool("includeDB", includeDB),
 						zap.Bool("includeS3", includeS3),
+						zap.Int64("tempSizeBytes", tempSizeBytes),
 					)
 
 					now := time.Now()
@@ -187,6 +218,7 @@ func main() {
 						TempArchiveDir: snapshotTempDir,
 						IncludeDB:      includeDB,
 						IncludeS3:      includeS3,
+						TempSizeBytes:  tempSizeBytes,
 					}); err != nil {
 						logger.Errorw("Restore failed", zap.Error(err))
 						return fmt.Errorf("restore failed: %w", err)
@@ -203,6 +235,29 @@ func main() {
 
 	if err := cmd.Run(ctx, os.Args); err != nil {
 		fmt.Fprintf(os.Stderr, "Error running command: %v\n", err)
+		exitOnFatalSnapshotError(logger, err)
 		os.Exit(1)
 	}
+}
+
+func parseTempSize(value string) (int64, error) {
+	qty, err := resource.ParseQuantity(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid --temp-size %q: %w", value, err)
+	}
+	if qty.Sign() <= 0 || qty.Cmp(*resource.NewQuantity(1<<63-1, resource.DecimalSI)) > 0 {
+		return 0, fmt.Errorf("invalid --temp-size %q: must be a positive quantity within int64 range", value)
+	}
+	return qty.Value(), nil
+}
+
+func exitOnFatalSnapshotError(logger *zap.SugaredLogger, err error) {
+	if !snapshot.IsNoSpaceError(err) {
+		return
+	}
+	logger.Errorw("No space left on device, failing without retry",
+		zap.Error(err),
+		zap.Int("exitCode", snapshot.ExitCodeNoSpace),
+	)
+	os.Exit(snapshot.ExitCodeNoSpace)
 }

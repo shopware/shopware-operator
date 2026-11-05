@@ -3,6 +3,7 @@ package util
 import (
 	"fmt"
 	"maps"
+	"strings"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 )
@@ -11,6 +12,12 @@ const shopwareLabelPrefix = "shop.shopware.com/"
 
 func ShopwareKey(key string) string {
 	return shopwareLabelPrefix + key
+}
+
+// NormalizeSnapshotLabelKey maps Kubernetes label keys to the underscore form
+// used by Datadog log tags (application-id -> application_id).
+func NormalizeSnapshotLabelKey(key string) string {
+	return strings.ReplaceAll(key, "-", "_")
 }
 
 func GetStoreLabel(store v1.Store) map[string]string {
