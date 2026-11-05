@@ -113,14 +113,16 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	if storeDebugInstance.IsState(shopv1.StoreDebugInstanceStateDone) {
 		pod := pod.DebugPod(*store, *storeDebugInstance)
-		if err := r.Delete(ctx, pod); err != nil && !k8serrors.IsNotFound(err) {
+		// Only delete objects controlled by this instance (matched by UID), so a
+		// same-named resource we did not create is never deleted.
+		if _, err := k8s.DeleteControlledObject(ctx, r.Client, storeDebugInstance, pod); err != nil {
 			log.Errorw("failed to delete pod", zap.Error(err))
 			tracing.RecordError(span, err)
 			return rr, nil
 		}
 
 		svc := service.DebugService(*store, *storeDebugInstance)
-		if err := r.Delete(ctx, svc); err != nil && !k8serrors.IsNotFound(err) {
+		if _, err := k8s.DeleteControlledObject(ctx, r.Client, storeDebugInstance, svc); err != nil {
 			log.Errorw("failed to delete service", zap.Error(err))
 			tracing.RecordError(span, err)
 			return rr, nil

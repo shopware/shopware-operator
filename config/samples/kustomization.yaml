@@ -3,4 +3,5 @@ resources:
 - shop_v1_storeexec.yaml
 - shop_v1_storesnapshot.yaml
 - shop_v1_storedebuginstance.yaml
+- shop_v1_terminaldebuginstance.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

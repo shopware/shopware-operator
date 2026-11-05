@@ -1,0 +1,13 @@
+apiVersion: shop.shopware.com/v1
+kind: TerminalDebugInstance
+metadata:
+  name: debug
+spec:
+  duration: 1h
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: composable-frontends
+  container: composable-frontends
+  extraContainerPorts:
+    - name: grpc-terminal
+      containerPort: 8080

@@ -181,6 +181,61 @@ func ObjectExists(
 	return true, nil
 }
 
+// ErrNotControlledByOwner is returned when an existing object has a name we
+// want to use but is not controlled by the given owner.
+var ErrNotControlledByOwner = errors.New("object is not controlled by owner")
+
+// DeleteControlledObject deletes the object with the name and namespace of obj,
+// but only if it is controlled by owner. An object that has the same name but a
+// different controller is left alone. The delete carries a UID precondition, so
+// an object that was replaced after the ownership check is not deleted either.
+// It reports whether an object was deleted.
+func DeleteControlledObject(
+	ctx context.Context,
+	cl client.Client,
+	owner metav1.Object,
+	obj client.Object,
+) (bool, error) {
+	if owner == nil || owner.GetUID() == "" {
+		return false, errors.New("owner must have a UID")
+	}
+
+	val := reflect.Indirect(reflect.ValueOf(obj))
+	existing := reflect.New(val.Type()).Interface().(client.Object)
+
+	nn := types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}
+	if err := cl.Get(ctx, nn, existing); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, errors.Wrapf(err, "get %v", nn.String())
+	}
+
+	if !metav1.IsControlledBy(existing, owner) {
+		logging.FromContext(ctx).Infow("Skip delete, object is not controlled by owner",
+			zap.String("kind", objectKind(obj)),
+			zap.String("obj-name", nn.String()),
+			zap.String("owner", owner.GetName()))
+		return false, nil
+	}
+
+	uid := existing.GetUID()
+	if err := cl.Delete(ctx, existing, client.Preconditions{UID: &uid}); err != nil {
+		// A failed precondition (conflict) means the object was replaced since
+		// we looked at it, so it is no longer ours to delete.
+		if k8serrors.IsNotFound(err) || k8serrors.IsConflict(err) {
+			return false, nil
+		}
+		return false, errors.Wrapf(err, "delete %v", nn.String())
+	}
+
+	return true, nil
+}
+
+// EnsureService creates or updates the Service. An existing Service that is not
+// controlled by owner is rejected, and the update is rejected with a conflict
+// if the Service changes between the ownership check and the patch. Both are
+// enforced in EnsureObjectWithHash, on the same object that gets patched.
 func EnsureService(
 	ctx context.Context,
 	cl client.Client,
@@ -189,16 +244,8 @@ func EnsureService(
 	s *runtime.Scheme,
 	saveOldMeta bool,
 ) error {
-	oldSvc := new(corev1.Service)
-	err := cl.Get(ctx, types.NamespacedName{
-		Name:      svc.GetName(),
-		Namespace: svc.GetNamespace(),
-	}, oldSvc)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			return EnsureObjectWithHash(ctx, cl, owner, svc, s)
-		}
-		return errors.Wrap(err, "get object")
+	if owner == nil {
+		return errors.New("service owner must not be nil")
 	}
 
 	return EnsureObjectWithHash(ctx, cl, owner, svc, s)
@@ -559,22 +606,10 @@ func EnsureObjectWithHash(
 		}
 	}
 
-	if obj.GetAnnotations() == nil {
-		obj.SetAnnotations(make(map[string]string))
-	}
-
-	objAnnotations := obj.GetAnnotations()
-	delete(objAnnotations, lastConfigHashAnnotation)
-	obj.SetAnnotations(objAnnotations)
-
-	hash, err := ObjectHash(obj)
+	hash, err := stampLastConfigHash(obj)
 	if err != nil {
-		return errors.Wrap(err, "calculate object hash")
+		return err
 	}
-
-	objAnnotations = obj.GetAnnotations()
-	objAnnotations[lastConfigHashAnnotation] = hash
-	obj.SetAnnotations(objAnnotations)
 
 	val := reflect.ValueOf(obj)
 	if val.Kind() == reflect.Pointer {
@@ -598,113 +633,179 @@ func EnsureObjectWithHash(
 		return nil
 	}
 
-	switch obj.(type) {
-	case *appsv1.Deployment:
-		annotations := obj.GetAnnotations()
-		for _, key := range ignoredAnnotations {
-			v, ok := oldObject.GetAnnotations()[key]
-			if ok {
-				annotations[key] = v
-			}
+	// Never take over a Service that is not controlled by this owner. Patching it
+	// would let us rewrite its selector and redirect live traffic.
+	if _, isService := obj.(*corev1.Service); isService && owner != nil {
+		if !metav1.IsControlledBy(oldObject, owner) {
+			return errors.Wrapf(ErrNotControlledByOwner,
+				"service %v is not controlled by %s", nn.String(), owner.GetName())
 		}
-		obj.SetAnnotations(annotations)
+	}
+
+	if _, isDeployment := obj.(*appsv1.Deployment); isDeployment {
+		keepIgnoredAnnotations(obj, oldObject)
 	}
 
 	hashChanged := oldObject.GetAnnotations()[lastConfigHashAnnotation] != hash
 	objectMetaChangedFields := ChangedMetaKeys(obj, oldObject)
+	if !hashChanged && len(objectMetaChangedFields) == 0 {
+		return nil
+	}
 
-	if hashChanged || len(objectMetaChangedFields) != 0 {
-		if hashChanged {
-			diff, err := ObjectDiff(oldObject, obj)
-			if err != nil {
-				diff = fmt.Sprintf("Error generating diff: %v", err)
-			}
-			logging.FromContext(ctx).Infow("Object last-config-hash has changed",
-				zap.String("kind", obj.GetObjectKind().GroupVersionKind().Kind),
-				zap.String("obj-name", obj.GetName()),
-				zap.String("old-hash", oldObject.GetAnnotations()[lastConfigHashAnnotation]),
-				zap.String("new-hash", hash),
-				zap.String("diff", diff))
-		} else {
-			logging.FromContext(ctx).Infow(
-				"Object meta has changed",
-				zap.String("kind", obj.GetObjectKind().GroupVersionKind().Kind),
-				zap.String("obj-name", obj.GetName()),
-				zap.Any("old-annotations", oldObject.GetAnnotations()),
-				zap.Any("new-annotations", obj.GetAnnotations()),
-				zap.Any("old-labels", oldObject.GetLabels()),
-				zap.Any("new-labels", obj.GetLabels()),
-				zap.Any("changed-fileds", objectMetaChangedFields),
-			)
-		}
+	logObjectChange(ctx, obj, oldObject, hash, hashChanged, objectMetaChangedFields)
 
-		obj.SetResourceVersion(oldObject.GetResourceVersion())
-		switch object := obj.(type) {
-		case *corev1.Service:
-			object.Spec.ClusterIP = oldObject.(*corev1.Service).Spec.ClusterIP
-			if object.Spec.Type == corev1.ServiceTypeLoadBalancer {
-				object.Spec.HealthCheckNodePort = oldObject.(*corev1.Service).Spec.HealthCheckNodePort
-			}
-		}
+	obj.SetResourceVersion(oldObject.GetResourceVersion())
+	if svc, isService := obj.(*corev1.Service); isService {
+		keepServiceImmutableFields(svc, oldObject.(*corev1.Service))
+	}
 
-		var patch client.Patch
-		switch oldObj := oldObject.(type) {
-		case *cm.Certificate:
-			patch = client.MergeFrom(oldObj.DeepCopy())
-			obj.(*cm.Certificate).TypeMeta = oldObj.DeepCopy().TypeMeta
+	if job, isJob := obj.(*batchv1.Job); isJob {
+		return recreateJob(ctx, cl, job, nn)
+	}
 
-			// Jobs are more special, because we can't changed them and they should only run once.
-			// So if we have no succeeded job we will delete the job and recreate them.
-		case *batchv1.Job:
-			if obj.(*batchv1.Job).Status.Succeeded != 0 {
-				return nil
-			}
-
-			if err := cl.Delete(ctx, obj, client.PropagationPolicy("Foreground")); err != nil {
-				return errors.Wrapf(err, "delete job %v", nn.String())
-			}
-
-			// Wait for deletion. A watch on events would be better, but the manager is not
-			// using the correct interface for that.
-			for i := 0; i < 10; i++ {
-				time.Sleep(time.Second)
-				err := cl.Get(ctx, types.NamespacedName{
-					Namespace: obj.GetNamespace(),
-					Name:      obj.GetName(),
-				}, nil)
-				if err != nil {
-					if k8serrors.IsNotFound(err) {
-						break
-					}
-					if i == 10 {
-						return errors.Wrapf(err, "delete job %v", nn.String())
-					}
-				}
-			}
-
-			obj.SetResourceVersion("")
-			if err := cl.Create(ctx, obj); err != nil {
-				return errors.Wrapf(err, "create job %v", nn.String())
-			}
-			return nil
-		case *gatewayv1.HTTPRoute:
-			// Gateway API resources use MergeFrom instead of StrategicMergeFrom
-			patch = client.MergeFrom(oldObj.DeepCopy())
-			obj.(*gatewayv1.HTTPRoute).TypeMeta = oldObj.DeepCopy().TypeMeta
-		case *kedav1alpha1.ScaledObject:
-			// CRDs don't support strategic merge patch
-			patch = client.MergeFrom(oldObj.DeepCopy())
-			obj.(*kedav1alpha1.ScaledObject).TypeMeta = oldObj.DeepCopy().TypeMeta
-		default:
-			patch = client.StrategicMergeFrom(oldObject)
-		}
-
-		if err := cl.Patch(ctx, obj, patch); err != nil {
-			return errors.Wrapf(err, "patch %v", nn.String())
-		}
+	if err := cl.Patch(ctx, obj, patchFor(obj, oldObject)); err != nil {
+		return errors.Wrapf(err, "patch %v", nn.String())
 	}
 
 	return nil
+}
+
+// stampLastConfigHash replaces the last-config-hash annotation of obj with the
+// hash of its current content and returns the hash.
+func stampLastConfigHash(obj client.Object) (string, error) {
+	if obj.GetAnnotations() == nil {
+		obj.SetAnnotations(make(map[string]string))
+	}
+
+	annotations := obj.GetAnnotations()
+	delete(annotations, lastConfigHashAnnotation)
+	obj.SetAnnotations(annotations)
+
+	hash, err := ObjectHash(obj)
+	if err != nil {
+		return "", errors.Wrap(err, "calculate object hash")
+	}
+
+	annotations = obj.GetAnnotations()
+	annotations[lastConfigHashAnnotation] = hash
+	obj.SetAnnotations(annotations)
+
+	return hash, nil
+}
+
+// keepIgnoredAnnotations copies annotations that other controllers manage from
+// the live object, so they are not seen as a change.
+func keepIgnoredAnnotations(obj, old client.Object) {
+	annotations := obj.GetAnnotations()
+	for _, key := range ignoredAnnotations {
+		if v, ok := old.GetAnnotations()[key]; ok {
+			annotations[key] = v
+		}
+	}
+	obj.SetAnnotations(annotations)
+}
+
+func logObjectChange(
+	ctx context.Context,
+	obj, old client.Object,
+	hash string,
+	hashChanged bool,
+	changedMetaKeys []string,
+) {
+	if hashChanged {
+		diff, err := ObjectDiff(old, obj)
+		if err != nil {
+			diff = fmt.Sprintf("Error generating diff: %v", err)
+		}
+		logging.FromContext(ctx).Infow("Object last-config-hash has changed",
+			zap.String("kind", obj.GetObjectKind().GroupVersionKind().Kind),
+			zap.String("obj-name", obj.GetName()),
+			zap.String("old-hash", old.GetAnnotations()[lastConfigHashAnnotation]),
+			zap.String("new-hash", hash),
+			zap.String("diff", diff))
+		return
+	}
+
+	logging.FromContext(ctx).Infow(
+		"Object meta has changed",
+		zap.String("kind", obj.GetObjectKind().GroupVersionKind().Kind),
+		zap.String("obj-name", obj.GetName()),
+		zap.Any("old-annotations", old.GetAnnotations()),
+		zap.Any("new-annotations", obj.GetAnnotations()),
+		zap.Any("old-labels", old.GetLabels()),
+		zap.Any("new-labels", obj.GetLabels()),
+		zap.Any("changed-fileds", changedMetaKeys),
+	)
+}
+
+// keepServiceImmutableFields takes fields the API server assigns from the live
+// Service.
+func keepServiceImmutableFields(svc, old *corev1.Service) {
+	svc.Spec.ClusterIP = old.Spec.ClusterIP
+	if svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
+		svc.Spec.HealthCheckNodePort = old.Spec.HealthCheckNodePort
+	}
+}
+
+// recreateJob replaces a job. Jobs are special, because they can't be changed
+// and should only run once. A job that has succeeded is left alone. Otherwise
+// the job is deleted and created again.
+func recreateJob(ctx context.Context, cl client.Client, job *batchv1.Job, nn types.NamespacedName) error {
+	if job.Status.Succeeded != 0 {
+		return nil
+	}
+
+	if err := cl.Delete(ctx, job, client.PropagationPolicy("Foreground")); err != nil {
+		return errors.Wrapf(err, "delete job %v", nn.String())
+	}
+
+	// Wait for deletion. A watch on events would be better, but the manager is not
+	// using the correct interface for that.
+	for i := 0; i < 10; i++ {
+		time.Sleep(time.Second)
+		err := cl.Get(ctx, types.NamespacedName{
+			Namespace: job.GetNamespace(),
+			Name:      job.GetName(),
+		}, nil)
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				break
+			}
+			if i == 10 {
+				return errors.Wrapf(err, "delete job %v", nn.String())
+			}
+		}
+	}
+
+	job.SetResourceVersion("")
+	if err := cl.Create(ctx, job); err != nil {
+		return errors.Wrapf(err, "create job %v", nn.String())
+	}
+	return nil
+}
+
+// patchFor builds the patch that turns old into obj.
+func patchFor(obj, old client.Object) client.Patch {
+	switch oldObj := old.(type) {
+	case *cm.Certificate:
+		obj.(*cm.Certificate).TypeMeta = oldObj.DeepCopy().TypeMeta
+		return client.MergeFrom(oldObj.DeepCopy())
+	case *gatewayv1.HTTPRoute:
+		// Gateway API resources use MergeFrom instead of StrategicMergeFrom
+		obj.(*gatewayv1.HTTPRoute).TypeMeta = oldObj.DeepCopy().TypeMeta
+		return client.MergeFrom(oldObj.DeepCopy())
+	case *kedav1alpha1.ScaledObject:
+		// CRDs don't support strategic merge patch
+		obj.(*kedav1alpha1.ScaledObject).TypeMeta = oldObj.DeepCopy().TypeMeta
+		return client.MergeFrom(oldObj.DeepCopy())
+	case *corev1.Service:
+		// The resourceVersion is sent with the patch, so the update fails with a
+		// conflict if the Service was replaced or modified since we verified its
+		// ownership.
+		return client.StrategicMergeFrom(old, client.MergeFromWithOptimisticLock{})
+	default:
+		return client.StrategicMergeFrom(old)
+	}
 }
 
 type secretHashData struct {

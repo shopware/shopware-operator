@@ -291,6 +291,15 @@ func run() int {
 		setupLog.Error(err, "unable to create instance controller", "controller", "StoreDebugInstance")
 		return 1
 	}
+	if err = (&controller.TerminalDebugInstanceReconciler{
+		Client:   nsClient,
+		Logger:   logger.With(zapz.String("component", "terminal-debug-instance-reconciler")),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor(fmt.Sprintf("shopware-controller-%s", cfg.Namespace)),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create terminal debug instance controller", "controller", "TerminalDebugInstance")
+		return 1
+	}
 	//+kubebuilder:scaffold:builder
 
 	defer func() {

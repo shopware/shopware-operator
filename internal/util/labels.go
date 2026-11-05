@@ -60,6 +60,17 @@ func GetDefaultStoreInstanceDebugLabels(store v1.Store, storeDebugInstance v1.St
 	return labels
 }
 
+// TerminalDebugLabelKey marks pods created for a TerminalDebugInstance.
+// Network policies select on it, and the source pod selection skips it.
+var TerminalDebugLabelKey = ShopwareKey("terminal.debug")
+
+func GetTerminalDebugInstanceLabels(terminalDebugInstance v1.TerminalDebugInstance) map[string]string {
+	return map[string]string{
+		TerminalDebugLabelKey:                  "true",
+		ShopwareKey("terminal.debug.instance"): terminalDebugInstance.Name,
+	}
+}
+
 func GetAdminDeploymentMatchLabel() map[string]string {
 	labels := make(map[string]string)
 	labels[ShopwareKey("store.app")] = "shopware-admin"
