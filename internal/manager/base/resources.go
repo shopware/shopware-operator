@@ -2,6 +2,7 @@ package base
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
@@ -28,14 +29,24 @@ func (b *Base) EnsureAppSecrets(ctx context.Context, store *v1.Store) (err error
 	ctx, span := tracing.Start(ctx, "Base.EnsureAppSecrets", tracing.AttrState.String(string(store.Status.State)))
 	defer tracing.End(span, &err)
 
-	storeSecret, err := secret.EnsureStoreSecret(ctx, b.Client, b.Recorder, store)
+	storeSecret, err := secret.EnsureStoreSecret(ctx, b.Client, store)
 	if err != nil {
+		var eventErr *secret.EventError
+		if errors.As(err, &eventErr) && b.Recorder != nil {
+			b.Recorder.Event(store, eventErr.EventType, eventErr.Reason, eventErr.Message)
+		}
 		return tracing.Sensitive(fmt.Errorf("app secrets: %w", err))
 	}
 
 	if err := k8s.EnsureObjectWithHash(ctx, b.Client, nil, storeSecret, b.Scheme); err != nil {
 		return tracing.Sensitive(fmt.Errorf("ensure store secret: %w", err))
 	}
+
+	hash, err := k8s.SecretHash(storeSecret)
+	if err != nil {
+		return fmt.Errorf("hash store secret: %w", err)
+	}
+	store.Status.SecretHash = hash
 
 	return nil
 }
@@ -188,6 +199,7 @@ func (b *Base) ReconcileDeployment(ctx context.Context, store *v1.Store) (err er
 	objs = append(objs, workers...)
 
 	for _, obj := range objs {
+		k8s.SetSecretHash(obj, store.Status.SecretHash)
 		if changed, err = k8s.HasObjectChanged(ctx, b.Client, obj); err != nil {
 			return fmt.Errorf("reconcile unready deployment: %w", err)
 		}
