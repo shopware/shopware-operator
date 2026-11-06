@@ -2,7 +2,6 @@ package deployment
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"maps"
 	"math"
@@ -20,7 +19,6 @@ import (
 )
 
 const (
-	maxK8sNameLength             = 63
 	workerTimeLimitSeconds int64 = 300
 )
 
@@ -197,11 +195,11 @@ func WorkerDeployment(store v1.Store, consumeQueues []string) *appsv1.Deployment
 	appName := "shopware-worker"
 	matchLabels := util.GetWorkerDeploymentMatchLabel()
 	if queue != "" {
-		matchLabels[util.ShopwareKey("worker.queue")] = truncateWithHash(queue)
+		matchLabels[util.ShopwareKey("worker.queue")] = util.ShortName(queue)
 	}
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.WorkerDeploymentContainer.Labels)
 	maps.Copy(labels, matchLabels)
-	labels[util.ShopwareKey("worker.queues")] = truncateWithHash(strings.Join(consumeQueues, "."))
+	labels[util.ShopwareKey("worker.queues")] = util.ShortName(strings.Join(consumeQueues, "."))
 
 	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.WorkerDeploymentContainer.Annotations)
 
@@ -281,7 +279,7 @@ done`,
 			APIVersion: "apps/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        GetQueueWorkerDeploymentName(store, queue),
+			Name:        util.GetQueueWorkerDeploymentName(store, queue),
 			Namespace:   store.Namespace,
 			Labels:      labels,
 			Annotations: annotations,
@@ -335,30 +333,4 @@ done`,
 	}
 
 	return deployment
-}
-
-func GetWorkerDeploymentName(store v1.Store) string {
-	return fmt.Sprintf("%s-store-worker", store.Name)
-}
-
-func GetQueueWorkerDeploymentName(store v1.Store, queue string) string {
-	if queue == "" {
-		return GetWorkerDeploymentName(store)
-	}
-	sanitized := strings.ReplaceAll(strings.ToLower(queue), "_", "-")
-	if sanitized != queue {
-		sanitized += "-" + fmt.Sprintf("%x", sha256.Sum256([]byte(queue)))[:8]
-	}
-	name := fmt.Sprintf("%s-%s", GetWorkerDeploymentName(store), sanitized)
-	return truncateWithHash(name)
-}
-
-// truncateWithHash keeps names within the k8s limit while staying unique and
-// deterministic: the overlong name is cut and suffixed with a hash of itself.
-func truncateWithHash(name string) string {
-	if len(name) <= maxK8sNameLength {
-		return name
-	}
-	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(name)))[:8]
-	return strings.TrimRight(name[:maxK8sNameLength-9], "-") + "-" + hash
 }

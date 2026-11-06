@@ -160,7 +160,7 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 			APIVersion: "apps/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        GetStorefrontDeploymentName(store),
+			Name:        util.GetStorefrontDeploymentName(store),
 			Namespace:   store.Namespace,
 			Labels:      labels,
 			Annotations: annotations,
@@ -214,8 +214,4 @@ func StorefrontDeployment(store v1.Store) *appsv1.Deployment {
 	}
 
 	return deployment
-}
-
-func GetStorefrontDeploymentName(store v1.Store) string {
-	return fmt.Sprintf("%s-storefront", store.Name)
 }

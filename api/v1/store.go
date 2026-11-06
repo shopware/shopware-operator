@@ -12,6 +12,7 @@ import (
 // Store is the Schema for the stores API
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:validation:XValidation:rule="size(self.metadata.name) <= 63",message="metadata.name must be at most 63 characters"
 // +kubebuilder:printcolumn:name="Storefront",type=string,JSONPath=".status.storefrontState.ready"
 // +kubebuilder:printcolumn:name="Worker",type=string,JSONPath=".status.workerState.ready"
 // +kubebuilder:printcolumn:name="Admin",type=string,JSONPath=".status.adminState.ready"

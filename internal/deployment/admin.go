@@ -137,7 +137,7 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 			APIVersion: "apps/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        GetAdminDeploymentName(store),
+			Name:        util.GetAdminDeploymentName(store),
 			Namespace:   store.Namespace,
 			Labels:      labels,
 			Annotations: annotations,
@@ -192,8 +192,4 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 	}
 
 	return deployment
-}
-
-func GetAdminDeploymentName(store v1.Store) string {
-	return fmt.Sprintf("%s-store-admin", store.Name)
 }

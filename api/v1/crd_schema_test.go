@@ -28,3 +28,19 @@ func TestStoreCRDUsesCompactContainerOverrideSchemas(t *testing.T) {
 
 	assert.Equal(t, 5, bytes.Count(crd, []byte("x-kubernetes-preserve-unknown-fields: true")))
 }
+
+func TestCRDsLimitMetadataNameLength(t *testing.T) {
+	t.Parallel()
+
+	for _, file := range []string{
+		"shop.shopware.com_stores.yaml",
+		"shop.shopware.com_storeexecs.yaml",
+		"shop.shopware.com_storedebuginstances.yaml",
+		"shop.shopware.com_storesnapshotcreates.yaml",
+		"shop.shopware.com_storesnapshotrestores.yaml",
+	} {
+		crd, err := os.ReadFile("../../config/crd/bases/" + file)
+		require.NoError(t, err)
+		assert.Contains(t, string(crd), "size(self.metadata.name) <= 63", file)
+	}
+}

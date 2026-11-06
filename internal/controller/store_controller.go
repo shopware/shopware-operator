@@ -15,6 +15,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/metrics"
 	"github.com/shopware/shopware-operator/internal/tracing"
 	"github.com/shopware/shopware-operator/internal/trigger"
+	"github.com/shopware/shopware-operator/internal/util"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -243,6 +244,16 @@ func (r *StoreReconciler) Reconcile(
 		metrics.RemoveStoreMetrics(store)
 		requeueReason = "store is being deleted"
 		return shortRequeue, nil
+	}
+
+	if err := util.ValidateStoreNames(*store); err != nil {
+		log.Errorw("invalid resource names", zap.Error(err))
+		tracing.RecordError(span, err)
+		if statusErr := r.stateManager().ReconcileStatus(ctx, store, err); statusErr != nil {
+			log.Errorw("failed to update status", zap.Error(statusErr))
+		}
+		requeueReason = "invalid resource names, no requeue"
+		return ctrl.Result{}, reconcile.TerminalError(err)
 	}
 
 	if err := r.stateManager().ReconcileResources(ctx, store); err != nil {
