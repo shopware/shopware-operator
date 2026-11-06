@@ -45,6 +45,7 @@ type StoreExecSpec struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:validation:XValidation:rule="size(self.metadata.name) <= 63",message="metadata.name must be at most 63 characters"
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
 // +kubebuilder:printcolumn:name="MaxRetries",type=string,JSONPath=".spec.maxRetries"
 // +kubebuilder:printcolumn:name="CronSchedule",type=string,JSONPath=".spec.cronSchedule"

@@ -31,7 +31,9 @@ func WorkerScaledObject(store v1.Store, queue string, metricsURL string) *kedav1
 
 	labels := util.GetStoreLabel(store)
 	labels[util.ShopwareKey("store.app")] = "shopware-worker"
-	labels[util.ShopwareKey("worker.queue")] = truncateWithHash(queue)
+	labels[util.ShopwareKey("worker.queue")] = util.GetQueueLabelValue(queue)
+
+	name := util.GetQueueWorkerDeploymentName(store, queue)
 
 	return &kedav1alpha1.ScaledObject{
 		TypeMeta: metav1.TypeMeta{
@@ -39,13 +41,13 @@ func WorkerScaledObject(store v1.Store, queue string, metricsURL string) *kedav1
 			APIVersion: "keda.sh/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetQueueWorkerDeploymentName(store, queue),
+			Name:      name,
 			Namespace: store.Namespace,
 			Labels:    labels,
 		},
 		Spec: kedav1alpha1.ScaledObjectSpec{
 			ScaleTargetRef: &kedav1alpha1.ScaleTarget{
-				Name: GetQueueWorkerDeploymentName(store, queue),
+				Name: name,
 			},
 			MinReplicaCount: &worker.MinReplicas,
 			MaxReplicaCount: &worker.MaxReplicas,
@@ -53,6 +55,7 @@ func WorkerScaledObject(store v1.Store, queue string, metricsURL string) *kedav1
 			PollingInterval: &worker.PollingInterval,
 			Advanced: &kedav1alpha1.AdvancedConfig{
 				HorizontalPodAutoscalerConfig: &kedav1alpha1.HorizontalPodAutoscalerConfig{
+					Name: util.GetWorkerScaledObjectHPAName(name),
 					Behavior: &autoscalingv2.HorizontalPodAutoscalerBehavior{
 						ScaleUp: &autoscalingv2.HPAScalingRules{
 							Policies: []autoscalingv2.HPAScalingPolicy{

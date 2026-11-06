@@ -37,7 +37,7 @@ func DebugService(store v1.Store, debugInstance v1.StoreDebugInstance) *corev1.S
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      debugInstance.Name,
+			Name:      util.GetDebugServiceName(debugInstance),
 			Namespace: store.Namespace,
 			Labels:    util.GetStoreLabel(store),
 		},
