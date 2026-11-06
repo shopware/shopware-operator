@@ -1,8 +1,6 @@
 package service
 
 import (
-	"fmt"
-
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
 	corev1 "k8s.io/api/core/v1"
@@ -20,7 +18,7 @@ func StorefrontService(store v1.Store) *corev1.Service {
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetStorefrontServiceName(store),
+			Name:      util.GetStorefrontServiceName(store),
 			Namespace: store.Namespace,
 			Labels:    util.GetStoreLabel(store),
 		},
@@ -39,8 +37,4 @@ func StorefrontService(store v1.Store) *corev1.Service {
 			PublishNotReadyAddresses: false,
 		},
 	}
-}
-
-func GetStorefrontServiceName(store v1.Store) string {
-	return fmt.Sprintf("%s-storefront", store.Name)
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/k8s"
 	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/tracing"
+	"github.com/shopware/shopware-operator/internal/util"
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	batchv1 "k8s.io/api/batch/v1"
@@ -22,6 +23,7 @@ import (
 	k8sretry "k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var (
@@ -192,6 +194,18 @@ func (r *StoreSnapshotBaseReconciler) ReconcileSnapshot(
 			tracing.RecordError(span, err)
 			return apiFailedRequeue, nil
 		}
+	}
+
+	if err := util.ValidateSnapshotNames(snapshot.GetObjectMeta().GetName(), snapshotType); err != nil {
+		logger.Errorw("invalid resource names", zap.Error(err))
+		tracing.RecordError(span, err)
+		status := *snapshot.GetStatus()
+		status.State = v1.SnapshotStateFailed
+		status.Message = err.Error()
+		if statusErr := writeStatus(ctx, r.Client, req.NamespacedName, status); statusErr != nil {
+			logger.Errorw("failed to update status", zap.Error(statusErr))
+		}
+		return noRequeue, reconcile.TerminalError(err)
 	}
 
 	logger.Info("Processing snapshot")

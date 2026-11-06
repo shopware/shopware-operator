@@ -60,6 +60,7 @@ const (
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:validation:XValidation:rule="size(self.metadata.name) <= 63",message="metadata.name must be at most 63 characters"
 // +kubebuilder:resource:scope=Namespaced
 // +kubebuilder:resource:shortName=store-snap-create
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"

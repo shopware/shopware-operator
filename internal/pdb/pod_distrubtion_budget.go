@@ -1,8 +1,6 @@
 package pdb
 
 import (
-	"fmt"
-
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
 	policy "k8s.io/api/policy/v1"
@@ -26,7 +24,7 @@ func StorefrontPDB(store v1.Store) *policy.PodDisruptionBudget {
 	return &policy.PodDisruptionBudget{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetStorefrontPDBName(store),
+			Name:      util.GetStorefrontPDBName(store),
 			Namespace: store.GetNamespace(),
 			Labels:    util.GetStoreLabel(store),
 		},
@@ -50,7 +48,7 @@ func WorkerPDB(store v1.Store) *policy.PodDisruptionBudget {
 	return &policy.PodDisruptionBudget{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetWorkerPDBName(store),
+			Name:      util.GetWorkerPDBName(store),
 			Namespace: store.GetNamespace(),
 			Labels:    util.GetStoreLabel(store),
 		},
@@ -74,22 +72,10 @@ func AdminPDB(store v1.Store) *policy.PodDisruptionBudget {
 	return &policy.PodDisruptionBudget{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetAdminPDBName(store),
+			Name:      util.GetAdminPDBName(store),
 			Namespace: store.GetNamespace(),
 			Labels:    util.GetStoreLabel(store),
 		},
 		Spec: spec,
 	}
-}
-
-func GetStorefrontPDBName(store v1.Store) string {
-	return fmt.Sprintf("%s-storefront", store.Name)
-}
-
-func GetAdminPDBName(store v1.Store) string {
-	return fmt.Sprintf("%s-admin", store.Name)
-}
-
-func GetWorkerPDBName(store v1.Store) string {
-	return fmt.Sprintf("%s-worker", store.Name)
 }

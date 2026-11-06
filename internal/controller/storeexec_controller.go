@@ -11,13 +11,16 @@ import (
 	"github.com/shopware/shopware-operator/internal/k8s"
 	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/tracing"
+	"github.com/shopware/shopware-operator/internal/util"
 	"go.uber.org/zap"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type StoreExecReconciler struct {
@@ -68,6 +71,24 @@ func (r *StoreExecReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		log.Errorw("get CR exec", zap.Error(err))
 		tracing.RecordError(span, err)
 		return rr, nil
+	}
+
+	if err = util.ValidateStoreExecNames(*ex); err != nil {
+		log.Errorw("invalid resource names", zap.Error(err))
+		tracing.RecordError(span, err)
+		skipStatusUpdate = true
+		ex.Status.State = v1.ExecStateError
+		ex.Status.AddCondition(v1.ExecCondition{
+			Type:           ex.Status.State,
+			LastUpdateTime: metav1.NewTime(time.Now()),
+			Message:        err.Error(),
+			Reason:         "InvalidName",
+			Status:         Error,
+		})
+		if statusErr := writeExecStatus(ctx, r.Client, req.NamespacedName, ex.Status); statusErr != nil {
+			log.Errorw("failed to update status", zap.Error(statusErr))
+		}
+		return ctrl.Result{}, reconcile.TerminalError(err)
 	}
 
 	if result, handled, cleanupErr := r.reconcileStoreExecCleanup(ctx, ex); handled || cleanupErr != nil {

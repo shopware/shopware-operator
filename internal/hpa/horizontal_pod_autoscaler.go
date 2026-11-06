@@ -2,7 +2,6 @@ package hpa
 
 import (
 	"context"
-	"fmt"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/deployment"
@@ -52,7 +51,7 @@ func StoreHPA(store v1.Store) *autoscaling.HorizontalPodAutoscaler {
 	return &autoscaling.HorizontalPodAutoscaler{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        GetStoreHPAName(store),
+			Name:        util.GetStoreHPAName(store),
 			Namespace:   store.GetNamespace(),
 			Labels:      util.GetDefaultContainerStoreLabels(store, map[string]string{}),
 			Annotations: store.Spec.HorizontalPodAutoscaler.Annotations,
@@ -69,8 +68,4 @@ func StoreHPA(store v1.Store) *autoscaling.HorizontalPodAutoscaler {
 			Behavior:    store.Spec.HorizontalPodAutoscaler.Behavior,
 		},
 	}
-}
-
-func GetStoreHPAName(store v1.Store) string {
-	return fmt.Sprintf("store-%s", store.Name)
 }

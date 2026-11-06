@@ -16,6 +16,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/secret"
 	"github.com/shopware/shopware-operator/internal/service"
 	"github.com/shopware/shopware-operator/internal/tracing"
+	"github.com/shopware/shopware-operator/internal/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
@@ -78,7 +79,7 @@ func (b *Base) ReconcileIngress(ctx context.Context, store *v1.Store) (err error
 		if err := ingress.DeleteStoreIngress(ctx, b.Client, *store); err != nil {
 			return fmt.Errorf("delete ingress: %w", err)
 		}
-		tracing.RecordObjectDisabled(ctx, "Ingress", ingress.GetStoreIngressName(*store), "spec.network.enabledIngress is false")
+		tracing.RecordObjectDisabled(ctx, "Ingress", util.GetStoreIngressName(*store), "spec.network.enabledIngress is false")
 		return nil
 	}
 
@@ -110,7 +111,7 @@ func (b *Base) ReconcileHTTPRoute(ctx context.Context, store *v1.Store) (err err
 		if err := httproute.DeleteStoreHTTPRoute(ctx, b.Client, *store); err != nil {
 			return fmt.Errorf("delete httproute: %w", err)
 		}
-		tracing.RecordObjectDisabled(ctx, "HTTPRoute", httproute.GetStoreHTTPRouteName(*store), "spec.network.enabledGateway is false")
+		tracing.RecordObjectDisabled(ctx, "HTTPRoute", util.GetStoreHTTPRouteName(*store), "spec.network.enabledGateway is false")
 		return nil
 	}
 

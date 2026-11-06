@@ -2,11 +2,9 @@ package httproute
 
 import (
 	"context"
-	"fmt"
 	"maps"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
-	"github.com/shopware/shopware-operator/internal/service"
 	"github.com/shopware/shopware-operator/internal/util"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,8 +48,8 @@ func StoreHTTPRoute(store v1.Store) *gatewayv1.HTTPRoute {
 		hostnames = append(hostnames, hostname)
 	}
 
-	adminServiceName := gatewayv1.ObjectName(service.GetAdminServiceName(store))
-	storefrontServiceName := gatewayv1.ObjectName(service.GetStorefrontServiceName(store))
+	adminServiceName := gatewayv1.ObjectName(util.GetAdminServiceName(store))
+	storefrontServiceName := gatewayv1.ObjectName(util.GetStorefrontServiceName(store))
 	port := gatewayv1.PortNumber(store.Spec.Network.Port)
 
 	rules := []gatewayv1.HTTPRouteRule{
@@ -159,7 +157,7 @@ func StoreHTTPRoute(store v1.Store) *gatewayv1.HTTPRoute {
 			Kind:       "HTTPRoute",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        GetStoreHTTPRouteName(store),
+			Name:        util.GetStoreHTTPRouteName(store),
 			Namespace:   store.GetNamespace(),
 			Annotations: store.Spec.Network.GatewayAnnotations,
 			Labels:      labels,
@@ -174,15 +172,11 @@ func StoreHTTPRoute(store v1.Store) *gatewayv1.HTTPRoute {
 	}
 }
 
-func GetStoreHTTPRouteName(store v1.Store) string {
-	return fmt.Sprintf("store-%s", store.Name)
-}
-
 func DeleteStoreHTTPRoute(ctx context.Context, c client.Client, store v1.Store) error {
 	httpRoute := &gatewayv1.HTTPRoute{}
 	err := c.Get(ctx, types.NamespacedName{
 		Namespace: store.GetNamespace(),
-		Name:      GetStoreHTTPRouteName(store),
+		Name:      util.GetStoreHTTPRouteName(store),
 	}, httpRoute)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
