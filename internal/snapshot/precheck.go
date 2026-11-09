@@ -3,183 +3,139 @@ package snapshot
 import (
 	"context"
 	"fmt"
-	"strings"
-	"time"
+	"sync"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	aconfig "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
-	cwtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
+	"github.com/minio/minio-go/v7"
 	"github.com/shopware/shopware-operator/internal/config"
 	"github.com/shopware/shopware-operator/internal/logging"
 	"go.uber.org/zap"
 )
 
-const (
-	s3SizeLookback      = 7 * 24 * time.Hour
-	s3SizePeriodSeconds = 86400
-)
-
-// StandardStorage only: one GetMetricStatistics call per bucket.
-// Requires cloudwatch:GetMetricStatistics.
-var s3BucketSizeStorageTypes = []string{"StandardStorage"}
-
-// MetricStatisticsAPI is the CloudWatch surface used by the S3 size precheck.
-type MetricStatisticsAPI interface {
-	GetMetricStatistics(ctx context.Context, params *cloudwatch.GetMetricStatisticsInput, optFns ...func(*cloudwatch.Options)) (*cloudwatch.GetMetricStatisticsOutput, error)
+// BucketSizer reports the current-object size of an S3 bucket (live keys only).
+type BucketSizer interface {
+	BucketUsage(ctx context.Context, bucket string) (bytes int64, objects int64, err error)
 }
 
-func NewCloudWatchMetrics(ctx context.Context, cfg *config.SnapshotConfig) (MetricStatisticsAPI, error) {
-	awsCfg, err := aconfig.LoadDefaultConfig(ctx)
+type minioBucketSizer struct {
+	client *minio.Client
+}
+
+func (m minioBucketSizer) BucketUsage(ctx context.Context, bucket string) (int64, int64, error) {
+	return sumObjectSizes(m.client.ListObjects(ctx, bucket, minio.ListObjectsOptions{
+		Recursive: true,
+	}))
+}
+
+func newMinioClient(ctx context.Context, cfg config.S3Config) (*minio.Client, error) {
+	cred, err := getAWSKeysWithAsumeRole(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
-	if awsCfg.Region == "" {
-		awsCfg.Region = cfg.S3.Region
-	}
-	return cloudwatch.NewFromConfig(awsCfg), nil
+	return minio.New(cfg.Endpoint, &minio.Options{
+		Creds:  cred,
+		Secure: true,
+	})
 }
 
-// CloudWatchPrecheckEnabled is true only for AWS S3 (CloudWatch BucketSizeBytes).
-// Custom endpoints (MinIO and other S3-compatible stores) have no CloudWatch metrics.
-func CloudWatchPrecheckEnabled(cfg config.S3Config) bool {
-	host := strings.TrimPrefix(cfg.Endpoint, "https://")
-	host = strings.TrimPrefix(host, "http://")
-	if i := strings.IndexAny(host, "/:"); i >= 0 {
-		host = host[:i]
+func (s *SnapshotService) resolveSizer(ctx context.Context) (BucketSizer, error) {
+	if s.sizer != nil {
+		return s.sizer, nil
 	}
-	if host == "" {
-		return true
+	client, err := newMinioClient(ctx, s.config.S3)
+	if err != nil {
+		return nil, err
 	}
-	return strings.Contains(strings.ToLower(host), "amazonaws.com")
+	return minioBucketSizer{client: client}, nil
 }
 
 func (s *SnapshotService) precheckTempStorage(ctx context.Context, cfg *config.SnapshotConfig, snapshotCtx *SnapshotContext) error {
 	if !snapshotCtx.IncludeS3 {
 		return nil
 	}
-	if !CloudWatchPrecheckEnabled(cfg.S3) {
-		logging.FromContext(ctx).Infow("S3 size precheck skipped: non-AWS endpoint",
-			zap.String("endpoint", cfg.S3.Endpoint),
-		)
-		return nil
-	}
 	if snapshotCtx.TempSizeBytes <= 0 {
 		return fmt.Errorf("s3 size precheck: temp size must be positive")
 	}
 
-	if s.metrics == nil {
-		return fmt.Errorf("s3 size precheck: metrics client is required")
+	sizer, err := s.resolveSizer(ctx)
+	if err != nil {
+		return fmt.Errorf("s3 size precheck: %w", err)
 	}
 
 	logger := logging.FromContext(ctx)
-	client := s.metrics
-
-	end := time.Now().UTC()
-	start := end.Add(-s3SizeLookback)
-	var total int64
-	var anyDatapoints bool
-
+	buckets := make([]string, 0, 2)
 	for _, bucket := range []string{cfg.S3.PrivateBucket, cfg.S3.PublicBucket} {
-		if bucket == "" {
-			continue
+		if bucket != "" {
+			buckets = append(buckets, bucket)
 		}
-		size, datapoints, err := maxBucketSize(ctx, client, bucket, start, end)
-		if err != nil {
-			return fmt.Errorf("s3 size precheck: bucket %s: %w", bucket, err)
-		}
-		if datapoints == 0 {
-			logger.Warnw("S3 size precheck: no CloudWatch BucketSizeBytes datapoints, skipping bucket",
-				zap.String("bucket", bucket),
-			)
-			continue
-		}
-		anyDatapoints = true
-		total += size
-		logger.Infow("S3 bucket size from CloudWatch",
-			zap.String("bucket", bucket),
-			zap.Int64("maxBytes", size),
-			zap.Int("datapoints", datapoints),
-		)
+	}
+	if len(buckets) == 0 {
+		return nil
 	}
 
-	if !anyDatapoints {
-		logger.Warnw("S3 size precheck: no CloudWatch datapoints, continuing without size estimate")
-		return nil
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	type bucketUsage struct {
+		bucket  string
+		bytes   int64
+		objects int64
+		err     error
+	}
+	results := make(chan bucketUsage, len(buckets))
+	var wg sync.WaitGroup
+	for _, bucket := range buckets {
+		wg.Add(1)
+		go func(bucket string) {
+			defer wg.Done()
+			bytes, objects, err := sizer.BucketUsage(ctx, bucket)
+			if err != nil {
+				cancel()
+			}
+			results <- bucketUsage{bucket: bucket, bytes: bytes, objects: objects, err: err}
+		}(bucket)
+	}
+	wg.Wait()
+	close(results)
+
+	var total int64
+	for usage := range results {
+		if usage.err != nil {
+			return fmt.Errorf("s3 size precheck: bucket %s: %w", usage.bucket, usage.err)
+		}
+		total += usage.bytes
+		logger.Infow("S3 bucket size from listing",
+			zap.String("bucket", usage.bucket),
+			zap.Int64("bytes", usage.bytes),
+			zap.Int64("objects", usage.objects),
+		)
 	}
 
 	required := requiredTempBytes(total)
 	logger.Infow("Snapshot temp storage precheck",
-		zap.Int64("s3MaxBytes", total),
+		zap.Int64("s3Bytes", total),
 		zap.Int64("requiredBytes", required),
 		zap.Int64("tempSizeBytes", snapshotCtx.TempSizeBytes),
 	)
 	if required > snapshotCtx.TempSizeBytes {
-		return fmt.Errorf("%w: estimated %d bytes (S3 7-day max + archive) exceeds temp size %d bytes",
+		return fmt.Errorf("%w: listed %d bytes (S3 current objects + archive) exceeds temp size %d bytes",
 			ErrInsufficientTempSpace, required, snapshotCtx.TempSizeBytes)
 	}
 	return nil
 }
 
-func maxBucketSize(ctx context.Context, client MetricStatisticsAPI, bucket string, start, end time.Time) (int64, int, error) {
-	var sum float64
-	var typesWithData int
-	totalPoints := 0
-	for _, storageType := range s3BucketSizeStorageTypes {
-		maxSize, n, err := maxStorageTypeSize(ctx, client, bucket, storageType, start, end)
-		if err != nil {
-			return 0, 0, err
+func sumObjectSizes(objects <-chan minio.ObjectInfo) (int64, int64, error) {
+	var size, count int64
+	for obj := range objects {
+		if obj.Err != nil {
+			return 0, 0, obj.Err
 		}
-		if n == 0 {
-			continue
-		}
-		sum += maxSize
-		typesWithData++
-		totalPoints += n
+		count++
+		size += obj.Size
 	}
-	if typesWithData == 0 {
-		return 0, 0, nil
-	}
-	return int64(sum), totalPoints, nil
+	return size, count, nil
 }
 
-func maxStorageTypeSize(ctx context.Context, client MetricStatisticsAPI, bucket, storageType string, start, end time.Time) (float64, int, error) {
-	out, err := client.GetMetricStatistics(ctx, &cloudwatch.GetMetricStatisticsInput{
-		Namespace:  aws.String("AWS/S3"),
-		MetricName: aws.String("BucketSizeBytes"),
-		Dimensions: []cwtypes.Dimension{
-			{Name: aws.String("BucketName"), Value: aws.String(bucket)},
-			{Name: aws.String("StorageType"), Value: aws.String(storageType)},
-		},
-		StartTime:  aws.Time(start),
-		EndTime:    aws.Time(end),
-		Period:     aws.Int32(s3SizePeriodSeconds),
-		Statistics: []cwtypes.Statistic{cwtypes.StatisticAverage},
-	})
-	if err != nil {
-		return 0, 0, err
-	}
-	if len(out.Datapoints) == 0 {
-		return 0, 0, nil
-	}
-	var maxSize float64
-	var found bool
-	for _, dp := range out.Datapoints {
-		if dp.Average == nil {
-			continue
-		}
-		if !found || *dp.Average > maxSize {
-			maxSize = *dp.Average
-			found = true
-		}
-	}
-	if !found {
-		return 0, 0, nil
-	}
-	return maxSize, len(out.Datapoints), nil
-}
-
-func requiredTempBytes(s3MaxBytes int64) int64 {
+func requiredTempBytes(s3Bytes int64) int64 {
 	// Peak on --tempdir is extracted objects plus the zip written next to them.
-	return s3MaxBytes * 2
+	return s3Bytes * 2
 }

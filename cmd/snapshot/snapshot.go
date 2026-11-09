@@ -81,7 +81,7 @@ func main() {
 			&cli.StringFlag{
 				Name:        "temp-size",
 				Value:       tempSize,
-				Usage:       "Allocated temp volume size for the S3 size precheck (Kubernetes quantity, default 100Gi)",
+				Usage:       "Allocated temp volume size compared against listed S3 object size (Kubernetes quantity, default 100Gi)",
 				Destination: &tempSize,
 			},
 			&cli.StringSliceFlag{
@@ -120,15 +120,7 @@ func main() {
 						logger.Warnw("Write metadata.json failed, skip metadata creation", zap.Error(err))
 					}
 
-					var metrics snapshot.MetricStatisticsAPI
-					if includeS3 && snapshot.CloudWatchPrecheckEnabled(cfg.S3) {
-						var err error
-						metrics, err = snapshot.NewCloudWatchMetrics(ctx, cfg)
-						if err != nil {
-							return fmt.Errorf("create cloudwatch client: %w", err)
-						}
-					}
-					snapshotService := snapshot.NewSnapshotService(cfg, metrics)
+					snapshotService := snapshot.NewSnapshotService(cfg, nil)
 					logger.Infow("Starting snapshot create process",
 						zap.String("backupFile", backupFile),
 						zap.String("temp", snapshotDir),

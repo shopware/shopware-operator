@@ -4,78 +4,54 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
-	cwtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
+	"github.com/minio/minio-go/v7"
 	"github.com/shopware/shopware-operator/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-type stubMetrics struct {
-	// bucket -> storageType -> datapoint averages
-	series map[string]map[string][]float64
-	err    error
+type stubSizer struct {
+	usage map[string]struct {
+		bytes   int64
+		objects int64
+	}
+	err error
 }
 
-func (s *stubMetrics) GetMetricStatistics(_ context.Context, params *cloudwatch.GetMetricStatisticsInput, _ ...func(*cloudwatch.Options)) (*cloudwatch.GetMetricStatisticsOutput, error) {
+func (s *stubSizer) BucketUsage(_ context.Context, bucket string) (int64, int64, error) {
 	if s.err != nil {
-		return nil, s.err
+		return 0, 0, s.err
 	}
-	bucket := ""
-	storageType := ""
-	for _, d := range params.Dimensions {
-		switch aws.ToString(d.Name) {
-		case "BucketName":
-			bucket = aws.ToString(d.Value)
-		case "StorageType":
-			storageType = aws.ToString(d.Value)
-		}
-	}
-	values := s.series[bucket][storageType]
-	out := &cloudwatch.GetMetricStatisticsOutput{}
-	for _, v := range values {
-		avg := v
-		out.Datapoints = append(out.Datapoints, cwtypes.Datapoint{Average: &avg})
-	}
-	return out, nil
+	u := s.usage[bucket]
+	return u.bytes, u.objects, nil
 }
 
 func TestRequiredTempBytes(t *testing.T) {
 	assert.Equal(t, int64(200), requiredTempBytes(100))
 }
 
-func TestPrecheckTempStorageRequiresMetricsClient(t *testing.T) {
-	svc := NewSnapshotService(&config.SnapshotConfig{
-		S3: config.S3Config{PrivateBucket: "priv"},
-	}, nil)
-	err := svc.precheckTempStorage(context.Background(), svc.config, &SnapshotContext{
-		IncludeS3:     true,
-		TempSizeBytes: 100,
-	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "metrics client is required")
+func TestSumObjectSizes(t *testing.T) {
+	ch := make(chan minio.ObjectInfo, 3)
+	ch <- minio.ObjectInfo{Key: "a", Size: 10}
+	ch <- minio.ObjectInfo{Key: "dir/", Size: 0}
+	ch <- minio.ObjectInfo{Key: "b", Size: 25}
+	close(ch)
+
+	size, count, err := sumObjectSizes(ch)
+	require.NoError(t, err)
+	assert.Equal(t, int64(35), size)
+	assert.Equal(t, int64(3), count)
 }
 
-func TestCloudWatchPrecheckEnabled(t *testing.T) {
-	assert.True(t, CloudWatchPrecheckEnabled(config.S3Config{}))
-	assert.True(t, CloudWatchPrecheckEnabled(config.S3Config{Endpoint: "s3.eu-central-1.amazonaws.com"}))
-	assert.True(t, CloudWatchPrecheckEnabled(config.S3Config{Endpoint: "https://s3.eu-central-1.vpce-0123.amazonaws.com"}))
-	assert.False(t, CloudWatchPrecheckEnabled(config.S3Config{Endpoint: "minio.minio.svc.cluster.local:9000"}))
-	assert.False(t, CloudWatchPrecheckEnabled(config.S3Config{Endpoint: "https://play.min.io"}))
-}
+func TestSumObjectSizesError(t *testing.T) {
+	ch := make(chan minio.ObjectInfo, 2)
+	ch <- minio.ObjectInfo{Key: "a", Size: 10}
+	ch <- minio.ObjectInfo{Err: fmt.Errorf("list failed")}
+	close(ch)
 
-func TestPrecheckTempStorageSkipsNonAWSEndpoint(t *testing.T) {
-	svc := NewSnapshotService(&config.SnapshotConfig{
-		S3: config.S3Config{PrivateBucket: "priv", Endpoint: "minio.minio.svc:9000"},
-	}, nil)
-	err := svc.precheckTempStorage(context.Background(), svc.config, &SnapshotContext{
-		IncludeS3:     true,
-		TempSizeBytes: 100,
-	})
-	assert.NoError(t, err)
+	_, _, err := sumObjectSizes(ch)
+	require.EqualError(t, err, "list failed")
 }
 
 func TestPrecheckTempStorageSkipsWhenS3Disabled(t *testing.T) {
@@ -92,10 +68,13 @@ func TestPrecheckTempStorageFits(t *testing.T) {
 		&config.SnapshotConfig{
 			S3: config.S3Config{PrivateBucket: "priv", PublicBucket: "pub"},
 		},
-		&stubMetrics{
-			series: map[string]map[string][]float64{
-				"priv": {"StandardStorage": {10, 30}},
-				"pub":  {"StandardStorage": {20, 20}},
+		&stubSizer{
+			usage: map[string]struct {
+				bytes   int64
+				objects int64
+			}{
+				"priv": {bytes: 30, objects: 3},
+				"pub":  {bytes: 20, objects: 2},
 			},
 		},
 	)
@@ -107,35 +86,18 @@ func TestPrecheckTempStorageFits(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestPrecheckTempStorageUsesMaxNotAverage(t *testing.T) {
-	svc := NewSnapshotService(
-		&config.SnapshotConfig{
-			S3: config.S3Config{PrivateBucket: "priv", PublicBucket: "pub"},
-		},
-		&stubMetrics{
-			series: map[string]map[string][]float64{
-				"priv": {"StandardStorage": {10, 60}},
-				"pub":  {"StandardStorage": {10}},
-			},
-		},
-	)
-	err := svc.precheckTempStorage(context.Background(), svc.config, &SnapshotContext{
-		IncludeS3:     true,
-		TempSizeBytes: 100,
-	})
-	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrInsufficientTempSpace)
-}
-
 func TestPrecheckTempStorageInsufficient(t *testing.T) {
 	svc := NewSnapshotService(
 		&config.SnapshotConfig{
 			S3: config.S3Config{PrivateBucket: "priv", PublicBucket: "pub"},
 		},
-		&stubMetrics{
-			series: map[string]map[string][]float64{
-				"priv": {"StandardStorage": {50}},
-				"pub":  {"StandardStorage": {50}},
+		&stubSizer{
+			usage: map[string]struct {
+				bytes   int64
+				objects int64
+			}{
+				"priv": {bytes: 50, objects: 1},
+				"pub":  {bytes: 50, objects: 1},
 			},
 		},
 	)
@@ -148,12 +110,15 @@ func TestPrecheckTempStorageInsufficient(t *testing.T) {
 	assert.True(t, IsNoSpaceError(err))
 }
 
-func TestPrecheckTempStorageNoDatapoints(t *testing.T) {
+func TestPrecheckTempStorageEmptyBuckets(t *testing.T) {
 	svc := NewSnapshotService(
 		&config.SnapshotConfig{
 			S3: config.S3Config{PrivateBucket: "priv"},
 		},
-		&stubMetrics{series: map[string]map[string][]float64{}},
+		&stubSizer{usage: map[string]struct {
+			bytes   int64
+			objects int64
+		}{}},
 	)
 	err := svc.precheckTempStorage(context.Background(), svc.config, &SnapshotContext{
 		IncludeS3:     true,
@@ -162,12 +127,12 @@ func TestPrecheckTempStorageNoDatapoints(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestPrecheckTempStorageCloudWatchError(t *testing.T) {
+func TestPrecheckTempStorageListError(t *testing.T) {
 	svc := NewSnapshotService(
 		&config.SnapshotConfig{
 			S3: config.S3Config{PrivateBucket: "priv"},
 		},
-		&stubMetrics{err: fmt.Errorf("access denied")},
+		&stubSizer{err: fmt.Errorf("access denied")},
 	)
 	err := svc.precheckTempStorage(context.Background(), svc.config, &SnapshotContext{
 		IncludeS3:     true,
@@ -175,21 +140,28 @@ func TestPrecheckTempStorageCloudWatchError(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, ErrInsufficientTempSpace)
+	assert.Contains(t, err.Error(), "access denied")
 }
 
-func TestMaxBucketSizeUsesStandardStoragePeak(t *testing.T) {
-	client := &stubMetrics{
-		series: map[string]map[string][]float64{
-			"b": {
-				"StandardStorage":   {10, 30},
-				"StandardIAStorage": {5},
+func TestPrecheckTempStorageRunsForMinIOEndpoint(t *testing.T) {
+	svc := NewSnapshotService(
+		&config.SnapshotConfig{
+			S3: config.S3Config{PrivateBucket: "priv", Endpoint: "minio.minio.svc:9000"},
+		},
+		&stubSizer{
+			usage: map[string]struct {
+				bytes   int64
+				objects int64
+			}{
+				"priv": {bytes: 10, objects: 1},
 			},
 		},
-	}
-	size, points, err := maxBucketSize(context.Background(), client, "b", time.Now().Add(-time.Hour), time.Now())
+	)
+	err := svc.precheckTempStorage(context.Background(), svc.config, &SnapshotContext{
+		IncludeS3:     true,
+		TempSizeBytes: 100,
+	})
 	require.NoError(t, err)
-	assert.Equal(t, int64(30), size)
-	assert.Equal(t, 2, points)
 }
 
 func TestIsNoSpaceErrorDetectsInsufficientTempSpace(t *testing.T) {

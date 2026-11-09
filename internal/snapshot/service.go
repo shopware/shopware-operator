@@ -35,14 +35,14 @@ type TarEntry struct {
 
 // SnapshotService handles backup operations
 type SnapshotService struct {
-	config  *config.SnapshotConfig
-	metrics MetricStatisticsAPI
+	config *config.SnapshotConfig
+	sizer  BucketSizer
 }
 
-func NewSnapshotService(cfg *config.SnapshotConfig, metrics MetricStatisticsAPI) *SnapshotService {
+func NewSnapshotService(cfg *config.SnapshotConfig, sizer BucketSizer) *SnapshotService {
 	return &SnapshotService{
-		config:  cfg,
-		metrics: metrics,
+		config: cfg,
+		sizer:  sizer,
 	}
 }
 
