@@ -143,6 +143,37 @@ func TestPrecheckTempStorageListError(t *testing.T) {
 	assert.Contains(t, err.Error(), "access denied")
 }
 
+type cancelOnOtherBucketSizer struct {
+	failBucket string
+	failErr    error
+}
+
+func (s *cancelOnOtherBucketSizer) BucketUsage(ctx context.Context, bucket string) (int64, int64, error) {
+	if bucket == s.failBucket {
+		return 0, 0, s.failErr
+	}
+	<-ctx.Done()
+	return 0, 0, ctx.Err()
+}
+
+func TestPrecheckTempStorageKeepsListingErrorOverCancel(t *testing.T) {
+	denied := fmt.Errorf("AccessDenied")
+	svc := NewSnapshotService(
+		&config.SnapshotConfig{
+			S3: config.S3Config{PrivateBucket: "priv", PublicBucket: "pub"},
+		},
+		&cancelOnOtherBucketSizer{failBucket: "priv", failErr: denied},
+	)
+	err := svc.precheckTempStorage(context.Background(), svc.config, &SnapshotContext{
+		IncludeS3:     true,
+		TempSizeBytes: 100,
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, denied)
+	assert.NotErrorIs(t, err, context.Canceled)
+	assert.Contains(t, err.Error(), "priv")
+}
+
 func TestPrecheckTempStorageRunsForMinIOEndpoint(t *testing.T) {
 	svc := NewSnapshotService(
 		&config.SnapshotConfig{

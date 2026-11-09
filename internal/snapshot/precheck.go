@@ -88,19 +88,21 @@ func (s *SnapshotService) precheckTempStorage(ctx context.Context, cfg *config.S
 		go func(bucket string) {
 			defer wg.Done()
 			bytes, objects, err := sizer.BucketUsage(ctx, bucket)
+			results <- bucketUsage{bucket: bucket, bytes: bytes, objects: objects, err: err}
 			if err != nil {
 				cancel()
 			}
-			results <- bucketUsage{bucket: bucket, bytes: bytes, objects: objects, err: err}
 		}(bucket)
 	}
 	wg.Wait()
 	close(results)
 
 	var total int64
+	var errs []error
 	for usage := range results {
 		if usage.err != nil {
-			return fmt.Errorf("s3 size precheck: bucket %s: %w", usage.bucket, usage.err)
+			errs = append(errs, fmt.Errorf("s3 size precheck: bucket %s: %w", usage.bucket, usage.err))
+			continue
 		}
 		total += usage.bytes
 		logger.Infow("S3 bucket size from listing",
@@ -108,6 +110,9 @@ func (s *SnapshotService) precheckTempStorage(ctx context.Context, cfg *config.S
 			zap.Int64("bytes", usage.bytes),
 			zap.Int64("objects", usage.objects),
 		)
+	}
+	if err := joinSnapshotErrors(errs); err != nil {
+		return err
 	}
 
 	required := requiredTempBytes(total)
