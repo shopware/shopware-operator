@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.12.2](https://github.com/shopware/shopware-operator/compare/1.12.1...v1.12.2) (2026-11-05)
+
+
+### Bug Fixes
+
+* reconciles only on changes ([860e29c](https://github.com/shopware/shopware-operator/commit/860e29c15da0382f08667753d9828046d5be25f2))
+* reconciles only on changes ([53055bb](https://github.com/shopware/shopware-operator/commit/53055bbefa528466c3b5e4cfc5c27216d379ae6f))
+* worker gracefull shutdown ([1b9653b](https://github.com/shopware/shopware-operator/commit/1b9653b371bccce407cb21b4cdde0c3775c7a7fc))
+* worker gracefull shutdown ([35df703](https://github.com/shopware/shopware-operator/commit/35df7039c0f657de28f932f01acecfe9ee7a350a))
+
 ## [1.12.1](https://github.com/shopware/shopware-operator/compare/1.12.0...v1.12.1) (2026-11-02)
 
 

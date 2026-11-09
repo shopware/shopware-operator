@@ -315,9 +315,14 @@ func TestWorkerDeployment(t *testing.T) {
 		assert.Len(t, container.Args, 1)
 		assert.Contains(t, container.Args[0], "bin/console messenger:consume async --time-limit=300")
 		assert.NotContains(t, container.Args[0], "--memory-limit")
-		assert.Contains(t, container.Args[0], `trap term TERM INT`)
+		assert.Contains(t, container.Args[0], `trap term TERM INT QUIT`)
 		assert.Contains(t, container.Args[0], `kill -TERM "$child"`)
 		assert.Equal(t, "shopware-worker", container.Name)
+		assert.Equal(t, int64(300), *result.Spec.Template.Spec.TerminationGracePeriodSeconds)
+
+		store.Spec.WorkerDeploymentContainer.TerminationGracePeriodSeconds = 600
+		result = deployment.WorkerDeployment(store, []string{"async"})
+		assert.Equal(t, int64(600), *result.Spec.Template.Spec.TerminationGracePeriodSeconds)
 	})
 
 	t.Run("test worker memory limit flag", func(t *testing.T) {

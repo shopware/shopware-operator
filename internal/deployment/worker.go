@@ -19,7 +19,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const maxK8sNameLength = 63
+const (
+	maxK8sNameLength             = 63
+	workerTimeLimitSeconds int64 = 300
+)
 
 func WorkerQueues(store v1.Store) []string {
 	if len(store.Status.QueueState.Transports) == 0 {
@@ -224,18 +227,18 @@ func WorkerDeployment(store v1.Store, consumeQueues []string) *appsv1.Deployment
 		})
 	}
 
-	consume := fmt.Sprintf("bin/console messenger:consume %s --time-limit=300 -vv", strings.Join(consumeQueues, " "))
+	consume := fmt.Sprintf("bin/console messenger:consume %s --time-limit=%d -vv", strings.Join(consumeQueues, " "), workerTimeLimitSeconds)
 	if phpMemoryLimitMiB > 0 {
 		consume += fmt.Sprintf(" --memory-limit=%dM", phpMemoryLimitMiB)
 	}
 	workerScript := fmt.Sprintf(
 		`term() {
-  trap - TERM INT
+  trap - TERM INT QUIT
   kill -TERM "$child" 2>/dev/null
   wait "$child"
   exit 0
 }
-trap term TERM INT
+trap term TERM INT QUIT
 while true; do
   %s &
   child=$!
@@ -243,6 +246,11 @@ while true; do
 done`,
 		consume,
 	)
+
+	terminationGracePeriodSeconds := workerTimeLimitSeconds
+	if store.Spec.WorkerDeploymentContainer.TerminationGracePeriodSeconds != 0 {
+		terminationGracePeriodSeconds = store.Spec.WorkerDeploymentContainer.TerminationGracePeriodSeconds
+	}
 
 	containers := append(util.DefaultContainerSecurityContexts(containerSpec.ExtraContainers), corev1.Container{
 		Name:            appName,
@@ -302,15 +310,16 @@ done`,
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
-					Volumes:                   containerSpec.Volumes,
-					TopologySpreadConstraints: containerSpec.TopologySpreadConstraints,
-					NodeSelector:              containerSpec.NodeSelector,
-					ImagePullSecrets:          containerSpec.ImagePullSecrets,
-					EnableServiceLinks:        containerSpec.EnableServiceLinks,
-					RestartPolicy:             containerSpec.RestartPolicy,
-					Containers:                containers,
-					SecurityContext:           util.DefaultPodSecurityContext(containerSpec.SecurityContext),
-					InitContainers:            util.DefaultContainerSecurityContexts(containerSpec.InitContainers),
+					Volumes:                       containerSpec.Volumes,
+					TopologySpreadConstraints:     containerSpec.TopologySpreadConstraints,
+					NodeSelector:                  containerSpec.NodeSelector,
+					ImagePullSecrets:              containerSpec.ImagePullSecrets,
+					EnableServiceLinks:            containerSpec.EnableServiceLinks,
+					RestartPolicy:                 containerSpec.RestartPolicy,
+					Containers:                    containers,
+					SecurityContext:               util.DefaultPodSecurityContext(containerSpec.SecurityContext),
+					InitContainers:                util.DefaultContainerSecurityContexts(containerSpec.InitContainers),
+					TerminationGracePeriodSeconds: &terminationGracePeriodSeconds,
 				},
 			},
 		},
