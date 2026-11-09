@@ -82,13 +82,17 @@ func (s *SnapshotService) extractArchiveFromS3(ctx context.Context, cfg *config.
 		return fmt.Errorf("failed to stream archive to temp file: %w", err)
 	}
 
-	logger.Infow("Downloaded archive from S3 to temp file", zap.String("s3URL", snapshotCtx.BackupFile), zap.Int64("archiveSize", written), zap.String("tempFile", tempFile.Name()))
+	logger.Infow("Downloaded archive from S3 to temp file",
+		zap.String("s3URL", snapshotCtx.BackupFile),
+		zap.String("archiveSize", formatBytes(written)),
+		zap.String("tempFile", tempFile.Name()),
+	)
 
 	if snapshotCtx.TempSizeBytes > 0 {
 		required := requiredTempBytes(written)
 		if required > snapshotCtx.TempSizeBytes {
-			return fmt.Errorf("%w: estimated %d bytes (archive + extract) exceeds temp size %d bytes",
-				ErrInsufficientTempSpace, required, snapshotCtx.TempSizeBytes)
+			return fmt.Errorf("%w: estimated %s (archive + extract) exceeds temp size %s",
+				ErrInsufficientTempSpace, formatBytes(required), formatBytes(snapshotCtx.TempSizeBytes))
 		}
 	}
 

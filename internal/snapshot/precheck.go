@@ -9,6 +9,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/config"
 	"github.com/shopware/shopware-operator/internal/logging"
 	"go.uber.org/zap"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 // BucketSizer reports the current-object size of an S3 bucket (live keys only).
@@ -107,7 +108,7 @@ func (s *SnapshotService) precheckTempStorage(ctx context.Context, cfg *config.S
 		total += usage.bytes
 		logger.Infow("S3 bucket size from listing",
 			zap.String("bucket", usage.bucket),
-			zap.Int64("bytes", usage.bytes),
+			zap.String("size", formatBytes(usage.bytes)),
 			zap.Int64("objects", usage.objects),
 		)
 	}
@@ -117,13 +118,13 @@ func (s *SnapshotService) precheckTempStorage(ctx context.Context, cfg *config.S
 
 	required := requiredTempBytes(total)
 	logger.Infow("Snapshot temp storage precheck",
-		zap.Int64("s3Bytes", total),
-		zap.Int64("requiredBytes", required),
-		zap.Int64("tempSizeBytes", snapshotCtx.TempSizeBytes),
+		zap.String("s3Size", formatBytes(total)),
+		zap.String("required", formatBytes(required)),
+		zap.String("tempSize", formatBytes(snapshotCtx.TempSizeBytes)),
 	)
 	if required > snapshotCtx.TempSizeBytes {
-		return fmt.Errorf("%w: listed %d bytes (S3 current objects + archive) exceeds temp size %d bytes",
-			ErrInsufficientTempSpace, required, snapshotCtx.TempSizeBytes)
+		return fmt.Errorf("%w: listed %s (S3 current objects + archive) exceeds temp size %s",
+			ErrInsufficientTempSpace, formatBytes(required), formatBytes(snapshotCtx.TempSizeBytes))
 	}
 	return nil
 }
@@ -143,4 +144,8 @@ func sumObjectSizes(objects <-chan minio.ObjectInfo) (int64, int64, error) {
 func requiredTempBytes(s3Bytes int64) int64 {
 	// Peak on --tempdir is extracted objects plus the zip written next to them.
 	return s3Bytes * 2
+}
+
+func formatBytes(n int64) string {
+	return resource.NewQuantity(n, resource.BinarySI).String()
 }

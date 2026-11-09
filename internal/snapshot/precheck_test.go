@@ -31,6 +31,14 @@ func TestRequiredTempBytes(t *testing.T) {
 	assert.Equal(t, int64(200), requiredTempBytes(100))
 }
 
+func TestFormatBytes(t *testing.T) {
+	assert.Equal(t, "0", formatBytes(0))
+	assert.Equal(t, "100", formatBytes(100))
+	assert.Equal(t, "1Ki", formatBytes(1024))
+	assert.Equal(t, "100Gi", formatBytes(100*1024*1024*1024))
+	assert.Equal(t, "200Gi", formatBytes(200*1024*1024*1024))
+}
+
 func TestSumObjectSizes(t *testing.T) {
 	ch := make(chan minio.ObjectInfo, 3)
 	ch <- minio.ObjectInfo{Key: "a", Size: 10}
