@@ -32,11 +32,14 @@ func TestRequiredTempBytes(t *testing.T) {
 }
 
 func TestFormatBytes(t *testing.T) {
-	assert.Equal(t, "0", formatBytes(0))
-	assert.Equal(t, "100", formatBytes(100))
+	assert.Equal(t, "0B", formatBytes(0))
+	assert.Equal(t, "100B", formatBytes(100))
 	assert.Equal(t, "1Ki", formatBytes(1024))
+	assert.Equal(t, "1.5Ki", formatBytes(1536))
 	assert.Equal(t, "100Gi", formatBytes(100*1024*1024*1024))
 	assert.Equal(t, "200Gi", formatBytes(200*1024*1024*1024))
+	assert.Equal(t, "95.2Gi", formatBytes(102211734557))
+	assert.Equal(t, "190.4Gi", formatBytes(204423469114))
 }
 
 func TestSumObjectSizes(t *testing.T) {

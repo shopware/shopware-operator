@@ -9,7 +9,6 @@ import (
 	"github.com/shopware/shopware-operator/internal/config"
 	"github.com/shopware/shopware-operator/internal/logging"
 	"go.uber.org/zap"
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 // BucketSizer reports the current-object size of an S3 bucket (live keys only).
@@ -147,5 +146,33 @@ func requiredTempBytes(s3Bytes int64) int64 {
 }
 
 func formatBytes(n int64) string {
-	return resource.NewQuantity(n, resource.BinarySI).String()
+	if n < 0 {
+		return "-" + formatBytes(-n)
+	}
+	const (
+		ki = 1024
+		mi = ki * 1024
+		gi = mi * 1024
+		ti = gi * 1024
+	)
+	switch {
+	case n >= ti:
+		return formatByteUnit(n, ti, "Ti")
+	case n >= gi:
+		return formatByteUnit(n, gi, "Gi")
+	case n >= mi:
+		return formatByteUnit(n, mi, "Mi")
+	case n >= ki:
+		return formatByteUnit(n, ki, "Ki")
+	default:
+		return fmt.Sprintf("%dB", n)
+	}
+}
+
+func formatByteUnit(n, unit int64, suffix string) string {
+	v := float64(n) / float64(unit)
+	if v == float64(int64(v)) {
+		return fmt.Sprintf("%d%s", int64(v), suffix)
+	}
+	return fmt.Sprintf("%.1f%s", v, suffix)
 }
