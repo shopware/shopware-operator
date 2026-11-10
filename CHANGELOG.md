@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.12.3](https://github.com/shopware/shopware-operator/compare/1.12.2...v1.12.3) (2026-11-10)
+
+
+### Bug Fixes
+
+* length check for names ([96c12bf](https://github.com/shopware/shopware-operator/commit/96c12bf28eec2733c30339539f47a2ff70d1b13e))
+* length check for names ([16e28d0](https://github.com/shopware/shopware-operator/commit/16e28d06386fb981d1d54c47e992cf6c1643e79e))
+* secret changes trigger new deployment rollout ([549b7a0](https://github.com/shopware/shopware-operator/commit/549b7a0b1cedd25a65396aa64bac3852d802aa0e))
+
 ## [1.12.2](https://github.com/shopware/shopware-operator/compare/1.12.1...v1.12.2) (2026-11-05)
 
 
