@@ -1,0 +1,32 @@
+name: External contributions
+
+# Setup: https://github.com/shopware/gh-project-automation/blob/main/docs/external-contributions.md
+
+on:
+  issues:
+    types: [opened, reopened]
+  # Gives fork pull requests the Slack token. Never check out or run code from the pull request here.
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions: {}
+
+jobs:
+  label-and-notify:
+    if: github.repository_owner == 'shopware'
+    runs-on: ubuntu-24.04
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - run: npm install --no-save --ignore-scripts --prefix "$RUNNER_TEMP/automation" @shopware-ag/gh-project-automation@1.21.0
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          SLACK_TOKEN: ${{ secrets.SLACK_TOKEN_PRODUCT_NOTIFICATIONS }}
+          SLACK_CHANNELS: ${{ vars.EXTERNAL_CONTRIBUTION_SLACK_CHANNELS }}
+        with:
+          script: |
+            const { labelExternalContribution, notifyExternalContribution } = await import(`${process.env.RUNNER_TEMP}/automation/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs`)
+            if (await labelExternalContribution({ github, core, context })) {
+              await notifyExternalContribution({ github, core, context }, process.env.SLACK_CHANNELS, 'external-contribution')
+            }
