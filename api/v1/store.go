@@ -141,12 +141,14 @@ type Configuration struct {
 	UsageDataConsent string `json:"usageDataConsent,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="!has(self.serviceRef) || has(self.tokenRef)",message="fastly tokenRef is required when serviceRef is set"
 type FastlySpec struct {
 	DisableOnSetupMigration bool      `json:"disableOnSetupMigration,omitempty"`
 	TokenRef                SecretRef `json:"tokenRef,omitempty"`
 	ServiceRef              SecretRef `json:"serviceRef,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="(has(self.username) && size(self.username) > 0) || has(self.usernameSecretRef)",message="admin username or usernameSecretRef is required"
 type Credentials struct {
 	Username          string    `json:"username,omitempty"`
 	Password          string    `json:"password,omitempty"`
@@ -190,6 +192,7 @@ type ScheduledTaskSpec struct {
 	Command string `json:"command"`
 }
 
+// +kubebuilder:validation:XValidation:rule="!self.enabled || has(self.passwordSecretRef)",message="opensearch passwordSecretRef is required when opensearch is enabled"
 type OpensearchSpec struct {
 	Enabled bool `json:"enabled"`
 
@@ -483,6 +486,7 @@ type S3Storage struct {
 	SecretAccessKeyRef SecretRef `json:"secretAccessKeyRef,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="(has(self.host) && size(self.host) > 0) || has(self.hostRef)",message="either database host or hostRef must be set"
 type DatabaseSpec struct {
 	Host    string    `json:"host,omitempty"`
 	HostRef SecretRef `json:"hostRef,omitempty"`
@@ -528,6 +532,10 @@ type SecretRef struct {
 	Name string `json:"name"`
 	// +kubebuilder:validation:MinLength=1
 	Key string `json:"key"`
+}
+
+func (r SecretRef) IsSet() bool {
+	return r.Name != "" && r.Key != ""
 }
 
 func (s *Store) GetSecretName() string {

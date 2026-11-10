@@ -8,6 +8,7 @@ import (
 
 	"github.com/shopware/shopware-operator/internal/tracing"
 	"github.com/shopware/shopware-operator/internal/trigger"
+	"github.com/shopware/shopware-operator/internal/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
@@ -32,7 +33,7 @@ func ownedDeployment() *appsv1.Deployment {
 		ResourceVersion: "1",
 		Generation:      1,
 		Labels:          map[string]string{"app": "storefront"},
-		Annotations:     map[string]string{"shopware.com/last-config-hash": "a"},
+		Annotations:     map[string]string{util.LastConfigHashAnnotation: "a"},
 		OwnerReferences: []metav1.OwnerReference{{
 			APIVersion: "shop.shopware.com/v1",
 			Kind:       "Store",

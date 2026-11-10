@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
@@ -15,6 +16,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/metrics"
 	"github.com/shopware/shopware-operator/internal/tracing"
 	"github.com/shopware/shopware-operator/internal/trigger"
+	"github.com/shopware/shopware-operator/internal/util"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -131,13 +133,15 @@ func (r *StoreReconciler) SetupWithManager(mgr ctrl.Manager, logger *zap.Sugared
 		// This will watch the db secret and run a reconcile if the db secret will change.
 		Watches(
 			&corev1.Secret{},
-			handler.EnqueueRequestsFromMapFunc(r.findStoreForReconcile),
-			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+			handler.EnqueueRequestsFromMapFunc(r.findStoreWithSecretChangeForReconcile),
+			builder.WithPredicates(predicate.Or(
+				predicate.ResourceVersionChangedPredicate{},
+			)),
 		).
 		Complete(r)
 }
 
-func (r *StoreReconciler) findStoreForReconcile(
+func (r *StoreReconciler) findStoreWithSecretChangeForReconcile(
 	ctx context.Context,
 	secret client.Object,
 ) []reconcile.Request {
@@ -147,35 +151,52 @@ func (r *StoreReconciler) findStoreForReconcile(
 		return []reconcile.Request{}
 	}
 
+	r.Logger.Debugw("got secret update event", zap.String("secret", secret.GetName()))
+
 	var requests []reconcile.Request
 	for _, store := range stores.Items {
 		if store.Namespace != secret.GetNamespace() {
 			continue
 		}
-		if store.Spec.Database.PasswordSecretRef.Name == secret.GetName() ||
-			store.Spec.Database.TLS.SecretName == secret.GetName() ||
-			store.Spec.OpensearchSpec.PasswordSecretRef.Name == secret.GetName() ||
-			store.Spec.ShopConfiguration.Fastly.TokenRef.Name == secret.GetName() ||
-			store.Spec.AdminCredentials.UsernameSecretRef.Name == secret.GetName() ||
-			store.Spec.AdminCredentials.PasswordSecretRef.Name == secret.GetName() {
+
+		// Own secret has changed, so we schedule a reconcile
+		// Triggered by delete for example, or changes, or creates
+		if store.GetSecretName() == secret.GetName() {
+			s := types.NamespacedName{
+				Namespace: store.Namespace,
+				Name:      store.Name,
+			}
+			r.Triggers.Add(s, trigger.Trigger{
+				Source: "StoreSecret",
+				Event:  trigger.EventMapped,
+				Name:   secret.GetName(),
+				Reason: "store secret has changed",
+			})
+			return []reconcile.Request{{
+				NamespacedName: s,
+			}}
+		}
+
+		if store.Spec.Database.TLS.SecretName == secret.GetName() ||
+			slices.Contains(util.GetReferencedSecretNames(store), secret.GetName()) {
 			r.Logger.
-				Infow(
-					"Do reconcile on store because db/opensearch/fastly secret has changed",
+				Debugw(
+					"Do reconcile on store because referenced secret has changed",
 					zap.String("store", store.Name),
 					zap.String("secret", secret.GetName()),
 					zap.String("secret-namespace", secret.GetNamespace()),
 				)
-			key := types.NamespacedName{
+			store := types.NamespacedName{
 				Namespace: store.Namespace,
 				Name:      store.Name,
 			}
-			r.Triggers.Add(key, trigger.Trigger{
+			r.Triggers.Add(store, trigger.Trigger{
 				Source: "ReferencedSecret",
 				Event:  trigger.EventMapped,
 				Name:   secret.GetName(),
-				Reason: "referenced db/opensearch/fastly/admin secret changed",
+				Reason: "secretRef has changed",
 			})
-			requests = append(requests, reconcile.Request{NamespacedName: key})
+			requests = append(requests, reconcile.Request{NamespacedName: store})
 		}
 	}
 
