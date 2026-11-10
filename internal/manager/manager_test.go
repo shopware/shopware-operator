@@ -14,6 +14,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/manager"
 	"github.com/shopware/shopware-operator/internal/manager/base"
 	"github.com/shopware/shopware-operator/internal/pdb"
+	"github.com/shopware/shopware-operator/internal/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
@@ -159,7 +160,7 @@ func TestReconcileStateSetupJobSucceeded(t *testing.T) {
 
 	setupJob := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      job.GetSetupJobName(*store),
+			Name:      util.GetSetupJobName(*store),
 			Namespace: store.Namespace,
 		},
 		Status: batchv1.JobStatus{
@@ -367,7 +368,7 @@ func TestReconcileResourcesSetupCreatesSecretAndJob(t *testing.T) {
 
 	setupJob := &batchv1.Job{}
 	require.NoError(t, c.Get(context.Background(),
-		types.NamespacedName{Namespace: "test", Name: job.GetSetupJobName(*store)}, setupJob))
+		types.NamespacedName{Namespace: "test", Name: util.GetSetupJobName(*store)}, setupJob))
 
 	migrationJob := &batchv1.JobList{}
 	require.NoError(t, c.List(context.Background(), migrationJob, client.InNamespace("test")))
@@ -586,8 +587,8 @@ func TestReconcileResourcesRemovesWorkerPDBWhenKedaEnabled(t *testing.T) {
 		names = append(names, p.Name)
 	}
 	assert.ElementsMatch(t, []string{
-		pdb.GetAdminPDBName(*store),
-		pdb.GetStorefrontPDBName(*store),
+		util.GetAdminPDBName(*store),
+		util.GetStorefrontPDBName(*store),
 	}, names)
 }
 
@@ -613,7 +614,7 @@ func TestReconcileResourcesKeepsWorkerPDBWhenStoreKedaScalingDisabled(t *testing
 
 	workerPDB := &policy.PodDisruptionBudget{}
 	require.NoError(t, c.Get(context.Background(),
-		types.NamespacedName{Namespace: "test", Name: pdb.GetWorkerPDBName(*store)}, workerPDB))
+		types.NamespacedName{Namespace: "test", Name: util.GetWorkerPDBName(*store)}, workerPDB))
 }
 
 func TestReconcileResourcesNoScaledObjectsWhenKedaDisabled(t *testing.T) {
@@ -847,7 +848,7 @@ func failedJob(name string) *batchv1.Job {
 func TestReconcileStateSetupJobFailed(t *testing.T) {
 	store := testStore()
 	store.Status.State = v1.StateSetup
-	m, _ := newTestManager(t, failedJob(job.GetSetupJobName(*store)))
+	m, _ := newTestManager(t, failedJob(util.GetSetupJobName(*store)))
 
 	require.NoError(t, m.ReconcileState(context.Background(), store))
 
@@ -861,7 +862,7 @@ func TestReconcileStateSetupJobFailed(t *testing.T) {
 func TestReconcileStateSetupErrorStaysWhileJobFailed(t *testing.T) {
 	store := testStore()
 	store.Status.State = v1.StateSetupError
-	m, _ := newTestManager(t, failedJob(job.GetSetupJobName(*store)))
+	m, _ := newTestManager(t, failedJob(util.GetSetupJobName(*store)))
 
 	require.NoError(t, m.ReconcileState(context.Background(), store))
 
@@ -873,7 +874,7 @@ func TestReconcileStateSetupErrorRecoversWhenJobSucceeds(t *testing.T) {
 	store.Status.State = v1.StateSetupError
 	setupJob := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      job.GetSetupJobName(*store),
+			Name:      util.GetSetupJobName(*store),
 			Namespace: store.Namespace,
 		},
 		Status: batchv1.JobStatus{
@@ -1027,7 +1028,7 @@ func TestReconcileResourcesSetupErrorStillReconcilesSetupJob(t *testing.T) {
 
 	setupJob := &batchv1.Job{}
 	require.NoError(t, c.Get(context.Background(),
-		types.NamespacedName{Namespace: "test", Name: job.GetSetupJobName(*store)}, setupJob))
+		types.NamespacedName{Namespace: "test", Name: util.GetSetupJobName(*store)}, setupJob))
 
 	deployments := &appsv1.DeploymentList{}
 	require.NoError(t, c.List(context.Background(), deployments, client.InNamespace("test")))

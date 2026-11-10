@@ -29,7 +29,7 @@ func DebugPod(store v1.Store, storeDebugInstance v1.StoreDebugInstance) *corev1.
 	podSpec := new(corev1.Pod)
 
 	podSpec.ObjectMeta = metav1.ObjectMeta{
-		Name:      storeDebugInstance.Name,
+		Name:      util.GetDebugPodName(storeDebugInstance),
 		Namespace: storeDebugInstance.Namespace,
 	}
 

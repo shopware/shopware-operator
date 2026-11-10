@@ -38,13 +38,13 @@ func GetCommandCronJob(
 	store v1.Store,
 	exec v1.StoreExec,
 ) (*batchv1.CronJob, error) {
-	mig := CommandJob(store, exec)
+	cron := CommandCronJob(store, exec)
 	search := &batchv1.CronJob{
-		ObjectMeta: mig.ObjectMeta,
+		ObjectMeta: cron.ObjectMeta,
 	}
 	err := client.Get(ctx, types.NamespacedName{
-		Namespace: mig.Namespace,
-		Name:      mig.Name,
+		Namespace: cron.Namespace,
+		Name:      cron.Name,
 	}, search)
 	return search, err
 }
@@ -59,7 +59,7 @@ func CommandCronJob(store v1.Store, ex v1.StoreExec) *batchv1.CronJob {
 			APIVersion: "batch/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        CommandJobName(ex),
+			Name:        util.CommandCronJobName(ex),
 			Namespace:   ex.Namespace,
 			Labels:      labels,
 			Annotations: annotations,
@@ -69,7 +69,7 @@ func CommandCronJob(store v1.Store, ex v1.StoreExec) *batchv1.CronJob {
 			Suspend:  &ex.Spec.CronSuspend,
 			JobTemplate: batchv1.JobTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:        CommandJobName(ex),
+					Name:        util.CommandCronJobName(ex),
 					Namespace:   ex.Namespace,
 					Labels:      labels,
 					Annotations: annotations,
@@ -95,7 +95,7 @@ func CommandJob(store v1.Store, ex v1.StoreExec) *batchv1.Job {
 			APIVersion: "batch/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        CommandJobName(ex),
+			Name:        util.CommandJobName(ex),
 			Namespace:   ex.Namespace,
 			Labels:      labels,
 			Annotations: annotations,
@@ -104,10 +104,6 @@ func CommandJob(store v1.Store, ex v1.StoreExec) *batchv1.Job {
 	}
 
 	return job
-}
-
-func CommandJobName(exec v1.StoreExec) string {
-	return exec.Name
 }
 
 func getJobSpec(store v1.Store, ex v1.StoreExec, labels map[string]string) batchv1.JobSpec {

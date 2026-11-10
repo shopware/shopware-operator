@@ -2,11 +2,9 @@ package ingress
 
 import (
 	"context"
-	"fmt"
 	"maps"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
-	"github.com/shopware/shopware-operator/internal/service"
 	"github.com/shopware/shopware-operator/internal/util"
 	appsv1 "k8s.io/api/apps/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -67,7 +65,7 @@ func StoreIngress(store v1.Store) *networkingv1.Ingress {
 							PathType: &pathType,
 							Backend: networkingv1.IngressBackend{
 								Service: &networkingv1.IngressServiceBackend{
-									Name: service.GetAdminServiceName(store),
+									Name: util.GetAdminServiceName(store),
 									Port: networkingv1.ServiceBackendPort{
 										Number: store.Spec.Network.Port,
 									},
@@ -79,7 +77,7 @@ func StoreIngress(store v1.Store) *networkingv1.Ingress {
 							PathType: &pathType,
 							Backend: networkingv1.IngressBackend{
 								Service: &networkingv1.IngressServiceBackend{
-									Name: service.GetAdminServiceName(store),
+									Name: util.GetAdminServiceName(store),
 									Port: networkingv1.ServiceBackendPort{
 										Number: store.Spec.Network.Port,
 									},
@@ -91,7 +89,7 @@ func StoreIngress(store v1.Store) *networkingv1.Ingress {
 							PathType: &pathType,
 							Backend: networkingv1.IngressBackend{
 								Service: &networkingv1.IngressServiceBackend{
-									Name: service.GetStorefrontServiceName(store),
+									Name: util.GetStorefrontServiceName(store),
 									Port: networkingv1.ServiceBackendPort{
 										Number: store.Spec.Network.Port,
 									},
@@ -103,7 +101,7 @@ func StoreIngress(store v1.Store) *networkingv1.Ingress {
 							PathType: &pathType,
 							Backend: networkingv1.IngressBackend{
 								Service: &networkingv1.IngressServiceBackend{
-									Name: service.GetStorefrontServiceName(store),
+									Name: util.GetStorefrontServiceName(store),
 									Port: networkingv1.ServiceBackendPort{
 										Number: store.Spec.Network.Port,
 									},
@@ -124,7 +122,7 @@ func StoreIngress(store v1.Store) *networkingv1.Ingress {
 	return &networkingv1.Ingress{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        GetStoreIngressName(store),
+			Name:        util.GetStoreIngressName(store),
 			Namespace:   store.GetNamespace(),
 			Annotations: annotations,
 			Labels:      labels,
@@ -137,15 +135,11 @@ func StoreIngress(store v1.Store) *networkingv1.Ingress {
 	}
 }
 
-func GetStoreIngressName(store v1.Store) string {
-	return fmt.Sprintf("store-%s", store.Name)
-}
-
 func DeleteStoreIngress(ctx context.Context, c client.Client, store v1.Store) error {
 	ingress := &networkingv1.Ingress{}
 	err := c.Get(ctx, types.NamespacedName{
 		Namespace: store.GetNamespace(),
-		Name:      GetStoreIngressName(store),
+		Name:      util.GetStoreIngressName(store),
 	}, ingress)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {

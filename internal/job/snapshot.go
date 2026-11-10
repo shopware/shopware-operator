@@ -40,7 +40,7 @@ func GetSnapshotCreateJob(
 }
 
 func SnapshotCreateJob(store v1.Store, snapshot v1.StoreSnapshotCreate) *batchv1.Job {
-	return snapshotJob(store, snapshot.ObjectMeta, snapshot.Spec, "create")
+	return snapshotJob(store, snapshot.ObjectMeta, snapshot.Spec, util.SnapshotSubCommandCreate)
 }
 
 func GetSnapshotRestoreJob(
@@ -61,7 +61,7 @@ func GetSnapshotRestoreJob(
 }
 
 func SnapshotRestoreJob(store v1.Store, snapshot v1.StoreSnapshotRestore) *batchv1.Job {
-	return snapshotJob(store, snapshot.ObjectMeta, snapshot.Spec, "restore")
+	return snapshotJob(store, snapshot.ObjectMeta, snapshot.Spec, util.SnapshotSubCommandRestore)
 }
 
 func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapshotSpec, subCommand string) *batchv1.Job {
@@ -156,7 +156,7 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 			APIVersion: "batch/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        SnapshotJobName(meta, subCommand),
+			Name:        util.SnapshotJobName(meta, subCommand),
 			Namespace:   meta.Namespace,
 			Labels:      labels,
 			Annotations: annotations,
