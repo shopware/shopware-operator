@@ -103,8 +103,7 @@ func main() {
 						exitOnFatalSnapshotError(logger, err)
 						os.Exit(14)
 					}
-					//nolint: errcheck
-					defer os.RemoveAll(snapshotDir)
+					defer cleanupSnapshotTempDir(logger, snapshotDir)
 
 					var tempMeta any
 					err = json.Unmarshal([]byte(cfg.MetaStoreJson), &tempMeta)
@@ -174,8 +173,7 @@ func main() {
 						exitOnFatalSnapshotError(logger, err)
 						os.Exit(14)
 					}
-					//nolint: errcheck
-					defer os.RemoveAll(snapshotTempDir)
+					defer cleanupSnapshotTempDir(logger, snapshotTempDir)
 
 					var tempMeta any
 					if err := json.Unmarshal([]byte(cfg.MetaStoreJson), &tempMeta); err != nil {
@@ -229,6 +227,21 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error running command: %v\n", err)
 		exitOnFatalSnapshotError(logger, err)
 		os.Exit(1)
+	}
+}
+
+func cleanupSnapshotTempDir(logger *zap.SugaredLogger, dir string) {
+	// The Job's ephemeral PVC is deleted with the pod. Recursively removing
+	// hundreds of thousands of objects delays process exit, so the CR stays
+	// running and Argo never sees status.state == succeeded.
+	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+		logger.Infow("Skipping snapshot temp dir cleanup; volume is torn down with the pod",
+			zap.String("dir", dir),
+		)
+		return
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		logger.Warnw("failed to clean snapshot temp dir", zap.String("dir", dir), zap.Error(err))
 	}
 }
 
