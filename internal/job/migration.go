@@ -49,8 +49,8 @@ func MigrationJob(store v1.Store) *batchv1.Job {
 	labels[util.ShopwareKey("store.type")] = "migration"
 
 	annotations := util.GetDefaultContainerAnnotations(CONTAINER_NAME_MIGRATION_JOB, store, store.Spec.MigrationJobContainer.Annotations)
-	annotations["shop.shopware.com/store.oldImage"] = store.Status.CurrentImageTag
-	annotations["shop.shopware.com/store.newImage"] = containerSpec.Image
+	annotations[util.OldImageAnnotation] = store.Status.CurrentImageTag
+	annotations[util.NewImageAnnotation] = containerSpec.Image
 
 	// Merge containerSpec.ExtraEnvs to override with merged values from MigrationJobContainer
 	envs := util.MergeEnv(store.GetEnv(), containerSpec.ExtraEnvs)

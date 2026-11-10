@@ -28,3 +28,22 @@ func TestStoreCRDUsesCompactContainerOverrideSchemas(t *testing.T) {
 
 	assert.Equal(t, 5, bytes.Count(crd, []byte("x-kubernetes-preserve-unknown-fields: true")))
 }
+
+func TestStoreCRDContainsSecretRefValidations(t *testing.T) {
+	t.Parallel()
+
+	crd, err := os.ReadFile("../../config/crd/bases/shop.shopware.com_stores.yaml")
+	require.NoError(t, err)
+
+	for _, expected := range []string{
+		"rule: (has(self.host) && size(self.host) > 0) || has(self.hostRef)",
+		"message: either database host or hostRef must be set",
+		"rule: '!self.enabled || has(self.passwordSecretRef)'",
+		"rule: (has(self.username) && size(self.username) > 0) || has(self.usernameSecretRef)",
+		"message: admin username or usernameSecretRef is required",
+		"rule: '!has(self.serviceRef) || has(self.tokenRef)'",
+		"message: fastly tokenRef is required when serviceRef is set",
+	} {
+		assert.Contains(t, string(crd), expected)
+	}
+}

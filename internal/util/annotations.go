@@ -9,13 +9,20 @@ import (
 	v1 "github.com/shopware/shopware-operator/api/v1"
 )
 
+const (
+	DefaultContainerAnnotation     = "kubectl.kubernetes.io/default-container"
+	DefaultLogsContainerAnnotation = "kubectl.kubernetes.io/default-logs-container"
+	LastConfigHashAnnotation       = "shop.shopware.com/last-config-hash"
+	StoreSecretHashAnnotation      = "shop.shopware.com/store-secret-hash"
+	OldImageAnnotation             = "shop.shopware.com/store.oldImage"
+	NewImageAnnotation             = "shop.shopware.com/store.newImage"
+)
+
 func GetDefaultContainerAnnotations(defaultContainer string, store v1.Store, overwrite map[string]string) map[string]string {
 	annotations := make(map[string]string)
-	if store.Spec.Container.Annotations != nil {
-		annotations = store.Spec.Container.Annotations
-	}
-	annotations["kubectl.kubernetes.io/default-container"] = defaultContainer
-	annotations["kubectl.kubernetes.io/default-logs-container"] = defaultContainer
+	maps.Copy(annotations, store.Spec.Container.Annotations)
+	annotations[DefaultContainerAnnotation] = defaultContainer
+	annotations[DefaultLogsContainerAnnotation] = defaultContainer
 	if overwrite != nil {
 		maps.Copy(annotations, overwrite)
 	}
@@ -24,21 +31,18 @@ func GetDefaultContainerAnnotations(defaultContainer string, store v1.Store, ove
 
 func GetDefaultContainerExecAnnotations(defaultContainer string, ex v1.StoreExec) map[string]string {
 	annotations := make(map[string]string)
-	if ex.Spec.Container.Annotations != nil {
-		annotations = ex.Spec.Container.Annotations
-	}
-	annotations["kubectl.kubernetes.io/default-container"] = defaultContainer
-	annotations["kubectl.kubernetes.io/default-logs-container"] = defaultContainer
+	maps.Copy(annotations, ex.Spec.Container.Annotations)
+	annotations[DefaultContainerAnnotation] = defaultContainer
+	annotations[DefaultLogsContainerAnnotation] = defaultContainer
 	return annotations
 }
 
 func GetDefaultContainerSnapshotAnnotations(defaultContainer string, sn v1.StoreSnapshotSpec, namespace string) map[string]string {
 	annotations := make(map[string]string)
-	if sn.Container.Annotations != nil {
-		maps.Copy(annotations, sn.Container.Annotations)
-	}
-	annotations["kubectl.kubernetes.io/default-container"] = defaultContainer
-	annotations["kubectl.kubernetes.io/default-logs-container"] = defaultContainer
+	maps.Copy(annotations, sn.Container.Annotations)
+	annotations[DefaultContainerAnnotation] = defaultContainer
+	annotations[DefaultLogsContainerAnnotation] = defaultContainer
+
 	key := fmt.Sprintf("ad.datadoghq.com/%s.logs", defaultContainer)
 	if raw, ok := annotations[key]; ok {
 		annotations[key] = appendDatadogLogNamespace(raw, namespace)
