@@ -81,7 +81,7 @@ func main() {
 			&cli.StringFlag{
 				Name:        "temp-size",
 				Value:       tempSize,
-				Usage:       "Allocated temp volume size compared against listed S3 object size (Kubernetes quantity, default 100Gi)",
+				Usage:       "Allocated temp volume size compared against listed S3 object size (K8s format, default 100Gi)",
 				Destination: &tempSize,
 			},
 			&cli.StringSliceFlag{
