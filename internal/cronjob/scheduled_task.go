@@ -2,7 +2,6 @@ package cronjob
 
 import (
 	"context"
-	"fmt"
 	"maps"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
@@ -79,7 +78,7 @@ func ScheduledTaskJob(store v1.Store) *batchv1.CronJob {
 			APIVersion: "batch/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        GetScheduledCronJobName(store),
+			Name:        util.GetScheduledCronJobName(store),
 			Namespace:   store.Namespace,
 			Labels:      labels,
 			Annotations: annotations,
@@ -91,7 +90,7 @@ func ScheduledTaskJob(store v1.Store) *batchv1.CronJob {
 			Suspend:           &store.Spec.ScheduledTask.Suspend,
 			JobTemplate: batchv1.JobTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:        GetScheduledCronJobName(store),
+					Name:        util.GetScheduledCronJobName(store),
 					Namespace:   store.Namespace,
 					Labels:      labels,
 					Annotations: annotations,
@@ -125,8 +124,4 @@ func ScheduledTaskJob(store v1.Store) *batchv1.CronJob {
 	}
 
 	return job
-}
-
-func GetScheduledCronJobName(store v1.Store) string {
-	return fmt.Sprintf("%s-scheduled-jobs", store.Name)
 }

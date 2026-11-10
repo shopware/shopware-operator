@@ -2,7 +2,6 @@ package job
 
 import (
 	"context"
-	"fmt"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/secret/keys"
@@ -90,7 +89,7 @@ func SetupJob(store v1.Store) *batchv1.Job {
 			APIVersion: "batch/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        GetSetupJobName(store),
+			Name:        util.GetSetupJobName(store),
 			Namespace:   store.Namespace,
 			Labels:      labels,
 			Annotations: annotations,
@@ -130,10 +129,6 @@ func SetupJob(store v1.Store) *batchv1.Job {
 	}
 
 	return job
-}
-
-func GetSetupJobName(store v1.Store) string {
-	return fmt.Sprintf("%s-setup", store.Name)
 }
 
 func DeleteSetupJob(ctx context.Context, c client.Client, store v1.Store) error {
