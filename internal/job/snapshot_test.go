@@ -48,8 +48,10 @@ func TestSnapshotCreateJobLabelHyphenUnderscoreSources(t *testing.T) {
 	}
 
 	result := job.SnapshotCreateJob(store, snapshot)
-	assert.Equal(t, "4537857a-b727-489b-aac0-5348e179597d", result.Spec.Template.Labels["application-id"])
-	assert.Empty(t, result.Spec.Template.Labels["application_id"])
+	assert.Equal(t, "4537857a-b727-489b-aac0-5348e179597d", result.Spec.Template.Labels["application_id"])
+	assert.Empty(t, result.Spec.Template.Labels["application-id"])
+	assert.Equal(t, "dbs-v5", result.Spec.Template.Labels["application_name"])
+	assert.Equal(t, "shopsnapshot-create", result.Spec.Template.Labels["tags.datadoghq.com/service"])
 	assert.Contains(t, result.Spec.Template.Spec.Containers[0].Args, "application_id=4537857a-b727-489b-aac0-5348e179597d")
 	assert.Contains(t, result.Spec.Template.Spec.Containers[0].Args, "application_name=dbs-v5")
 	assert.NotContains(t, result.Spec.Template.Spec.Containers[0].Args, "namespace=dbs-v5-67091e48-6ddb-4cc3-9b29-fc9f4d782f37")

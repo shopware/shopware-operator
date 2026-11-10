@@ -20,6 +20,22 @@ func NormalizeSnapshotLabelKey(key string) string {
 	return strings.ReplaceAll(key, "-", "_")
 }
 
+// SnapshotLabelPairs copies labels with Datadog-style keys and drops empty values
+// so a CR's application-id does not also appear as application_id.
+func SnapshotLabelPairs(labels map[string]string) map[string]string {
+	if len(labels) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(labels))
+	for key, value := range labels {
+		if value == "" {
+			continue
+		}
+		out[NormalizeSnapshotLabelKey(key)] = value
+	}
+	return out
+}
+
 func GetStoreLabel(store v1.Store) map[string]string {
 	return map[string]string{
 		ShopwareKey("store.name"): store.Name,
@@ -49,7 +65,7 @@ func GetDefaultStoreExecLabels(store v1.Store, extra map[string]string, name, ex
 }
 
 func GetDefaultStoreSnapshotLabels(store v1.Store, overwrite map[string]string, name, subCommand string) map[string]string {
-	labels := overrideStoreLabels(store, overwrite)
+	labels := overrideStoreLabels(store, SnapshotLabelPairs(overwrite))
 	labels[ShopwareKey("storesnapshot.name")] = name
 	labels[ShopwareKey("storesnapshot.type")] = subCommand
 	return labels

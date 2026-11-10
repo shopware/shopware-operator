@@ -111,16 +111,15 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 	}
 	// Add labels from meta
 	// We sort the labels to ensure consistent ordering, so we don't trigger unnecessary job restarts due to label order changes
-	if meta.Labels != nil {
-		labelKeys := make([]string, 0, len(meta.Labels))
-		for key := range meta.Labels {
+	if snapshotLabels := util.SnapshotLabelPairs(meta.Labels); len(snapshotLabels) > 0 {
+		labelKeys := make([]string, 0, len(snapshotLabels))
+		for key := range snapshotLabels {
 			labelKeys = append(labelKeys, key)
 		}
 		sort.Strings(labelKeys)
 
 		for _, key := range labelKeys {
-			value := meta.Labels[key]
-			args = append(args, "--label", fmt.Sprintf("%s=%s", util.NormalizeSnapshotLabelKey(key), value))
+			args = append(args, "--label", fmt.Sprintf("%s=%s", key, snapshotLabels[key]))
 		}
 	}
 

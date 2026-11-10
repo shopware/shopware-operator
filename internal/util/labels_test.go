@@ -17,6 +17,22 @@ func TestNormalizeSnapshotLabelKey(t *testing.T) {
 	require.Equal(t, "tags.datadoghq.com/service", util.NormalizeSnapshotLabelKey("tags.datadoghq.com/service"))
 }
 
+func TestSnapshotLabelPairs_NormalizesAndDropsEmpty(t *testing.T) {
+	got := util.SnapshotLabelPairs(map[string]string{
+		"application-id":             "abc",
+		"application_id":             "abc",
+		"application-name":           "dbs-v5",
+		"tags.datadoghq.com/service": "shopsnapshot-create",
+		"empty":                      "",
+	})
+	require.Equal(t, map[string]string{
+		"application_id":             "abc",
+		"application_name":           "dbs-v5",
+		"tags.datadoghq.com/service": "shopsnapshot-create",
+	}, got)
+	require.Nil(t, util.SnapshotLabelPairs(nil))
+}
+
 func TestLabelMerge(t *testing.T) {
 	store := v1.Store{
 		ObjectMeta: metav1.ObjectMeta{

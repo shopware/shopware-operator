@@ -120,13 +120,6 @@ func main() {
 					}
 
 					snapshotService := snapshot.NewSnapshotService(cfg, nil)
-					logger.Infow("Starting snapshot create process",
-						zap.String("backupFile", backupFile),
-						zap.String("temp", snapshotDir),
-						zap.Bool("includeDB", includeDB),
-						zap.Bool("includeS3", includeS3),
-						zap.Strings("labels", labels),
-					)
 
 					parsedLabels := make(map[string]string)
 					for _, label := range labels {
@@ -135,8 +128,19 @@ func main() {
 							logger.Warnw("Invalid label format, skipping", zap.String("label", label))
 							continue
 						}
+						if parts[1] == "" {
+							continue
+						}
 						parsedLabels[util.NormalizeSnapshotLabelKey(parts[0])] = parts[1]
 					}
+
+					logger.Infow("Starting snapshot create process",
+						zap.String("backupFile", backupFile),
+						zap.String("temp", snapshotDir),
+						zap.Bool("includeDB", includeDB),
+						zap.Bool("includeS3", includeS3),
+						zap.Any("labels", parsedLabels),
+					)
 
 					tempSizeBytes, err := parseTempSize(tempSize)
 					if err != nil {
