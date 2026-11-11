@@ -2,6 +2,7 @@ package base
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
@@ -16,6 +17,7 @@ import (
 	"github.com/shopware/shopware-operator/internal/secret"
 	"github.com/shopware/shopware-operator/internal/service"
 	"github.com/shopware/shopware-operator/internal/tracing"
+	"github.com/shopware/shopware-operator/internal/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
@@ -28,14 +30,24 @@ func (b *Base) EnsureAppSecrets(ctx context.Context, store *v1.Store) (err error
 	ctx, span := tracing.Start(ctx, "Base.EnsureAppSecrets", tracing.AttrState.String(string(store.Status.State)))
 	defer tracing.End(span, &err)
 
-	storeSecret, err := secret.EnsureStoreSecret(ctx, b.Client, b.Recorder, store)
+	storeSecret, err := secret.EnsureStoreSecret(ctx, b.Client, store)
 	if err != nil {
+		var eventErr *secret.EventError
+		if errors.As(err, &eventErr) && b.Recorder != nil {
+			b.Recorder.Event(store, eventErr.EventType, eventErr.Reason, eventErr.Message)
+		}
 		return tracing.Sensitive(fmt.Errorf("app secrets: %w", err))
 	}
 
 	if err := k8s.EnsureObjectWithHash(ctx, b.Client, nil, storeSecret, b.Scheme); err != nil {
 		return tracing.Sensitive(fmt.Errorf("ensure store secret: %w", err))
 	}
+
+	hash, err := k8s.SecretHash(storeSecret)
+	if err != nil {
+		return fmt.Errorf("hash store secret: %w", err)
+	}
+	store.Status.SecretHash = hash
 
 	return nil
 }
@@ -78,7 +90,7 @@ func (b *Base) ReconcileIngress(ctx context.Context, store *v1.Store) (err error
 		if err := ingress.DeleteStoreIngress(ctx, b.Client, *store); err != nil {
 			return fmt.Errorf("delete ingress: %w", err)
 		}
-		tracing.RecordObjectDisabled(ctx, "Ingress", ingress.GetStoreIngressName(*store), "spec.network.enabledIngress is false")
+		tracing.RecordObjectDisabled(ctx, "Ingress", util.GetStoreIngressName(*store), "spec.network.enabledIngress is false")
 		return nil
 	}
 
@@ -110,7 +122,7 @@ func (b *Base) ReconcileHTTPRoute(ctx context.Context, store *v1.Store) (err err
 		if err := httproute.DeleteStoreHTTPRoute(ctx, b.Client, *store); err != nil {
 			return fmt.Errorf("delete httproute: %w", err)
 		}
-		tracing.RecordObjectDisabled(ctx, "HTTPRoute", httproute.GetStoreHTTPRouteName(*store), "spec.network.enabledGateway is false")
+		tracing.RecordObjectDisabled(ctx, "HTTPRoute", util.GetStoreHTTPRouteName(*store), "spec.network.enabledGateway is false")
 		return nil
 	}
 
@@ -188,6 +200,7 @@ func (b *Base) ReconcileDeployment(ctx context.Context, store *v1.Store) (err er
 	objs = append(objs, workers...)
 
 	for _, obj := range objs {
+		k8s.SetSecretHash(obj, store.Status.SecretHash)
 		if changed, err = k8s.HasObjectChanged(ctx, b.Client, obj); err != nil {
 			return fmt.Errorf("reconcile unready deployment: %w", err)
 		}

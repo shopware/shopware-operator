@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/shopware/shopware-operator/internal/secret/keys"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
@@ -60,6 +61,7 @@ const (
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:validation:XValidation:rule="size(self.metadata.name) <= 63",message="metadata.name must be at most 63 characters"
 // +kubebuilder:resource:scope=Namespaced
 // +kubebuilder:resource:shortName=store-snap-create
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
@@ -131,7 +133,7 @@ func (s StoreSnapshotSpec) GetEnv(store Store) []corev1.EnvVar {
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: store.Spec.SecretName,
 					},
-					Key: "database-host",
+					Key: keys.DatabaseHost,
 				},
 			},
 		},
@@ -142,7 +144,7 @@ func (s StoreSnapshotSpec) GetEnv(store Store) []corev1.EnvVar {
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: store.Spec.SecretName,
 					},
-					Key: "database-password",
+					Key: keys.DatabasePassword,
 				},
 			},
 		},
@@ -153,7 +155,7 @@ func (s StoreSnapshotSpec) GetEnv(store Store) []corev1.EnvVar {
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: store.Spec.SecretName,
 					},
-					Key: "database-user",
+					Key: keys.DatabaseUser,
 				},
 			},
 		},

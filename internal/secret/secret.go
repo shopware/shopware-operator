@@ -15,10 +15,10 @@ import (
 
 	"github.com/pkg/errors"
 	v1 "github.com/shopware/shopware-operator/api/v1"
+	"github.com/shopware/shopware-operator/internal/secret/keys"
 	"github.com/shopware/shopware-operator/internal/util"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -30,92 +30,33 @@ const (
 	rsaKeySize = 2024
 )
 
-type EventRecorder interface {
-	Event(object runtime.Object, eventType, reason, message string)
+type referencedValues struct {
+	OpensearchPassword []byte
+	FastlyServiceID    []byte
+	FastlyToken        []byte
+	AdminUsername      []byte
+	AdminPassword      []byte
+	TidewaysAPIKey     []byte
+	S3AccessKeyID      []byte
+	S3SecretAccessKey  []byte
 }
 
-func EnsureStoreSecret(ctx context.Context, r client.Client, recorder EventRecorder, store *v1.Store) (*corev1.Secret, error) {
-	if err := validateStoreSecret(store); err != nil {
+type referencedSecret struct {
+	ref    v1.SecretRef
+	label  string
+	target *[]byte
+}
+
+func EnsureStoreSecret(ctx context.Context, r client.Client, store *v1.Store) (*corev1.Secret, error) {
+	values, err := readReferencedValues(ctx, r, store)
+	if err != nil {
 		return nil, err
-	}
-
-	var opensearchPassword []byte
-	if store.Spec.OpensearchSpec.Enabled {
-		es := new(corev1.Secret)
-		if err := r.Get(ctx, types.NamespacedName{
-			Namespace: store.Namespace,
-			Name:      store.Spec.OpensearchSpec.PasswordSecretRef.Name,
-		}, es); err != nil {
-			if k8serrors.IsNotFound(err) {
-				recorder.Event(store, "Warning", "Opensearch secret not found",
-					fmt.Sprintf("Missing opensearch secret for Store %s in namespace %s",
-						store.Name,
-						store.Namespace))
-				return nil, fmt.Errorf("can't find opensearch secret: %w", err)
-			}
-			return nil, fmt.Errorf("can't read opensearch secret: %w", err)
-		}
-		opensearchPassword = es.Data[store.Spec.OpensearchSpec.PasswordSecretRef.Key]
-	}
-
-	var (
-		adminPassword []byte
-		err           error
-	)
-	if store.Spec.AdminCredentials.PasswordSecretRef.Name != "" {
-		adminPassword, err = getSecretValue(ctx, r, store, store.Spec.AdminCredentials.PasswordSecretRef, "Admin credentials")
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	var fastlyToken []byte
-	if store.Spec.ShopConfiguration.Fastly.TokenRef.Name != "" && store.Spec.ShopConfiguration.Fastly.TokenRef.Key != "" {
-		fastlyTokenSecret := new(corev1.Secret)
-		if err := r.Get(ctx, types.NamespacedName{
-			Namespace: store.Namespace,
-			Name:      store.Spec.ShopConfiguration.Fastly.TokenRef.Name,
-		}, fastlyTokenSecret); err != nil {
-			if k8serrors.IsNotFound(err) {
-				recorder.Event(store, "Warning", "Fastly secret not found",
-					fmt.Sprintf("Missing Fastly secret for Store %s in namespace %s",
-						store.Name,
-						store.Namespace))
-				return nil, fmt.Errorf("can't find Fastly secret: %w", err)
-			}
-			return nil, fmt.Errorf("can't read Fastly secret: %w", err)
-		}
-		fastlyToken = fastlyTokenSecret.Data[store.Spec.ShopConfiguration.Fastly.TokenRef.Key]
-	}
-
-	var fastlyServiceID []byte
-	if store.Spec.ShopConfiguration.Fastly.ServiceRef.Name != "" && store.Spec.ShopConfiguration.Fastly.ServiceRef.Key != "" {
-		fastlyServiceIDSecret := new(corev1.Secret)
-		if err := r.Get(ctx, types.NamespacedName{
-			Namespace: store.Namespace,
-			Name:      store.Spec.ShopConfiguration.Fastly.ServiceRef.Name,
-		}, fastlyServiceIDSecret); err != nil {
-			if k8serrors.IsNotFound(err) {
-				recorder.Event(store, "Warning", "Fastly secret not found",
-					fmt.Sprintf("Missing Fastly secret for Store %s in namespace %s",
-						store.Name,
-						store.Namespace))
-				return nil, fmt.Errorf("can't find Fastly secret: %w", err)
-			}
-			return nil, fmt.Errorf("can't read Fastly secret: %w", err)
-		}
-		fastlyServiceID = fastlyServiceIDSecret.Data[store.Spec.ShopConfiguration.Fastly.ServiceRef.Key]
 	}
 
 	dbSpec, err := util.GetDBSpec(ctx, *store, r)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			recorder.Event(store, "Warning", "DB secret not found",
-				fmt.Sprintf("Missing database secret for Store %s in namespace %s: %s",
-					store.Name,
-					store.Namespace,
-					err.Error()))
-			return nil, fmt.Errorf("can't find database secret: %w", err)
+			return nil, newDatabaseSecretNotFoundError(store, err)
 		}
 		return nil, fmt.Errorf("can't read database secret: %w", err)
 	}
@@ -130,7 +71,7 @@ func EnsureStoreSecret(ctx context.Context, r client.Client, recorder EventRecor
 		return nil, fmt.Errorf("get store secret: %w", err)
 	}
 
-	if err = GenerateStoreSecret(ctx, store, storeSecret, dbSpec, opensearchPassword, fastlyServiceID, fastlyToken, adminPassword); err != nil {
+	if err = generateStoreSecret(store, storeSecret, dbSpec, values); err != nil {
 		return nil, fmt.Errorf("fill store secret: %w", err)
 	}
 	storeSecret.Name = store.GetSecretName()
@@ -139,99 +80,120 @@ func EnsureStoreSecret(ctx context.Context, r client.Client, recorder EventRecor
 	return storeSecret, nil
 }
 
-func validateStoreSecret(store *v1.Store) error {
-	if store.Spec.Database.Host == "" && store.Spec.Database.HostRef.Name == "" {
-		return fmt.Errorf("database host is empty for store %s. Either set host or a hostRef", store.Name)
+func readReferencedValues(ctx context.Context, r client.Client, store *v1.Store) (referencedValues, error) {
+	var values referencedValues
+	spec := store.Spec
+
+	refs := []referencedSecret{
+		{ref: spec.AdminCredentials.UsernameSecretRef, label: "Admin credentials", target: &values.AdminUsername},
+		{ref: spec.AdminCredentials.PasswordSecretRef, label: "Admin credentials", target: &values.AdminPassword},
+		{ref: spec.S3Storage.AccessKeyRef, label: "S3 access key", target: &values.S3AccessKeyID},
+		{ref: spec.S3Storage.SecretAccessKeyRef, label: "S3 secret access key", target: &values.S3SecretAccessKey},
+	}
+	if spec.Tideways.Enabled {
+		refs = append(refs, referencedSecret{ref: spec.Tideways.APIKeyRef, label: "Tideways", target: &values.TidewaysAPIKey})
+	}
+	if spec.OpensearchSpec.Enabled {
+		refs = append(refs, referencedSecret{ref: spec.OpensearchSpec.PasswordSecretRef, label: "Opensearch", target: &values.OpensearchPassword})
+	}
+	if spec.ShopConfiguration.Fastly.TokenRef.IsSet() && spec.ShopConfiguration.Fastly.ServiceRef.IsSet() {
+		refs = append(refs,
+			referencedSecret{ref: spec.ShopConfiguration.Fastly.TokenRef, label: "Fastly", target: &values.FastlyToken},
+			referencedSecret{ref: spec.ShopConfiguration.Fastly.ServiceRef, label: "Fastly", target: &values.FastlyServiceID},
+		)
 	}
 
-	if store.Spec.OpensearchSpec.Enabled && (store.Spec.OpensearchSpec.PasswordSecretRef.Name == "" || store.Spec.OpensearchSpec.PasswordSecretRef.Key == "") {
-		return fmt.Errorf("opensearch is enabled but passwordSecretRef key or name is empty for store %s", store.Name)
+	for _, ref := range refs {
+		if !ref.ref.IsSet() {
+			continue
+		}
+		value, err := getSecretValue(ctx, r, store, ref.ref, ref.label)
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				return values, newReferencedSecretNotFoundError(store, ref.label, err)
+			}
+			return values, err
+		}
+		*ref.target = value
 	}
 
-	if invalidSecretRef(store.Spec.AdminCredentials.UsernameSecretRef) {
-		return fmt.Errorf("admin usernameSecretRef key or name is empty for store %s", store.Name)
-	}
-	if store.Spec.AdminCredentials.Username == "" && !secretRefComplete(store.Spec.AdminCredentials.UsernameSecretRef) {
-		return fmt.Errorf("admin username or a complete usernameSecretRef is required for store %s", store.Name)
-	}
-	if invalidSecretRef(store.Spec.AdminCredentials.PasswordSecretRef) {
-		return fmt.Errorf("admin passwordSecretRef key or name is empty for store %s", store.Name)
-	}
-
-	// Validate Fastly configuration: if ServiceRef is provided, TokenRef must also be provided.
-	if secretRefProvided(store.Spec.ShopConfiguration.Fastly.ServiceRef) &&
-		!secretRefComplete(store.Spec.ShopConfiguration.Fastly.TokenRef) {
-		return fmt.Errorf("fastly apiTokenSecretRef key or name is empty for store %s. Unset the fastlyServiceID or provide a secret", store.Name)
-	}
-
-	return nil
+	return values, nil
 }
 
-func invalidSecretRef(ref v1.SecretRef) bool {
-	return secretRefProvided(ref) && !secretRefComplete(ref)
+func setOrDelete(data map[string][]byte, key string, value []byte) {
+	if len(value) == 0 {
+		delete(data, key)
+		return
+	}
+	data[key] = value
 }
 
-func secretRefProvided(ref v1.SecretRef) bool {
-	return ref.Name != "" || ref.Key != ""
-}
-
-func secretRefComplete(ref v1.SecretRef) bool {
-	return ref.Name != "" && ref.Key != ""
-}
-
-func GenerateStoreSecret(ctx context.Context, store *v1.Store, secret *corev1.Secret, dbSpec *util.DatabaseSpec, opensearchPassword []byte, fastlyServiceID []byte, fastlyToken []byte, adminPassword []byte) error {
+func generateStoreSecret(store *v1.Store, secret *corev1.Secret, dbSpec *util.DatabaseSpec, values referencedValues) error {
 	if secret.Data == nil {
 		secret.Data = make(map[string][]byte)
 	}
 
-	if _, ok := secret.Data["app-secret"]; !ok {
+	if _, ok := secret.Data[keys.AppSecret]; !ok {
 		pass, err := generatePass(128)
 		if err != nil {
 			return fmt.Errorf("generate app secret: %w", err)
 		}
-		secret.Data["app-secret"] = pass
+		secret.Data[keys.AppSecret] = pass
 	}
 
-	if secretRefComplete(store.Spec.AdminCredentials.PasswordSecretRef) {
-		secret.Data["admin-password"] = adminPassword
-	} else if _, ok := secret.Data["admin-password"]; !ok {
+	if store.Spec.AdminCredentials.PasswordSecretRef.IsSet() {
+		secret.Data[keys.AdminPassword] = values.AdminPassword
+	} else if _, ok := secret.Data[keys.AdminPassword]; !ok {
 		if store.Spec.AdminCredentials.Password != "" {
-			secret.Data["admin-password"] = []byte(store.Spec.AdminCredentials.Password)
+			secret.Data[keys.AdminPassword] = []byte(store.Spec.AdminCredentials.Password)
 		} else {
 			admin, err := generatePass(20)
 			if err != nil {
 				return fmt.Errorf("generate admin secret: %w", err)
 			}
-			secret.Data["admin-password"] = admin
+			secret.Data[keys.AdminPassword] = admin
 		}
 	}
 
-	if _, ok := secret.Data["jwt-private-key"]; !ok {
+	if store.Spec.AdminCredentials.UsernameSecretRef.IsSet() {
+		secret.Data[keys.AdminUsername] = values.AdminUsername
+	} else {
+		setOrDelete(secret.Data, keys.AdminUsername, []byte(store.Spec.AdminCredentials.Username))
+	}
+
+	if _, ok := secret.Data[keys.JWTPrivateKey]; !ok {
 		privateKey, publicKey, err := generatePrivatePublicKey(rsaKeySize)
 		if err != nil {
 			return fmt.Errorf("create jwt keys: %w", err)
 		}
-		secret.Data["jwt-private-key"] = []byte(base64.StdEncoding.EncodeToString(privateKey))
-		secret.Data["jwt-public-key"] = []byte(base64.StdEncoding.EncodeToString(publicKey))
+		secret.Data[keys.JWTPrivateKey] = []byte(base64.StdEncoding.EncodeToString(privateKey))
+		secret.Data[keys.JWTPublicKey] = []byte(base64.StdEncoding.EncodeToString(publicKey))
 	}
 
 	// Used for snapshot controller
-	secret.Data["database-password"] = []byte(url.QueryEscape(string(dbSpec.Password)))
-	secret.Data["database-user"] = []byte(dbSpec.User)
-	secret.Data["database-host"] = []byte(dbSpec.Host)
+	secret.Data[keys.DatabasePassword] = []byte(url.QueryEscape(string(dbSpec.Password)))
+	secret.Data[keys.DatabaseUser] = []byte(dbSpec.User)
+	secret.Data[keys.DatabaseHost] = []byte(dbSpec.Host)
 
-	secret.Data["database-url"] = util.GenerateDatabaseURLForShopware(dbSpec)
+	secret.Data[keys.DatabaseURL] = util.GenerateDatabaseURLForShopware(dbSpec)
 
 	if store.Spec.OpensearchSpec.Enabled {
-		secret.Data["opensearch-url"] = util.GenerateOpensearchURLForShopware(&store.Spec.OpensearchSpec, opensearchPassword)
+		secret.Data[keys.OpensearchURL] = util.GenerateOpensearchURLForShopware(&store.Spec.OpensearchSpec, values.OpensearchPassword)
 	} else {
-		delete(secret.Data, "opensearch-url")
+		delete(secret.Data, keys.OpensearchURL)
 	}
 
-	if len(fastlyServiceID) > 0 && len(fastlyToken) > 0 {
-		secret.Data["fastly-token"] = fastlyToken
-		secret.Data["fastly-service-id"] = fastlyServiceID
+	if len(values.FastlyServiceID) > 0 && len(values.FastlyToken) > 0 {
+		secret.Data[keys.FastlyToken] = values.FastlyToken
+		secret.Data[keys.FastlyServiceID] = values.FastlyServiceID
+	} else {
+		delete(secret.Data, keys.FastlyToken)
+		delete(secret.Data, keys.FastlyServiceID)
 	}
+
+	setOrDelete(secret.Data, keys.TidewaysAPIKey, values.TidewaysAPIKey)
+	setOrDelete(secret.Data, keys.S3AccessKeyID, values.S3AccessKeyID)
+	setOrDelete(secret.Data, keys.S3SecretAccessKey, values.S3SecretAccessKey)
 
 	return nil
 }

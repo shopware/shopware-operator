@@ -86,12 +86,12 @@ func TestGetQueueWorkerDeploymentName(t *testing.T) {
 
 	t.Run("short queue keeps full name", func(t *testing.T) {
 		assert.Equal(t, "test-store-store-worker-low-priority-e718f68a",
-			deployment.GetQueueWorkerDeploymentName(store, "low_priority"))
+			util.GetQueueWorkerDeploymentName(store, "low_priority"))
 	})
 
 	t.Run("long queue is truncated to 63 chars with hash", func(t *testing.T) {
 		longQueue := strings.Repeat("very_long_queue_", 5)
-		name := deployment.GetQueueWorkerDeploymentName(store, longQueue)
+		name := util.GetQueueWorkerDeploymentName(store, longQueue)
 		assert.LessOrEqual(t, len(name), 63)
 		assert.True(t, strings.HasPrefix(name, "test-store-store-worker-very-long-queue-"))
 	})
@@ -99,10 +99,10 @@ func TestGetQueueWorkerDeploymentName(t *testing.T) {
 	t.Run("long queues stay unique and deterministic", func(t *testing.T) {
 		queueA := strings.Repeat("very_long_queue_", 5) + "a"
 		queueB := strings.Repeat("very_long_queue_", 5) + "b"
-		nameA := deployment.GetQueueWorkerDeploymentName(store, queueA)
-		nameB := deployment.GetQueueWorkerDeploymentName(store, queueB)
+		nameA := util.GetQueueWorkerDeploymentName(store, queueA)
+		nameB := util.GetQueueWorkerDeploymentName(store, queueB)
 		assert.NotEqual(t, nameA, nameB)
-		assert.Equal(t, nameA, deployment.GetQueueWorkerDeploymentName(store, queueA))
+		assert.Equal(t, nameA, util.GetQueueWorkerDeploymentName(store, queueA))
 	})
 }
 

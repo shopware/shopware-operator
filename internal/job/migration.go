@@ -2,8 +2,6 @@ package job
 
 import (
 	"context"
-	"crypto/md5"
-	"fmt"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/util"
@@ -45,12 +43,12 @@ func MigrationJob(store v1.Store) *batchv1.Job {
 	sharedProcessNamespace := true
 
 	labels := util.GetDefaultContainerStoreLabels(store, store.Spec.MigrationJobContainer.Labels)
-	labels[util.ShopwareKey("store.hash")] = GetMigrateHash(store)
+	labels[util.ShopwareKey("store.hash")] = util.GetMigrateHash(store)
 	labels[util.ShopwareKey("store.type")] = "migration"
 
 	annotations := util.GetDefaultContainerAnnotations(CONTAINER_NAME_MIGRATION_JOB, store, store.Spec.MigrationJobContainer.Annotations)
-	annotations["shop.shopware.com/store.oldImage"] = store.Status.CurrentImageTag
-	annotations["shop.shopware.com/store.newImage"] = containerSpec.Image
+	annotations[util.OldImageAnnotation] = store.Status.CurrentImageTag
+	annotations[util.NewImageAnnotation] = containerSpec.Image
 
 	// Merge containerSpec.ExtraEnvs to override with merged values from MigrationJobContainer
 	envs := util.MergeEnv(store.GetEnv(), containerSpec.ExtraEnvs)
@@ -73,7 +71,7 @@ func MigrationJob(store v1.Store) *batchv1.Job {
 			APIVersion: "batch/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        MigrateJobName(store),
+			Name:        util.MigrateJobName(store),
 			Namespace:   store.Namespace,
 			Labels:      labels,
 			Annotations: annotations,
@@ -113,15 +111,6 @@ func MigrationJob(store v1.Store) *batchv1.Job {
 	}
 
 	return job
-}
-
-func MigrateJobName(store v1.Store) string {
-	return fmt.Sprintf("%s-migrate-%s", store.Name, GetMigrateHash(store))
-}
-
-func GetMigrateHash(store v1.Store) string {
-	data := []byte(store.Status.CurrentImageTag)
-	return fmt.Sprintf("%x", md5.Sum(data))
 }
 
 func DeleteAllMigrationJobs(ctx context.Context, c client.Client, store *v1.Store) error {

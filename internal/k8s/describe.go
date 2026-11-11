@@ -3,6 +3,7 @@ package k8s
 import (
 	"fmt"
 
+	"github.com/shopware/shopware-operator/internal/util"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -18,8 +19,8 @@ func DescribeUpdate(oldObject, newObject client.Object) (string, []string) {
 			fmt.Sprintf("generation:%d->%d", oldObject.GetGeneration(), newObject.GetGeneration()),
 		}
 	}
-	oldHash := oldObject.GetAnnotations()[lastConfigHashAnnotation]
-	newHash := newObject.GetAnnotations()[lastConfigHashAnnotation]
+	oldHash := oldObject.GetAnnotations()[util.LastConfigHashAnnotation]
+	newHash := newObject.GetAnnotations()[util.LastConfigHashAnnotation]
 	if oldHash != newHash {
 		return "config hash annotation changed", []string{fmt.Sprintf("hash:%s->%s", oldHash, newHash)}
 	}

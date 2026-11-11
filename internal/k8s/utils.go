@@ -39,6 +39,7 @@ import (
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/tracing"
+	"github.com/shopware/shopware-operator/internal/util"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -56,8 +57,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
-
-const lastConfigHashAnnotation = "shopware.com/last-config-hash"
 
 var ignoredAnnotations = []string{"deployment.kubernetes.io/revision"}
 
@@ -503,7 +502,7 @@ func DetectObjectChange(
 	}
 
 	objAnnotations := obj.GetAnnotations()
-	delete(objAnnotations, lastConfigHashAnnotation)
+	delete(objAnnotations, util.LastConfigHashAnnotation)
 	obj.SetAnnotations(objAnnotations)
 
 	val := reflect.ValueOf(obj)
@@ -531,6 +530,10 @@ func DetectObjectChange(
 		return hashChanged, nil
 	}
 
+	if secretHashChanged(oldObject, obj) {
+		return ObjectChange{Reason: changeReasonSecretChanged}, nil
+	}
+
 	changedFields := ChangedMetaKeys(oldObject, obj)
 	if len(changedFields) == 0 {
 		return ObjectChange{}, nil
@@ -545,7 +548,7 @@ func ChangedMetaKeys(old, new metav1.Object) []string {
 
 func filteredAnnotations(obj metav1.Object) map[string]string {
 	annotations := maps.Clone(obj.GetAnnotations())
-	delete(annotations, lastConfigHashAnnotation)
+	delete(annotations, util.LastConfigHashAnnotation)
 	for _, key := range ignoredAnnotations {
 		delete(annotations, key)
 	}
@@ -558,7 +561,7 @@ func objectHashChanged(old, new client.Object) (ObjectChange, error) {
 		return ObjectChange{}, errors.Wrap(err, "calculate object hash")
 	}
 
-	oldHash, ok := old.GetAnnotations()[lastConfigHashAnnotation]
+	oldHash, ok := old.GetAnnotations()[util.LastConfigHashAnnotation]
 	if !ok {
 		return ObjectChange{Reason: changeReasonHashMissing}, nil
 	}
@@ -589,6 +592,46 @@ func objectKind(obj client.Object) string {
 		return kind
 	}
 	return reflect.Indirect(reflect.ValueOf(obj)).Type().Name()
+}
+
+func logObjectChange(
+	ctx context.Context,
+	oldObject client.Object,
+	obj client.Object,
+	hash string,
+	hashChanged bool,
+	secretChanged bool,
+	objectMetaChangedFields []string,
+) {
+	if secretChanged && !hashChanged {
+		logging.FromContext(ctx).Infow("Store secret hash has changed",
+			zap.String("kind", obj.GetObjectKind().GroupVersionKind().Kind),
+			zap.String("obj-name", obj.GetName()),
+			zap.String("old-secret-hash", secretHashOf(oldObject)),
+			zap.String("new-secret-hash", secretHashOf(obj)))
+	} else if hashChanged {
+		diff, err := ObjectDiff(oldObject, obj)
+		if err != nil {
+			diff = fmt.Sprintf("Error generating diff: %v", err)
+		}
+		logging.FromContext(ctx).Infow("Object last-config-hash has changed",
+			zap.String("kind", obj.GetObjectKind().GroupVersionKind().Kind),
+			zap.String("obj-name", obj.GetName()),
+			zap.String("old-hash", oldObject.GetAnnotations()[util.LastConfigHashAnnotation]),
+			zap.String("new-hash", hash),
+			zap.String("diff", diff))
+	} else {
+		logging.FromContext(ctx).Infow(
+			"Object meta has changed",
+			zap.String("kind", obj.GetObjectKind().GroupVersionKind().Kind),
+			zap.String("obj-name", obj.GetName()),
+			zap.Any("old-annotations", oldObject.GetAnnotations()),
+			zap.Any("new-annotations", obj.GetAnnotations()),
+			zap.Any("old-labels", oldObject.GetLabels()),
+			zap.Any("new-labels", obj.GetLabels()),
+			zap.Any("changed-fileds", objectMetaChangedFields),
+		)
+	}
 }
 
 func EnsureObjectWithHash(
@@ -646,13 +689,14 @@ func EnsureObjectWithHash(
 		keepIgnoredAnnotations(obj, oldObject)
 	}
 
-	hashChanged := oldObject.GetAnnotations()[lastConfigHashAnnotation] != hash
+	hashChanged := oldObject.GetAnnotations()[util.LastConfigHashAnnotation] != hash
+	secretChanged := secretHashChanged(oldObject, obj)
 	objectMetaChangedFields := ChangedMetaKeys(obj, oldObject)
 	if !hashChanged && len(objectMetaChangedFields) == 0 {
 		return nil
 	}
 
-	logObjectChange(ctx, obj, oldObject, hash, hashChanged, objectMetaChangedFields)
+	logObjectChange(ctx, oldObject, obj, hash, hashChanged, secretChanged, objectMetaChangedFields)
 
 	obj.SetResourceVersion(oldObject.GetResourceVersion())
 	if svc, isService := obj.(*corev1.Service); isService {
@@ -819,7 +863,7 @@ type configMapHashData struct {
 }
 
 func extractRelevantData(obj runtime.Object) interface{} {
-	switch object := obj.(type) {
+	switch object := withoutSecretHash(obj).(type) {
 	case *appsv1.StatefulSet:
 		return object.Spec
 	case *appsv1.Deployment:

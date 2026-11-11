@@ -80,6 +80,7 @@ func (r *StoreDebugInstanceReconciler) Reconcile(ctx context.Context, req ctrl.R
 	storeDebugInstance, err = k8s.GetStoreDebugInstance(ctx, r.Client, req.NamespacedName)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
+			log.Warnw("get CR store debug instance", zap.Error(err))
 			return rr, nil
 		}
 		log.Errorw("get CR store debug instance", zap.Error(err))

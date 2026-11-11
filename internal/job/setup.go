@@ -2,9 +2,9 @@ package job
 
 import (
 	"context"
-	"fmt"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
+	"github.com/shopware/shopware-operator/internal/secret/keys"
 	"github.com/shopware/shopware-operator/internal/util"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -43,20 +43,6 @@ func SetupJob(store v1.Store) *batchv1.Job {
 	// Use util function for annotations
 	annotations := util.GetDefaultContainerAnnotations(CONTAINER_NAME_SETUP_JOB, store, store.Spec.SetupJobContainer.Annotations)
 
-	adminUsername := corev1.EnvVar{
-		Name:  "INSTALL_ADMIN_USERNAME",
-		Value: store.Spec.AdminCredentials.Username,
-	}
-	if store.Spec.AdminCredentials.UsernameSecretRef.Name != "" {
-		adminUsername.Value = ""
-		adminUsername.ValueFrom = &corev1.EnvVarSource{
-			SecretKeyRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: store.Spec.AdminCredentials.UsernameSecretRef.Name},
-				Key:                  store.Spec.AdminCredentials.UsernameSecretRef.Key,
-			},
-		}
-	}
-
 	envs := append(store.GetEnv(),
 		corev1.EnvVar{
 			Name: "INSTALL_ADMIN_PASSWORD",
@@ -65,11 +51,21 @@ func SetupJob(store v1.Store) *batchv1.Job {
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: store.GetSecretName(),
 					},
-					Key: "admin-password",
+					Key: keys.AdminPassword,
 				},
 			},
 		},
-		adminUsername,
+		corev1.EnvVar{
+			Name: "INSTALL_ADMIN_USERNAME",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: store.GetSecretName(),
+					},
+					Key: keys.AdminUsername,
+				},
+			},
+		},
 	)
 
 	// Merge containerSpec.ExtraEnvs to override with merged values from SetupJobContainer
@@ -93,7 +89,7 @@ func SetupJob(store v1.Store) *batchv1.Job {
 			APIVersion: "batch/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        GetSetupJobName(store),
+			Name:        util.GetSetupJobName(store),
 			Namespace:   store.Namespace,
 			Labels:      labels,
 			Annotations: annotations,
@@ -133,10 +129,6 @@ func SetupJob(store v1.Store) *batchv1.Job {
 	}
 
 	return job
-}
-
-func GetSetupJobName(store v1.Store) string {
-	return fmt.Sprintf("%s-setup", store.Name)
 }
 
 func DeleteSetupJob(ctx context.Context, c client.Client, store v1.Store) error {

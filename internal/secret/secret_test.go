@@ -10,16 +10,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
-
-type mockEventRecorder struct {
-	events []string
-}
-
-func (m *mockEventRecorder) Event(object runtime.Object, eventType, reason, message string) {
-	m.events = append(m.events, eventType+":"+reason+":"+message)
-}
 
 func createTestStore() *v1.Store {
 	return &v1.Store{
@@ -73,9 +66,7 @@ func TestEnsureStoreSecret_Success(t *testing.T) {
 		WithObjects(store, dbSecret).
 		Build()
 
-	recorder := &mockEventRecorder{}
-
-	storeSecret, err := EnsureStoreSecret(ctx, fakeClient, recorder, store)
+	storeSecret, err := EnsureStoreSecret(ctx, fakeClient, store)
 	if err != nil {
 		t.Fatalf("EnsureStoreSecret failed: %v", err)
 	}
@@ -100,11 +91,6 @@ func TestEnsureStoreSecret_Success(t *testing.T) {
 			t.Errorf("Expected secret to contain key '%s'", key)
 		}
 	}
-
-	// Verify no events were recorded
-	if len(recorder.events) != 0 {
-		t.Errorf("Expected no events, got %d events: %v", len(recorder.events), recorder.events)
-	}
 }
 
 func TestEnsureStoreSecret_AdminCredentialsSecretRefs(t *testing.T) {
@@ -125,7 +111,7 @@ func TestEnsureStoreSecret_AdminCredentialsSecretRefs(t *testing.T) {
 	_ = corev1.AddToScheme(scheme)
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(store, dbSecret, adminSecret).Build()
 
-	storeSecret, err := EnsureStoreSecret(ctx, fakeClient, &mockEventRecorder{}, store)
+	storeSecret, err := EnsureStoreSecret(ctx, fakeClient, store)
 	if err != nil {
 		t.Fatalf("EnsureStoreSecret failed: %v", err)
 	}
@@ -154,7 +140,7 @@ func TestEnsureStoreSecret_AdminCredentialsPasswordSecretRefUpdatesExistingSecre
 	_ = corev1.AddToScheme(scheme)
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(store, dbSecret, adminSecret, storeSecret).Build()
 
-	result, err := EnsureStoreSecret(ctx, fakeClient, &mockEventRecorder{}, store)
+	result, err := EnsureStoreSecret(ctx, fakeClient, store)
 	if err != nil {
 		t.Fatalf("EnsureStoreSecret failed: %v", err)
 	}
@@ -198,9 +184,7 @@ func TestEnsureStoreSecret_WithOpensearch(t *testing.T) {
 		WithObjects(store, dbSecret, opensearchSecret).
 		Build()
 
-	recorder := &mockEventRecorder{}
-
-	storeSecret, err := EnsureStoreSecret(ctx, fakeClient, recorder, store)
+	storeSecret, err := EnsureStoreSecret(ctx, fakeClient, store)
 	if err != nil {
 		t.Fatalf("EnsureStoreSecret failed: %v", err)
 	}
@@ -212,11 +196,6 @@ func TestEnsureStoreSecret_WithOpensearch(t *testing.T) {
 	// Verify opensearch URL is present
 	if _, exists := storeSecret.Data["opensearch-url"]; !exists {
 		t.Error("Expected secret to contain 'opensearch-url'")
-	}
-
-	// Verify no events were recorded
-	if len(recorder.events) != 0 {
-		t.Errorf("Expected no events, got %d events: %v", len(recorder.events), recorder.events)
 	}
 }
 
@@ -259,9 +238,7 @@ func TestEnsureStoreSecret_WithFastly(t *testing.T) {
 		WithObjects(store, dbSecret, fastlySecret).
 		Build()
 
-	recorder := &mockEventRecorder{}
-
-	storeSecret, err := EnsureStoreSecret(ctx, fakeClient, recorder, store)
+	storeSecret, err := EnsureStoreSecret(ctx, fakeClient, store)
 	if err != nil {
 		t.Fatalf("EnsureStoreSecret failed: %v", err)
 	}
@@ -275,11 +252,6 @@ func TestEnsureStoreSecret_WithFastly(t *testing.T) {
 		t.Error("Expected secret to contain 'fastly-token'")
 	} else if string(fastlyToken) != "fastly-api-token" {
 		t.Errorf("Expected fastly token 'fastly-api-token', got '%s'", string(fastlyToken))
-	}
-
-	// Verify no events were recorded
-	if len(recorder.events) != 0 {
-		t.Errorf("Expected no events, got %d events: %v", len(recorder.events), recorder.events)
 	}
 }
 
@@ -296,26 +268,13 @@ func TestEnsureStoreSecret_MissingDatabaseSecret(t *testing.T) {
 		WithObjects(store).
 		Build()
 
-	recorder := &mockEventRecorder{}
-
-	storeSecret, err := EnsureStoreSecret(ctx, fakeClient, recorder, store)
+	storeSecret, err := EnsureStoreSecret(ctx, fakeClient, store)
 	if err == nil {
 		t.Fatal("Expected error when database secret is missing")
 	}
 
 	if storeSecret != nil {
 		t.Fatal("Expected storeSecret to be nil when database secret is missing")
-	}
-
-	// Verify warning event was recorded
-	if len(recorder.events) != 1 {
-		t.Fatalf("Expected 1 event, got %d events: %v", len(recorder.events), recorder.events)
-	}
-
-	// Check that the event starts with the expected prefix (the exact error message may vary)
-	expectedPrefix := "Warning:DB secret not found:Missing database secret for Store test-store in namespace default:"
-	if len(recorder.events[0]) < len(expectedPrefix) || recorder.events[0][:len(expectedPrefix)] != expectedPrefix {
-		t.Errorf("Expected event to start with '%s', got: %s", expectedPrefix, recorder.events[0])
 	}
 }
 
@@ -343,24 +302,13 @@ func TestEnsureStoreSecret_MissingOpensearchSecret(t *testing.T) {
 		WithObjects(store, dbSecret).
 		Build()
 
-	recorder := &mockEventRecorder{}
-
-	storeSecret, err := EnsureStoreSecret(ctx, fakeClient, recorder, store)
+	storeSecret, err := EnsureStoreSecret(ctx, fakeClient, store)
 	if err == nil {
 		t.Fatal("Expected error when opensearch secret is missing")
 	}
 
 	if storeSecret != nil {
 		t.Fatal("Expected storeSecret to be nil when opensearch secret is missing")
-	}
-
-	// Verify warning event was recorded
-	if len(recorder.events) != 1 {
-		t.Fatalf("Expected 1 event, got %d events: %v", len(recorder.events), recorder.events)
-	}
-
-	if recorder.events[0] != "Warning:Opensearch secret not found:Missing opensearch secret for Store test-store in namespace default" {
-		t.Errorf("Unexpected event: %s", recorder.events[0])
 	}
 }
 
@@ -393,9 +341,7 @@ func TestEnsureStoreSecret_MissingFastlySecret(t *testing.T) {
 		WithObjects(store, dbSecret).
 		Build()
 
-	recorder := &mockEventRecorder{}
-
-	storeSecret, err := EnsureStoreSecret(ctx, fakeClient, recorder, store)
+	storeSecret, err := EnsureStoreSecret(ctx, fakeClient, store)
 	if err == nil {
 		t.Fatal("Expected error when fastly secret is missing")
 	}
@@ -403,114 +349,9 @@ func TestEnsureStoreSecret_MissingFastlySecret(t *testing.T) {
 	if storeSecret != nil {
 		t.Fatal("Expected storeSecret to be nil when fastly secret is missing")
 	}
-
-	// Verify warning event was recorded
-	if len(recorder.events) != 1 {
-		t.Fatalf("Expected 1 event, got %d events: %v", len(recorder.events), recorder.events)
-	}
-
-	if recorder.events[0] != "Warning:Fastly secret not found:Missing Fastly secret for Store test-store in namespace default" {
-		t.Errorf("Unexpected event: %s", recorder.events[0])
-	}
-}
-
-func TestEnsureStoreSecret_MissingDatabaseHost(t *testing.T) {
-	ctx := context.Background()
-	store := createTestStore()
-	store.Spec.Database.Host = ""
-
-	scheme := runtime.NewScheme()
-	_ = v1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(store).
-		Build()
-
-	recorder := &mockEventRecorder{}
-
-	_, err := EnsureStoreSecret(ctx, fakeClient, recorder, store)
-	if err == nil {
-		t.Fatal("Expected error for missing database host")
-	}
-
-	expectedError := "database host is empty for store test-store. Either set host or a hostRef"
-	if err.Error() != expectedError {
-		t.Errorf("Expected error '%s', got '%s'", expectedError, err.Error())
-	}
-}
-
-func TestEnsureStoreSecret_OpensearchEnabledButMissingConfig(t *testing.T) {
-	ctx := context.Background()
-	store := createTestStore()
-	store.Spec.OpensearchSpec = v1.OpensearchSpec{
-		Enabled: true,
-		Host:    "opensearch.example.com",
-		// Missing PasswordSecretRef
-	}
-
-	scheme := runtime.NewScheme()
-	_ = v1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(store).
-		Build()
-
-	recorder := &mockEventRecorder{}
-
-	_, err := EnsureStoreSecret(ctx, fakeClient, recorder, store)
-	if err == nil {
-		t.Fatal("Expected error for opensearch enabled without secret config")
-	}
-
-	expectedError := "opensearch is enabled but passwordSecretRef key or name is empty for store test-store"
-	if err.Error() != expectedError {
-		t.Errorf("Expected error '%s', got '%s'", expectedError, err.Error())
-	}
-}
-
-func TestEnsureStoreSecret_FastlyServiceIDWithoutSecret(t *testing.T) {
-	ctx := context.Background()
-	store := createTestStore()
-	store.Spec.ShopConfiguration = v1.Configuration{
-		Currency: "EUR",
-		Locale:   "en-GB",
-		Fastly: v1.FastlySpec{
-			ServiceRef: v1.SecretRef{
-				Name: "fastly-secret",
-				Key:  "service-id",
-			},
-			// Missing TokenRef
-		},
-	}
-
-	scheme := runtime.NewScheme()
-	_ = v1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(store).
-		Build()
-
-	recorder := &mockEventRecorder{}
-
-	_, err := EnsureStoreSecret(ctx, fakeClient, recorder, store)
-	if err == nil {
-		t.Fatal("Expected error for fastly serviceID without secret config")
-	}
-
-	expectedError := "fastly apiTokenSecretRef key or name is empty for store test-store. Unset the fastlyServiceID or provide a secret"
-	if err.Error() != expectedError {
-		t.Errorf("Expected error '%s', got '%s'", expectedError, err.Error())
-	}
 }
 
 func TestGenerateStoreSecret(t *testing.T) {
-	ctx := context.Background()
 	store := createTestStore()
 
 	dbSpec := &util.DatabaseSpec{
@@ -530,7 +371,7 @@ func TestGenerateStoreSecret(t *testing.T) {
 	fastlyServiceID := []byte("fastly-service-id")
 	fastlyToken := []byte("fastly-token")
 
-	err := GenerateStoreSecret(ctx, store, secret, dbSpec, opensearchPassword, fastlyServiceID, fastlyToken, nil)
+	err := generateStoreSecret(store, secret, dbSpec, referencedValues{OpensearchPassword: opensearchPassword, FastlyServiceID: fastlyServiceID, FastlyToken: fastlyToken})
 	if err != nil {
 		t.Fatalf("GenerateStoreSecret failed: %v", err)
 	}
@@ -569,7 +410,6 @@ func TestGenerateStoreSecret(t *testing.T) {
 }
 
 func TestGenerateStoreSecret_CustomAdminPassword(t *testing.T) {
-	ctx := context.Background()
 	store := createTestStore()
 	store.Spec.AdminCredentials.Password = "custom-admin-password"
 
@@ -586,7 +426,7 @@ func TestGenerateStoreSecret_CustomAdminPassword(t *testing.T) {
 		Data: make(map[string][]byte),
 	}
 
-	err := GenerateStoreSecret(ctx, store, secret, dbSpec, nil, nil, nil, nil)
+	err := generateStoreSecret(store, secret, dbSpec, referencedValues{})
 	if err != nil {
 		t.Fatalf("GenerateStoreSecret failed: %v", err)
 	}
@@ -598,7 +438,6 @@ func TestGenerateStoreSecret_CustomAdminPassword(t *testing.T) {
 }
 
 func TestGenerateStoreSecret_PreservesExistingSecrets(t *testing.T) {
-	ctx := context.Background()
 	store := createTestStore()
 
 	dbSpec := &util.DatabaseSpec{
@@ -619,7 +458,7 @@ func TestGenerateStoreSecret_PreservesExistingSecrets(t *testing.T) {
 		},
 	}
 
-	err := GenerateStoreSecret(ctx, store, secret, dbSpec, nil, nil, nil, nil)
+	err := generateStoreSecret(store, secret, dbSpec, referencedValues{})
 	if err != nil {
 		t.Fatalf("GenerateStoreSecret failed: %v", err)
 	}
@@ -671,9 +510,7 @@ func TestEnsureStoreSecret_WithDatabaseHostRef(t *testing.T) {
 		WithObjects(store, dbSecret, dbHostSecret).
 		Build()
 
-	recorder := &mockEventRecorder{}
-
-	storeSecret, err := EnsureStoreSecret(ctx, fakeClient, recorder, store)
+	storeSecret, err := EnsureStoreSecret(ctx, fakeClient, store)
 	if err != nil {
 		t.Fatalf("EnsureStoreSecret failed: %v", err)
 	}
@@ -685,11 +522,6 @@ func TestEnsureStoreSecret_WithDatabaseHostRef(t *testing.T) {
 	// Verify database host from secret is used
 	if string(storeSecret.Data["database-host"]) != "db-from-secret.example.com" {
 		t.Errorf("Expected database-host to be 'db-from-secret.example.com', got '%s'", string(storeSecret.Data["database-host"]))
-	}
-
-	// Verify no events were recorded
-	if len(recorder.events) != 0 {
-		t.Errorf("Expected no events, got %d events: %v", len(recorder.events), recorder.events)
 	}
 }
 
@@ -719,9 +551,7 @@ func TestEnsureStoreSecret_UpdateExistingSecret(t *testing.T) {
 		WithObjects(store, dbSecret, existingStoreSecret).
 		Build()
 
-	recorder := &mockEventRecorder{}
-
-	storeSecret, err := EnsureStoreSecret(ctx, fakeClient, recorder, store)
+	storeSecret, err := EnsureStoreSecret(ctx, fakeClient, store)
 	if err != nil {
 		t.Fatalf("EnsureStoreSecret failed: %v", err)
 	}
@@ -749,5 +579,113 @@ func TestEnsureStoreSecret_UpdateExistingSecret(t *testing.T) {
 	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-store-secret", Namespace: "default"}, &retrievedSecret)
 	if err != nil {
 		t.Fatalf("Failed to retrieve secret from fake client: %v", err)
+	}
+}
+
+func TestEnsureStoreSecret_CopiesReferencedSecrets(t *testing.T) {
+	ctx := context.Background()
+	store := createTestStore()
+	store.Spec.AdminCredentials.Username = ""
+	store.Spec.AdminCredentials.UsernameSecretRef = v1.SecretRef{Name: "admin-credentials", Key: "username"}
+	store.Spec.Tideways.Enabled = true
+	store.Spec.Tideways.APIKeyRef = v1.SecretRef{Name: "tideways", Key: "api-key"}
+	store.Spec.S3Storage.AccessKeyRef = v1.SecretRef{Name: "s3", Key: "access"}
+	store.Spec.S3Storage.SecretAccessKeyRef = v1.SecretRef{Name: "s3", Key: "secret"}
+
+	objects := []client.Object{
+		store,
+		createDBSecret(),
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "admin-credentials", Namespace: "default"},
+			Data:       map[string][]byte{"username": []byte("secret-admin")},
+		},
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "tideways", Namespace: "default"},
+			Data:       map[string][]byte{"api-key": []byte("tideways-key")},
+		},
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "s3", Namespace: "default"},
+			Data:       map[string][]byte{"access": []byte("access-id"), "secret": []byte("secret-key")},
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	_ = v1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+
+	storeSecret, err := EnsureStoreSecret(ctx, fakeClient, store)
+	if err != nil {
+		t.Fatalf("EnsureStoreSecret failed: %v", err)
+	}
+
+	expected := map[string]string{
+		"admin-username":       "secret-admin",
+		"tideways-api-key":     "tideways-key",
+		"s3-access-key-id":     "access-id",
+		"s3-secret-access-key": "secret-key",
+	}
+	for key, value := range expected {
+		if got := string(storeSecret.Data[key]); got != value {
+			t.Errorf("expected %s to be %q, got %q", key, value, got)
+		}
+	}
+}
+
+func TestEnsureStoreSecret_RemovesUnreferencedKeys(t *testing.T) {
+	ctx := context.Background()
+	store := createTestStore()
+	existing := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-store-secret", Namespace: "default"},
+		Data: map[string][]byte{
+			"tideways-api-key":     []byte("old"),
+			"s3-access-key-id":     []byte("old"),
+			"s3-secret-access-key": []byte("old"),
+			"fastly-token":         []byte("old"),
+			"fastly-service-id":    []byte("old"),
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	_ = v1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(store, createDBSecret(), existing).Build()
+
+	storeSecret, err := EnsureStoreSecret(ctx, fakeClient, store)
+	if err != nil {
+		t.Fatalf("EnsureStoreSecret failed: %v", err)
+	}
+
+	for key := range existing.Data {
+		if _, ok := storeSecret.Data[key]; ok {
+			t.Errorf("expected %s to be removed", key)
+		}
+	}
+	if got := string(storeSecret.Data["admin-username"]); got != "admin" {
+		t.Errorf("expected admin-username to be %q, got %q", "admin", got)
+	}
+}
+
+func TestEnsureStoreSecret_IgnoresTidewaysSecretWhenDisabled(t *testing.T) {
+	ctx := context.Background()
+	store := createTestStore()
+	store.Spec.Tideways.Enabled = false
+	store.Spec.Tideways.APIKeyRef = v1.SecretRef{Name: "missing-tideways", Key: "api-key"}
+	existing := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-store-secret", Namespace: "default"},
+		Data:       map[string][]byte{"tideways-api-key": []byte("old")},
+	}
+
+	scheme := runtime.NewScheme()
+	_ = v1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(store, createDBSecret(), existing).Build()
+
+	storeSecret, err := EnsureStoreSecret(ctx, fakeClient, store)
+	if err != nil {
+		t.Fatalf("EnsureStoreSecret failed: %v", err)
+	}
+	if _, ok := storeSecret.Data["tideways-api-key"]; ok {
+		t.Error("expected tideways-api-key to be removed when tideways is disabled")
 	}
 }
