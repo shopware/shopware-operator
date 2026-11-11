@@ -594,46 +594,6 @@ func objectKind(obj client.Object) string {
 	return reflect.Indirect(reflect.ValueOf(obj)).Type().Name()
 }
 
-func logObjectChange(
-	ctx context.Context,
-	oldObject client.Object,
-	obj client.Object,
-	hash string,
-	hashChanged bool,
-	secretChanged bool,
-	objectMetaChangedFields []string,
-) {
-	if secretChanged && !hashChanged {
-		logging.FromContext(ctx).Infow("Store secret hash has changed",
-			zap.String("kind", obj.GetObjectKind().GroupVersionKind().Kind),
-			zap.String("obj-name", obj.GetName()),
-			zap.String("old-secret-hash", secretHashOf(oldObject)),
-			zap.String("new-secret-hash", secretHashOf(obj)))
-	} else if hashChanged {
-		diff, err := ObjectDiff(oldObject, obj)
-		if err != nil {
-			diff = fmt.Sprintf("Error generating diff: %v", err)
-		}
-		logging.FromContext(ctx).Infow("Object last-config-hash has changed",
-			zap.String("kind", obj.GetObjectKind().GroupVersionKind().Kind),
-			zap.String("obj-name", obj.GetName()),
-			zap.String("old-hash", oldObject.GetAnnotations()[util.LastConfigHashAnnotation]),
-			zap.String("new-hash", hash),
-			zap.String("diff", diff))
-	} else {
-		logging.FromContext(ctx).Infow(
-			"Object meta has changed",
-			zap.String("kind", obj.GetObjectKind().GroupVersionKind().Kind),
-			zap.String("obj-name", obj.GetName()),
-			zap.Any("old-annotations", oldObject.GetAnnotations()),
-			zap.Any("new-annotations", obj.GetAnnotations()),
-			zap.Any("old-labels", oldObject.GetLabels()),
-			zap.Any("new-labels", obj.GetLabels()),
-			zap.Any("changed-fileds", objectMetaChangedFields),
-		)
-	}
-}
-
 func EnsureObjectWithHash(
 	ctx context.Context,
 	cl client.Client,
@@ -696,7 +656,7 @@ func EnsureObjectWithHash(
 		return nil
 	}
 
-	logObjectChange(ctx, oldObject, obj, hash, hashChanged, secretChanged, objectMetaChangedFields)
+	logObjectChange(ctx, obj, oldObject, hash, hashChanged, secretChanged, objectMetaChangedFields)
 
 	obj.SetResourceVersion(oldObject.GetResourceVersion())
 	if svc, isService := obj.(*corev1.Service); isService {
@@ -722,7 +682,7 @@ func stampLastConfigHash(obj client.Object) (string, error) {
 	}
 
 	annotations := obj.GetAnnotations()
-	delete(annotations, lastConfigHashAnnotation)
+	delete(annotations, util.LastConfigHashAnnotation)
 	obj.SetAnnotations(annotations)
 
 	hash, err := ObjectHash(obj)
@@ -731,7 +691,7 @@ func stampLastConfigHash(obj client.Object) (string, error) {
 	}
 
 	annotations = obj.GetAnnotations()
-	annotations[lastConfigHashAnnotation] = hash
+	annotations[util.LastConfigHashAnnotation] = hash
 	obj.SetAnnotations(annotations)
 
 	return hash, nil
@@ -754,8 +714,18 @@ func logObjectChange(
 	obj, old client.Object,
 	hash string,
 	hashChanged bool,
+	secretChanged bool,
 	changedMetaKeys []string,
 ) {
+	if secretChanged && !hashChanged {
+		logging.FromContext(ctx).Infow("Store secret hash has changed",
+			zap.String("kind", obj.GetObjectKind().GroupVersionKind().Kind),
+			zap.String("obj-name", obj.GetName()),
+			zap.String("old-secret-hash", secretHashOf(old)),
+			zap.String("new-secret-hash", secretHashOf(obj)))
+		return
+	}
+
 	if hashChanged {
 		diff, err := ObjectDiff(old, obj)
 		if err != nil {
@@ -764,7 +734,7 @@ func logObjectChange(
 		logging.FromContext(ctx).Infow("Object last-config-hash has changed",
 			zap.String("kind", obj.GetObjectKind().GroupVersionKind().Kind),
 			zap.String("obj-name", obj.GetName()),
-			zap.String("old-hash", old.GetAnnotations()[lastConfigHashAnnotation]),
+			zap.String("old-hash", old.GetAnnotations()[util.LastConfigHashAnnotation]),
 			zap.String("new-hash", hash),
 			zap.String("diff", diff))
 		return
