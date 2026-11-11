@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"sync/atomic"
 
@@ -20,8 +19,6 @@ import (
 	"github.com/shopware/shopware-operator/internal/logging"
 	"go.uber.org/zap"
 )
-
-var totalUploadWorkers = 2 * runtime.GOMAXPROCS(0)
 
 type FileEntry struct {
 	Name string
@@ -118,47 +115,26 @@ func CopyToFilesystem(ctx context.Context, cred *credentials.Credentials, direct
 
 func RestoreFromFilesystem(ctx context.Context, cred *credentials.Credentials, directory string, s v1.S3Storage, emptyBeforeRestore bool) error {
 	logger := logging.FromContext(ctx).With(zap.Any("s3_storage", s))
+	workers := S3WorkerCount()
 
-	logger.Debug("Init minio client")
-	s3Client, err := minio.New(s.EndpointURL, &minio.Options{
-		Creds:  cred,
-		Secure: true,
-	})
+	logger.Infow("Init minio client", zap.Int("workers", workers))
+	s3Client, err := NewMinioClient(s.EndpointURL, cred, true, workers)
 	if err != nil {
 		return err
 	}
 
-	var wg sync.WaitGroup
-	errChan := make(chan error, 2)
-
-	wg.Add(1)
-	go func() {
-		err := uploadBucket(ctx, s3Client, s.PublicBucketName, filepath.Join(directory, "public"), totalUploadWorkers/2, emptyBeforeRestore)
-		if err != nil {
-			errChan <- fmt.Errorf("error uploading to public bucket: %w", err)
-		}
-		wg.Done()
-	}()
-
-	wg.Add(1)
-	go func() {
-		err := uploadBucket(ctx, s3Client, s.PrivateBucketName, filepath.Join(directory, "private"), totalUploadWorkers/2, emptyBeforeRestore)
-		if err != nil {
-			errChan <- fmt.Errorf("error uploading to private bucket: %w", err)
-		}
-		wg.Done()
-	}()
-
-	wg.Wait()
-	close(errChan)
-
-	// nolint: prealloc
-	var errs []error
-	for err := range errChan {
-		logger.Errorw("error uploading bucket", zap.Error(err))
-		errs = append(errs, err)
+	sources := []bucketSource{
+		{bucket: s.PublicBucketName, sourcePath: filepath.Join(directory, "public")},
+		{bucket: s.PrivateBucketName, sourcePath: filepath.Join(directory, "private")},
 	}
-	return errors.Join(errs...)
+
+	if emptyBeforeRestore {
+		if err := emptyBuckets(ctx, s3Client, sources); err != nil {
+			return err
+		}
+	}
+
+	return uploadBuckets(ctx, s3Client, sources, workers)
 }
 
 func emptyBucketAsync(ctx context.Context, s3Client *minio.Client, bucketName string) error {
@@ -240,128 +216,150 @@ func emptyBucketAsync(ctx context.Context, s3Client *minio.Client, bucketName st
 	}
 }
 
-func uploadBucket(ctx context.Context, s3Client *minio.Client, bucketName, sourcePath string, workers int, emptyBeforeRestore bool) error {
-	logger := logging.FromContext(ctx).With(zap.String("bucket", bucketName), zap.String("source_path", sourcePath))
-	logger.Info("Starting bucket upload process")
+type bucketSource struct {
+	bucket     string
+	sourcePath string
+}
 
-	if emptyBeforeRestore {
-		logger.Info("Emptying bucket before restore")
-		if err := emptyBucketAsync(ctx, s3Client, bucketName); err != nil {
-			logger.Errorw("Failed to empty bucket", zap.Error(err))
-			return err
+type uploadJob struct {
+	bucket     string
+	sourcePath string
+	file       string
+}
+
+func emptyBuckets(ctx context.Context, s3Client *minio.Client, sources []bucketSource) error {
+	logger := logging.FromContext(ctx)
+	var wg sync.WaitGroup
+	errCh := make(chan error, len(sources))
+
+	for _, src := range sources {
+		if src.bucket == "" {
+			continue
 		}
-		logger.Info("Successfully emptied bucket, proceeding with upload")
+		src := src
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			logger.Infow("Emptying bucket before restore", zap.String("bucket", src.bucket))
+			if err := emptyBucketAsync(ctx, s3Client, src.bucket); err != nil {
+				errCh <- fmt.Errorf("empty bucket %s: %w", src.bucket, err)
+			}
+		}()
 	}
 
-	logger.Info("Scanning source directory for files")
-	if _, err := os.Stat(sourcePath); err != nil {
-		if os.IsNotExist(err) {
-			logger.Warnw("Source path does not exist", zap.String("source_path", sourcePath))
-			logger.Info("No files to upload, operation complete")
-			return nil
-		}
-		logger.Errorw("Failed to stat source path", zap.String("source_path", sourcePath), zap.Error(err))
-		return fmt.Errorf("failed to stat source path: %w", err)
+	wg.Wait()
+	close(errCh)
+
+	var errs []error
+	for err := range errCh {
+		logger.Errorw("Failed to empty bucket", zap.Error(err))
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
+}
+
+func uploadBuckets(ctx context.Context, s3Client *minio.Client, sources []bucketSource, workers int) error {
+	logger := logging.FromContext(ctx)
+	if workers <= 0 {
+		workers = 1
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	effectiveWorkers := workers
-	if effectiveWorkers <= 0 {
-		effectiveWorkers = 1
-	}
+	jobCh := make(chan uploadJob, workers)
+	stats := NewTransferStats(logger, "upload", workers)
+	defer stats.Finish()
 
-	fileCh := make(chan string, effectiveWorkers)
-	walkErrCh := make(chan error, 1)
-	fileCount := int64(0)
-	uploadedCount := int64(0)
+	var walkWg sync.WaitGroup
+	var walkErr atomic.Value
+	var scanned int64
 
-	logger.Infow("Starting upload with workers", zap.Int("worker_count", effectiveWorkers))
-	go func() {
-		walkErr := filepath.WalkDir(sourcePath, func(path string, d fs.DirEntry, fileErr error) error {
-			if fileErr != nil {
-				logger.Errorw("Error walking directory", zap.String("path", path), zap.Error(fileErr))
-				return fileErr
+	for _, src := range sources {
+		if src.bucket == "" {
+			continue
+		}
+		if _, err := os.Stat(src.sourcePath); err != nil {
+			if os.IsNotExist(err) {
+				logger.Warnw("Source path does not exist",
+					zap.String("source_path", src.sourcePath),
+					zap.String("bucket", src.bucket))
+				continue
 			}
-
-			if d.IsDir() {
-				return nil
-			}
-
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case fileCh <- path:
-				atomic.AddInt64(&fileCount, 1)
-				return nil
-			}
-		})
-
-		if walkErr != nil && !errors.Is(walkErr, context.Canceled) {
-			cancel()
+			return fmt.Errorf("failed to stat source path: %w", err)
 		}
 
-		close(fileCh)
-		walkErrCh <- walkErr
+		src := src
+		walkWg.Add(1)
+		go func() {
+			defer walkWg.Done()
+			err := filepath.WalkDir(src.sourcePath, func(path string, d fs.DirEntry, fileErr error) error {
+				if fileErr != nil {
+					logger.Errorw("Error walking directory", zap.String("path", path), zap.Error(fileErr))
+					return fileErr
+				}
+				if d.IsDir() {
+					return nil
+				}
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case jobCh <- uploadJob{bucket: src.bucket, sourcePath: src.sourcePath, file: path}:
+					atomic.AddInt64(&scanned, 1)
+					return nil
+				}
+			})
+			if err != nil && !errors.Is(err, context.Canceled) {
+				walkErr.Store(fmt.Errorf("walking source path %s: %w", src.sourcePath, err))
+				cancel()
+			}
+		}()
+	}
+
+	go func() {
+		walkWg.Wait()
+		close(jobCh)
 	}()
 
-	err := runUploadWorkers(ctx, effectiveWorkers, fileCh, func(ctx context.Context, file string) error {
-		relPath, err := filepath.Rel(sourcePath, file)
+	err := runWorkers(ctx, workers, jobCh, func(ctx context.Context, job uploadJob) error {
+		relPath, err := filepath.Rel(job.sourcePath, job.file)
 		if err != nil {
-			return fmt.Errorf("rel path error for %s: %w", file, err)
+			return fmt.Errorf("rel path error for %s: %w", job.file, err)
 		}
 
 		logger.Debugw("Uploading file",
-			zap.String("local_file", file),
+			zap.String("bucket", job.bucket),
+			zap.String("local_file", job.file),
 			zap.String("s3_key", relPath))
 
-		info, err := s3Client.FPutObject(ctx, bucketName, relPath, file, minio.PutObjectOptions{})
+		info, err := s3Client.FPutObject(ctx, job.bucket, relPath, job.file, minio.PutObjectOptions{})
 		if err != nil {
-			return fmt.Errorf("error uploading %s: %w", file, err)
+			return fmt.Errorf("error uploading %s: %w", job.file, err)
 		}
-
-		uploaded := atomic.AddInt64(&uploadedCount, 1)
-		if uploaded%100 == 0 {
-			logger.Debugw("Upload progress",
-				zap.Int64("uploaded_count", uploaded),
-				zap.Int64("scanned_files", atomic.LoadInt64(&fileCount)),
-				zap.Int64("size_bytes", info.Size))
-		}
-
+		stats.Add(info.Size)
 		return nil
 	})
 	if err != nil {
 		cancel()
-	}
-
-	walkErr := <-walkErrCh
-
-	if err != nil {
 		logger.Errorw("Upload failed", zap.Error(err))
+		if stored, ok := walkErr.Load().(error); ok && stored != nil && errors.Is(err, context.Canceled) {
+			return stored
+		}
 		return err
 	}
 
-	if walkErr != nil {
-		if !errors.Is(walkErr, context.Canceled) {
-			logger.Errorw("Failed to walk source path", zap.Error(walkErr))
-			return fmt.Errorf("walking source path: %w", walkErr)
-		}
-		if ctx.Err() != nil {
-			logger.Errorw("Failed to walk source path", zap.Error(ctx.Err()))
-			return fmt.Errorf("walking source path: %w", ctx.Err())
-		}
+	if stored, ok := walkErr.Load().(error); ok && stored != nil {
+		logger.Errorw("Failed to walk source path", zap.Error(stored))
+		return stored
 	}
 
-	if fileCount == 0 {
+	if atomic.LoadInt64(&scanned) == 0 {
 		logger.Info("No files to upload, operation complete")
 		return nil
 	}
 
 	logger.Infow("Successfully completed bucket upload",
-		zap.Int64("total_files_uploaded", uploadedCount),
-		zap.Int64("total_files_scanned", fileCount),
-		zap.String("bucket", bucketName))
+		zap.Int64("total_files_scanned", atomic.LoadInt64(&scanned)))
 	return nil
 }
 
@@ -390,21 +388,10 @@ func NewS3Downloader(client *minio.Client, bucket string) *S3Downloader {
 // The function is called for each object with the object's metadata and a reader for the object's content.
 // The function is responsible for closing the reader after processing the object.
 func (s *S3Downloader) DownloadBucket(ctx context.Context, batchCount int, f func(minio.ObjectInfo, *minio.Object) error) error {
-	objects := s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
-		Recursive: true,
-	})
-
-	return runDownloadWorkers(ctx, batchCount, objects, func(ctx context.Context, obj minio.ObjectInfo) error {
-		r, err := s.client.GetObject(ctx, s.bucket, obj.Key, minio.GetObjectOptions{})
-		if err != nil {
-			return fmt.Errorf("error downloading %s: %w", obj.Key, err)
-		}
-
-		if err := f(obj, r); err != nil {
-			return fmt.Errorf("error processing object %s: %w", obj.Key, err)
-		}
-
-		return nil
+	return DownloadBuckets(ctx, s.client, batchCount, []BucketDownload{{
+		Bucket: s.bucket,
+	}}, func(_ string, info minio.ObjectInfo, obj *minio.Object) error {
+		return f(info, obj)
 	})
 }
 

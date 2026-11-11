@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
+	snapshottool "github.com/shopware/shopware-operator/internal/snapshot"
 	"github.com/shopware/shopware-operator/internal/util"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -15,7 +16,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const CONTAINER_NAME_SNAPSHOT = "operator-snapshot"
+const (
+	CONTAINER_NAME_SNAPSHOT = "operator-snapshot"
+	DEFAULT_TEMP_SIZE       = "20Gi"
+	TTLSecondsAfterFinished = 15 * 60 // 15 minutes
+)
 
 func GetSnapshotCreateJob(
 	ctx context.Context,
@@ -61,9 +66,10 @@ func SnapshotRestoreJob(store v1.Store, snapshot v1.StoreSnapshotRestore) *batch
 
 func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapshotSpec, subCommand string) *batchv1.Job {
 	sharedProcessNamespace := true
-	res := resource.MustParse("20Gi")
+	res := resource.MustParse(DEFAULT_TEMP_SIZE)
 	tempDirMountPath := "/temp"
 	addDefaultTempDir := true
+	var tempVolume corev1.Volume
 
 	for _, volume := range snapshot.Container.Volumes {
 		if volume.Ephemeral == nil {
@@ -74,6 +80,7 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 			if mount.Name == volume.Name && mount.MountPath != "" {
 				tempDirMountPath = mount.MountPath
 				addDefaultTempDir = false
+				tempVolume = volume
 				break
 			}
 		}
@@ -92,24 +99,27 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 			MountPath: tempDirMountPath,
 		})
 	}
-	// Build args with labels
 	args := []string{
 		subCommand,
 		"--backup-file", snapshot.Path,
 		"--tempdir", tempDirMountPath,
 	}
+	if addDefaultTempDir {
+		args = append(args, "--temp-size", res.String())
+	} else if qty, ok := ephemeralStorageRequest(tempVolume); ok {
+		args = append(args, "--temp-size", qty.String())
+	}
 	// Add labels from meta
 	// We sort the labels to ensure consistent ordering, so we don't trigger unnecessary job restarts due to label order changes
-	if meta.Labels != nil {
-		labelKeys := make([]string, 0, len(meta.Labels))
-		for key := range meta.Labels {
+	if snapshotLabels := util.SnapshotLabelPairs(meta.Labels); len(snapshotLabels) > 0 {
+		labelKeys := make([]string, 0, len(snapshotLabels))
+		for key := range snapshotLabels {
 			labelKeys = append(labelKeys, key)
 		}
 		sort.Strings(labelKeys)
 
 		for _, key := range labelKeys {
-			value := meta.Labels[key]
-			args = append(args, "--label", fmt.Sprintf("%s=%s", key, value))
+			args = append(args, "--label", fmt.Sprintf("%s=%s", key, snapshotLabels[key]))
 		}
 	}
 
@@ -138,7 +148,7 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 	}
 
 	labels := util.GetDefaultStoreSnapshotLabels(store, meta.Labels, meta.Name, subCommand)
-	annotations := util.GetDefaultContainerSnapshotAnnotations(CONTAINER_NAME_SNAPSHOT, snapshot)
+	annotations := util.GetDefaultContainerSnapshotAnnotations(CONTAINER_NAME_SNAPSHOT, snapshot, meta.Namespace)
 
 	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
@@ -153,7 +163,8 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 		},
 		Spec: batchv1.JobSpec{
 			BackoffLimit:            &snapshot.MaxRetries,
-			TTLSecondsAfterFinished: func(i int32) *int32 { return &i }(60),
+			TTLSecondsAfterFinished: func(i int32) *int32 { return &i }(TTLSecondsAfterFinished),
+			PodFailurePolicy:        snapshotNoSpaceFailurePolicy(),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
@@ -178,6 +189,37 @@ func snapshotJob(store v1.Store, meta metav1.ObjectMeta, snapshot v1.StoreSnapsh
 	}
 
 	return job
+}
+
+func ephemeralStorageRequest(volume corev1.Volume) (resource.Quantity, bool) {
+	if volume.Ephemeral == nil || volume.Ephemeral.VolumeClaimTemplate == nil {
+		return resource.Quantity{}, false
+	}
+	qty, ok := volume.Ephemeral.VolumeClaimTemplate.Spec.Resources.Requests[corev1.ResourceStorage]
+	if ok && !qty.IsZero() {
+		return qty, true
+	}
+	return resource.Quantity{}, false
+}
+
+func snapshotNoSpaceFailurePolicy() *batchv1.PodFailurePolicy {
+	containerName := CONTAINER_NAME_SNAPSHOT
+	return &batchv1.PodFailurePolicy{
+		Rules: []batchv1.PodFailurePolicyRule{
+			{
+				Action: batchv1.PodFailurePolicyActionFailJob,
+				OnExitCodes: &batchv1.PodFailurePolicyOnExitCodesRequirement{
+					ContainerName: &containerName,
+					Operator:      batchv1.PodFailurePolicyOnExitCodesOpIn,
+					Values:        []int32{snapshottool.ExitCodeNoSpace},
+				},
+			},
+		},
+	}
+}
+
+func SnapshotJobName(snap metav1.ObjectMeta, subCommand string) string {
+	return fmt.Sprintf("snapshot-%s-%s", subCommand, snap.Name)
 }
 
 func IsSnapshotJobCompleted(

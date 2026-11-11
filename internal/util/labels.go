@@ -3,6 +3,7 @@ package util
 import (
 	"fmt"
 	"maps"
+	"strings"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 )
@@ -11,6 +12,28 @@ const shopwareLabelPrefix = "shop.shopware.com/"
 
 func ShopwareKey(key string) string {
 	return shopwareLabelPrefix + key
+}
+
+// NormalizeSnapshotLabelKey maps Kubernetes label keys to the underscore form
+// used by Datadog log tags (application-id -> application_id).
+func NormalizeSnapshotLabelKey(key string) string {
+	return strings.ReplaceAll(key, "-", "_")
+}
+
+// SnapshotLabelPairs copies labels with Datadog-style keys and drops empty values
+// so a CR's application-id does not also appear as application_id.
+func SnapshotLabelPairs(labels map[string]string) map[string]string {
+	if len(labels) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(labels))
+	for key, value := range labels {
+		if value == "" {
+			continue
+		}
+		out[NormalizeSnapshotLabelKey(key)] = value
+	}
+	return out
 }
 
 func GetStoreLabel(store v1.Store) map[string]string {
@@ -42,7 +65,7 @@ func GetDefaultStoreExecLabels(store v1.Store, extra map[string]string, name, ex
 }
 
 func GetDefaultStoreSnapshotLabels(store v1.Store, overwrite map[string]string, name, subCommand string) map[string]string {
-	labels := overrideStoreLabels(store, overwrite)
+	labels := overrideStoreLabels(store, SnapshotLabelPairs(overwrite))
 	labels[ShopwareKey("storesnapshot.name")] = name
 	labels[ShopwareKey("storesnapshot.type")] = subCommand
 	return labels

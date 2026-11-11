@@ -11,8 +11,10 @@ import (
 	"github.com/shopware/shopware-operator/internal/config"
 	"github.com/shopware/shopware-operator/internal/logging"
 	"github.com/shopware/shopware-operator/internal/snapshot"
+	"github.com/shopware/shopware-operator/internal/util"
 	"github.com/urfave/cli/v3"
 	"go.uber.org/zap"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var (
@@ -23,6 +25,7 @@ var (
 	tempDir    = os.TempDir()
 	includeDB  = true
 	includeS3  = true
+	tempSize   = "100Gi"
 	labels     []string
 )
 
@@ -75,6 +78,12 @@ func main() {
 				Value:       true,
 				Destination: &includeS3,
 			},
+			&cli.StringFlag{
+				Name:        "temp-size",
+				Value:       tempSize,
+				Usage:       "Allocated temp volume size compared against listed S3 object size (K8s format, default 100Gi)",
+				Destination: &tempSize,
+			},
 			&cli.StringSliceFlag{
 				Name:        "label",
 				Usage:       "Labels to attach to the snapshot (format: key=value)",
@@ -91,10 +100,10 @@ func main() {
 					snapshotDir, err := os.MkdirTemp(tempDir, "snapshot-")
 					if err != nil {
 						logger.Errorw("TempDir creation failed", zap.Error(err))
+						exitOnFatalSnapshotError(logger, err)
 						os.Exit(14)
 					}
-					//nolint: errcheck
-					defer os.RemoveAll(snapshotDir)
+					defer cleanupSnapshotTempDir(logger, snapshotDir)
 
 					var tempMeta any
 					err = json.Unmarshal([]byte(cfg.MetaStoreJson), &tempMeta)
@@ -110,14 +119,7 @@ func main() {
 						logger.Warnw("Write metadata.json failed, skip metadata creation", zap.Error(err))
 					}
 
-					snapshotService := snapshot.NewSnapshotService(cfg)
-					logger.Infow("Starting snapshot create process",
-						zap.String("backupFile", backupFile),
-						zap.String("temp", snapshotDir),
-						zap.Bool("includeDB", includeDB),
-						zap.Bool("includeS3", includeS3),
-						zap.Strings("labels", labels),
-					)
+					snapshotService := snapshot.NewSnapshotService(cfg, nil)
 
 					parsedLabels := make(map[string]string)
 					for _, label := range labels {
@@ -126,7 +128,23 @@ func main() {
 							logger.Warnw("Invalid label format, skipping", zap.String("label", label))
 							continue
 						}
-						parsedLabels[parts[0]] = parts[1]
+						if parts[1] == "" {
+							continue
+						}
+						parsedLabels[util.NormalizeSnapshotLabelKey(parts[0])] = parts[1]
+					}
+
+					logger.Infow("Starting snapshot create process",
+						zap.String("backupFile", backupFile),
+						zap.String("temp", snapshotDir),
+						zap.Bool("includeDB", includeDB),
+						zap.Bool("includeS3", includeS3),
+						zap.Any("labels", parsedLabels),
+					)
+
+					tempSizeBytes, err := parseTempSize(tempSize)
+					if err != nil {
+						return err
 					}
 
 					now := time.Now()
@@ -135,6 +153,7 @@ func main() {
 						TempArchiveDir: snapshotDir,
 						IncludeDB:      includeDB,
 						IncludeS3:      includeS3,
+						TempSizeBytes:  tempSizeBytes,
 						Labels:         parsedLabels,
 					}); err != nil {
 						logger.Errorw("Backup failed", zap.Error(err))
@@ -155,10 +174,10 @@ func main() {
 					snapshotTempDir, err := os.MkdirTemp(tempDir, "snapshot-")
 					if err != nil {
 						logger.Errorw("TempDir creation failed", zap.Error(err))
+						exitOnFatalSnapshotError(logger, err)
 						os.Exit(14)
 					}
-					//nolint: errcheck
-					defer os.RemoveAll(snapshotTempDir)
+					defer cleanupSnapshotTempDir(logger, snapshotTempDir)
 
 					var tempMeta any
 					if err := json.Unmarshal([]byte(cfg.MetaStoreJson), &tempMeta); err != nil {
@@ -173,12 +192,18 @@ func main() {
 						logger.Warnw("Write metadata.json failed, skip metadata creation", zap.Error(err))
 					}
 
-					snapshotService := snapshot.NewSnapshotService(cfg)
+					tempSizeBytes, err := parseTempSize(tempSize)
+					if err != nil {
+						return err
+					}
+
+					snapshotService := snapshot.NewSnapshotService(cfg, nil)
 					logger.Infow("Starting snapshot restore process",
 						zap.String("backupFile", backupFile),
 						zap.String("temp", snapshotTempDir),
 						zap.Bool("includeDB", includeDB),
 						zap.Bool("includeS3", includeS3),
+						zap.Int64("tempSizeBytes", tempSizeBytes),
 					)
 
 					now := time.Now()
@@ -187,6 +212,7 @@ func main() {
 						TempArchiveDir: snapshotTempDir,
 						IncludeDB:      includeDB,
 						IncludeS3:      includeS3,
+						TempSizeBytes:  tempSizeBytes,
 					}); err != nil {
 						logger.Errorw("Restore failed", zap.Error(err))
 						return fmt.Errorf("restore failed: %w", err)
@@ -203,6 +229,44 @@ func main() {
 
 	if err := cmd.Run(ctx, os.Args); err != nil {
 		fmt.Fprintf(os.Stderr, "Error running command: %v\n", err)
+		exitOnFatalSnapshotError(logger, err)
 		os.Exit(1)
 	}
+}
+
+func cleanupSnapshotTempDir(logger *zap.SugaredLogger, dir string) {
+	// The Job's ephemeral PVC is deleted with the pod. Recursively removing
+	// hundreds of thousands of objects delays process exit, so the CR stays
+	// running and Argo never sees status.state == succeeded.
+	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+		logger.Infow("Skipping snapshot temp dir cleanup; volume is torn down with the pod",
+			zap.String("dir", dir),
+		)
+		return
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		logger.Warnw("failed to clean snapshot temp dir", zap.String("dir", dir), zap.Error(err))
+	}
+}
+
+func parseTempSize(value string) (int64, error) {
+	qty, err := resource.ParseQuantity(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid --temp-size %q: %w", value, err)
+	}
+	if qty.Sign() <= 0 || qty.Cmp(*resource.NewQuantity(1<<63-1, resource.DecimalSI)) > 0 {
+		return 0, fmt.Errorf("invalid --temp-size %q: must be a positive quantity within int64 range", value)
+	}
+	return qty.Value(), nil
+}
+
+func exitOnFatalSnapshotError(logger *zap.SugaredLogger, err error) {
+	if !snapshot.IsNoSpaceError(err) {
+		return
+	}
+	logger.Errorw("No space left on device, failing without retry",
+		zap.Error(err),
+		zap.Int("exitCode", snapshot.ExitCodeNoSpace),
+	)
+	os.Exit(snapshot.ExitCodeNoSpace)
 }

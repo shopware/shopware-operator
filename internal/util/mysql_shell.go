@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"html/template"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -474,7 +475,7 @@ func parseDumpOutput(output string) (DumpOutput, error) {
 	result.CompressedSize = compressed
 
 	if uncompressed != 0 && compressed != 0 {
-		result.CompressionRatio = float64(uncompressed) / float64(compressed)
+		result.CompressionRatio = roundCompressionRatio(float64(uncompressed) / float64(compressed))
 	}
 
 	return result, nil
@@ -497,6 +498,10 @@ func parseDuration(str string) (time.Duration, error) {
 	}
 
 	return time.ParseDuration(hours + "h" + minutes + "m" + seconds + "s")
+}
+
+func roundCompressionRatio(ratio float64) float64 {
+	return math.Round(ratio*100) / 100
 }
 
 func parseSize(s string) (int64, error) {
