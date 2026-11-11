@@ -707,7 +707,9 @@ func ensureObjectWithHash(
 	hashChanged := oldObject.GetAnnotations()[util.LastConfigHashAnnotation] != hash
 	secretChanged := secretHashChanged(oldObject, obj)
 	objectMetaChangedFields := ChangedMetaKeys(obj, oldObject)
-	if !hashChanged && len(objectMetaChangedFields) == 0 {
+	// The secret hash is not part of the config hash, so a changed secret has to
+	// be checked on its own, otherwise a secret change never rolls out.
+	if !hashChanged && !secretChanged && len(objectMetaChangedFields) == 0 {
 		return nil
 	}
 
