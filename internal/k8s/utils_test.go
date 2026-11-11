@@ -32,6 +32,8 @@ func newTestService(selector map[string]string) *corev1.Service {
 func TestEnsureServiceRejectsForeignService(t *testing.T) {
 	owner := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "debug", Namespace: "ns", UID: "owner-uid"}}
 
+	// EnsureService is the strict variant used for debug instances, so it must not
+	// adopt a Service without controller reference. Only EnsureStoreService does.
 	tests := map[string]*corev1.Service{
 		"no owner": newTestService(map[string]string{"app": "prod"}),
 		"other controller": func() *corev1.Service {
@@ -75,6 +77,59 @@ func TestEnsureServiceUpdatesOwnedService(t *testing.T) {
 	got := new(corev1.Service)
 	require.NoError(t, cl.Get(context.Background(), client.ObjectKeyFromObject(existing), got))
 	assert.Equal(t, map[string]string{"app": "new"}, got.Spec.Selector)
+}
+
+func TestEnsureStoreServiceAdoptsServiceWithoutController(t *testing.T) {
+	owner := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "store", Namespace: "ns", UID: "new-uid"}}
+
+	tests := map[string][]metav1.OwnerReference{
+		// What is left after the old Store was deleted with orphan propagation.
+		"no owner references": nil,
+		"owner reference that is not a controller": {{
+			APIVersion: "v1", Kind: "ConfigMap", Name: "other", UID: "other-uid",
+		}},
+	}
+
+	for name, owners := range tests {
+		t.Run(name, func(t *testing.T) {
+			existing := newTestService(map[string]string{"app": "old"})
+			existing.OwnerReferences = owners
+			cl := fake.NewClientBuilder().WithObjects(existing).Build()
+
+			require.NoError(t, k8s.EnsureStoreService(context.Background(), cl, owner,
+				newTestService(map[string]string{"app": "new"}), scheme.Scheme))
+
+			got := new(corev1.Service)
+			require.NoError(t, cl.Get(context.Background(), client.ObjectKeyFromObject(existing), got))
+			assert.Equal(t, map[string]string{"app": "new"}, got.Spec.Selector)
+			assert.True(t, metav1.IsControlledBy(got, owner), "service must be controlled by the new owner")
+		})
+	}
+}
+
+func TestEnsureStoreServiceRejectsServiceControlledByOther(t *testing.T) {
+	owner := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "store", Namespace: "ns", UID: "new-uid"}}
+	existing := newTestService(map[string]string{"app": "prod"})
+	existing.OwnerReferences = []metav1.OwnerReference{{
+		APIVersion: "v1", Kind: "ConfigMap", Name: "other", UID: "other-uid",
+		Controller: ptr.To(true),
+	}}
+	cl := fake.NewClientBuilder().WithObjects(existing).Build()
+
+	err := k8s.EnsureStoreService(context.Background(), cl, owner,
+		newTestService(map[string]string{"app": "new"}), scheme.Scheme)
+	require.ErrorIs(t, err, k8s.ErrNotControlledByOwner)
+
+	got := new(corev1.Service)
+	require.NoError(t, cl.Get(context.Background(), client.ObjectKeyFromObject(existing), got))
+	assert.Equal(t, map[string]string{"app": "prod"}, got.Spec.Selector)
+	assert.Equal(t, existing.OwnerReferences, got.OwnerReferences)
+}
+
+func TestEnsureStoreServiceRequiresOwner(t *testing.T) {
+	cl := fake.NewClientBuilder().Build()
+	require.Error(t, k8s.EnsureStoreService(context.Background(), cl, nil,
+		newTestService(nil), scheme.Scheme))
 }
 
 func TestDeleteControlledObject(t *testing.T) {

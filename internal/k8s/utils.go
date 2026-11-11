@@ -234,7 +234,12 @@ func DeleteControlledObject(
 // EnsureService creates or updates the Service. An existing Service that is not
 // controlled by owner is rejected, and the update is rejected with a conflict
 // if the Service changes between the ownership check and the patch. Both are
-// enforced in EnsureObjectWithHash, on the same object that gets patched.
+// enforced in ensureObjectWithHash, on the same object that gets patched.
+//
+// This is the strict variant, used for the Services of debug instances. Those
+// Services have names derived from user input, so a name collision must never
+// let us rewrite the selector of an unrelated Service. Use EnsureStoreService
+// for the Services of a Store.
 func EnsureService(
 	ctx context.Context,
 	cl client.Client,
@@ -247,7 +252,34 @@ func EnsureService(
 		return errors.New("service owner must not be nil")
 	}
 
-	return EnsureObjectWithHash(ctx, cl, owner, svc, s)
+	return ensureObjectWithHash(ctx, cl, owner, svc, s, false)
+}
+
+// EnsureStoreService is EnsureService for the Services of a Store, with one
+// documented exception: an existing Service that has no controller reference at
+// all is adopted instead of rejected.
+//
+// A Store's Services have fixed names, derived from the Store, and the Store is
+// their only intended owner. They lose their controller reference when the Store
+// is deleted with orphan propagation (for example when it is recreated during a
+// backup restore or a migration of the operator). The recreated Store has to take
+// them back, otherwise their selectors can never be updated again and the
+// reconcile of everything after the Services fails.
+//
+// Services that are controlled by someone else are still rejected, because
+// replacing another controller's ownership would hijack its Service.
+func EnsureStoreService(
+	ctx context.Context,
+	cl client.Client,
+	owner metav1.Object,
+	svc *corev1.Service,
+	s *runtime.Scheme,
+) error {
+	if owner == nil {
+		return errors.New("service owner must not be nil")
+	}
+
+	return ensureObjectWithHash(ctx, cl, owner, svc, s, true)
 }
 
 func EnsureHPA(
@@ -601,6 +633,21 @@ func EnsureObjectWithHash(
 	obj client.Object,
 	s *runtime.Scheme,
 ) error {
+	return ensureObjectWithHash(ctx, cl, owner, obj, s, false)
+}
+
+// ensureObjectWithHash creates or patches obj. For a Service with an owner it
+// refuses to touch an existing Service that owner does not control. With
+// adoptOwnerlessService set, an existing Service without any controller
+// reference is exempt from that, and gets owner as its controller with the patch.
+func ensureObjectWithHash(
+	ctx context.Context,
+	cl client.Client,
+	owner metav1.Object,
+	obj client.Object,
+	s *runtime.Scheme,
+	adoptOwnerlessService bool,
+) error {
 	if owner != nil {
 		if err := controllerutil.SetControllerReference(owner, obj, s); err != nil {
 			return errors.Wrapf(err, "set controller reference to %s/%s",
@@ -637,11 +684,19 @@ func EnsureObjectWithHash(
 	}
 
 	// Never take over a Service that is not controlled by this owner. Patching it
-	// would let us rewrite its selector and redirect live traffic.
+	// would let us rewrite its selector and redirect live traffic. The only
+	// exception is adoptOwnerlessService (see EnsureStoreService): a Service
+	// without a controller reference is adopted, the patch below sets owner as
+	// its controller.
 	if _, isService := obj.(*corev1.Service); isService && owner != nil {
 		if !metav1.IsControlledBy(oldObject, owner) {
-			return errors.Wrapf(ErrNotControlledByOwner,
-				"service %v is not controlled by %s", nn.String(), owner.GetName())
+			if !adoptOwnerlessService || metav1.GetControllerOf(oldObject) != nil {
+				return errors.Wrapf(ErrNotControlledByOwner,
+					"service %v is not controlled by %s", nn.String(), owner.GetName())
+			}
+			logging.FromContext(ctx).Infow("Adopt service without controller reference",
+				zap.String("obj-name", nn.String()),
+				zap.String("owner", owner.GetName()))
 		}
 	}
 
