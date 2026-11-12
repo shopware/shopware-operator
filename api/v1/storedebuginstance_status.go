@@ -34,25 +34,27 @@ type StoreDebugInstanceCondition struct {
 }
 
 func (s *StoreDebugInstanceStatus) AddCondition(c StoreDebugInstanceCondition) {
-	if len(s.Conditions) == 0 {
-		s.Conditions = append(s.Conditions, c)
-		return
+	s.Conditions = addDebugInstanceCondition(s.Conditions, c)
+}
+
+func addDebugInstanceCondition(conditions []StoreDebugInstanceCondition, c StoreDebugInstanceCondition) []StoreDebugInstanceCondition {
+	if len(conditions) == 0 {
+		return append(conditions, c)
 	}
 
 	// Update latest condition if the type is the same
-	if s.Conditions[len(s.Conditions)-1].Type == c.Type {
-		s.Conditions[len(s.Conditions)-1] = c
-		return
+	if conditions[len(conditions)-1].Type == c.Type {
+		conditions[len(conditions)-1] = c
+		return conditions
 	}
 
 	// Add condition if the type is different then the last one
-	if s.Conditions[len(s.Conditions)-1].Type != c.Type {
-		s.Conditions = append(s.Conditions, c)
-	}
+	conditions = append(conditions, c)
 
-	if len(s.Conditions) > maxStatusesQuantity {
-		s.Conditions = s.Conditions[len(s.Conditions)-maxStatusesQuantity:]
+	if len(conditions) > maxStatusesQuantity {
+		conditions = conditions[len(conditions)-maxStatusesQuantity:]
 	}
+	return conditions
 }
 
 func (s *StoreDebugInstance) IsState(states ...StoreDebugInstanceState) bool {
