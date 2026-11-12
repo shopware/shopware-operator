@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/sethvargo/go-envconfig"
 )
@@ -77,6 +78,8 @@ type StoreConfig struct {
 	DisableChecks        bool   `env:"DISABLE_CHECKS, default=false"`
 	EnableTracing        bool   `env:"ENABLE_TRACING, default=false"`
 	Namespace            string `env:"NAMESPACE, default=default"`
+
+	ReconcileInterval time.Duration `env:"RECONCILE_INTERVAL, default=15m"`
 }
 
 type Config struct {

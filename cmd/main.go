@@ -115,6 +115,12 @@ func run() int {
 		return 3
 	}
 
+	if cfg.ReconcileInterval <= 0 {
+		setupLog.Error(fmt.Errorf("reconcile interval must be positive, got %s", cfg.ReconcileInterval),
+			"invalid env `RECONCILE_INTERVAL`")
+		return 3
+	}
+
 	if cfg.EnableKeda && (cfg.MetricsAddr == "0" || cfg.MetricsAddr == "" || cfg.OperatorServiceURL == "") {
 		setupLog.Error(fmt.Errorf("keda is enabled but metrics are not configured"),
 			"ENABLE_KEDA requires the metrics endpoint: "+
@@ -245,6 +251,7 @@ func run() int {
 		DisableServiceChecks: cfg.DisableChecks,
 		EnableKeda:           cfg.EnableKeda,
 		OperatorMetricsURL:   cfg.OperatorServiceURL,
+		ReconcileInterval:    cfg.ReconcileInterval,
 	}).SetupWithManager(mgr, logger); err != nil {
 		setupLog.Error(err, "unable to create store controller", "controller", "Store")
 		return 1

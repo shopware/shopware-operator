@@ -106,6 +106,10 @@ logFormat: json
 # This is a global level. You can also control this per store.
 disableChecks: false
 
+# Interval for the periodic reconcile of a ready store. Uses Go duration
+# syntax, e.g. 30s, 2m, 15m, 1h.
+reconcileInterval: 15m
+
 # tracing: when enabled, the operator exports OpenTelemetry traces for every
 # reconcile and status change via OTLP. The exporter is configured with the
 # standard OTEL_* environment variables, e.g. OTEL_EXPORTER_OTLP_ENDPOINT.

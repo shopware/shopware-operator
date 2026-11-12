@@ -43,7 +43,6 @@ var (
 	noRequeue        = ctrl.Result{}
 	shortRequeue     = ctrl.Result{RequeueAfter: 5 * time.Second}
 	apiFailedRequeue = ctrl.Result{RequeueAfter: 20 * time.Second}
-	longRequeue      = ctrl.Result{RequeueAfter: 15 * time.Minute}
 )
 
 // StoreReconciler reconciles a Store object
@@ -56,6 +55,7 @@ type StoreReconciler struct {
 	DisableServiceChecks bool
 	EnableKeda           bool
 	OperatorMetricsURL   string
+	ReconcileInterval    time.Duration
 	EventHandlers        []event.EventHandler
 	Logger               *zap.SugaredLogger
 	StateManager         *manager.StoreStateManager
@@ -302,5 +302,5 @@ func (r *StoreReconciler) Reconcile(
 
 	log.Info("Reconcile finished, schedule long Reconcile")
 	requeueReason = "store is ready, periodic long requeue"
-	return longRequeue, nil
+	return ctrl.Result{RequeueAfter: r.ReconcileInterval}, nil
 }
