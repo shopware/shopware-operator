@@ -80,6 +80,8 @@ spec:
           value: "{{ .Values.logFormat | default "json" }}"
         - name: DISABLE_CHECKS
           value: "{{ .Values.disableChecks | default "false" }}"
+        - name: RECONCILE_INTERVAL
+          value: "{{ .Values.reconcileInterval | default "15m" }}"
         {{- if and .Values.resources .Values.resources.limits .Values.resources.limits.memory }}
         - name: GOMEMLIMIT
           value: "{{ include "shopware-operator.goMemLimit" .Values.resources.limits.memory }}"
