@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.12.4](https://github.com/shopware/shopware-operator/compare/1.12.3...v1.12.4) (2026-11-12)
+
+
+### Bug Fixes
+
+* make short reconciles ([6b7bc26](https://github.com/shopware/shopware-operator/commit/6b7bc263411a3bf3d5182e038862e0d889cd12e9))
+* make short reconciles ([f76d612](https://github.com/shopware/shopware-operator/commit/f76d61253f199dbadbbb72d8a941883ee561752c))
+* **snapshot:** refresh credentials and tweak ephemeral storage ([#286](https://github.com/shopware/shopware-operator/issues/286)) ([f1687bf](https://github.com/shopware/shopware-operator/commit/f1687bf49d675ff9950bb5e4bc94b1de3f913789))
+
 ## [1.12.3](https://github.com/shopware/shopware-operator/compare/1.12.2...v1.12.3) (2026-11-10)
 
 
