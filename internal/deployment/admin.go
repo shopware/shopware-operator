@@ -77,7 +77,10 @@ func AdminDeployment(store v1.Store) *appsv1.Deployment {
 
 	annotations := util.GetDefaultContainerAnnotations(appName, store, store.Spec.AdminDeploymentContainer.Annotations)
 
-	envs := util.MergeEnv(store.GetEnv(), containerSpec.ExtraEnvs)
+	envs := util.MergeEnv(
+		util.MergeEnv(store.GetEnv(), requestTerminateTimeoutEnv(containerSpec.RequestTerminateTimeout)),
+		containerSpec.ExtraEnvs,
+	)
 	if store.Spec.FPM.ProcessManagement == "operator" {
 		if containerSpec.Resources.Limits.Memory() != nil && containerSpec.Resources.Limits.Memory().Value() != 0 {
 			phpEnvs := GetCalculatedPHPFPMValues(int(containerSpec.Resources.Limits.Memory().Value() / (1024 * 1024)))
