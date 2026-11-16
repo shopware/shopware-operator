@@ -73,7 +73,7 @@ func (b *Base) ReconcileServices(ctx context.Context, store *v1.Store) (err erro
 				store.Name,
 				store.Namespace,
 				obj.Labels["app"])
-			if err := k8s.EnsureService(ctx, b.Client, store, obj, b.Scheme, true); err != nil {
+			if err := k8s.EnsureStoreService(ctx, b.Client, store, obj, b.Scheme); err != nil {
 				return fmt.Errorf("reconcile unready services: %w", err)
 			}
 		}

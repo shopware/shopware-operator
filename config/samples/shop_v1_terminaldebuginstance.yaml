@@ -1,0 +1,13 @@
+apiVersion: shop.shopware.com/v1
+kind: TerminalDebugInstance
+metadata:
+  labels:
+    app.kubernetes.io/name: shopware-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: terminaldebuginstance-sample
+spec:
+  duration: 1h
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: composable-frontends
+  container: composable-frontends

@@ -20,14 +20,7 @@ func DebugService(store v1.Store, debugInstance v1.StoreDebugInstance) *corev1.S
 	}
 
 	// Add any extra ports from the debug instance
-	for _, port := range debugInstance.Spec.ExtraContainerPorts {
-		ports = append(ports, corev1.ServicePort{
-			Name:       port.Name,
-			Protocol:   port.Protocol,
-			Port:       port.ContainerPort,
-			TargetPort: intstr.FromInt32(port.ContainerPort),
-		})
-	}
+	ports = append(ports, servicePorts(debugInstance.Spec.ExtraContainerPorts, "http")...)
 
 	selector := util.GetDefaultStoreInstanceDebugLabels(store, debugInstance)
 
