@@ -20,6 +20,7 @@ import (
 
 const (
 	workerTimeLimitSeconds int64 = 300
+	FailureTransportName         = "failed"
 )
 
 func WorkerQueues(store v1.Store) []string {
@@ -29,6 +30,9 @@ func WorkerQueues(store v1.Store) []string {
 
 	queues := make([]string, 0, len(store.Status.QueueState.Transports))
 	for _, transport := range store.Status.QueueState.Transports {
+		if transport.Name == FailureTransportName {
+			continue
+		}
 		queues = append(queues, transport.Name)
 	}
 	return queues
