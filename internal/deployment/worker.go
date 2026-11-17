@@ -233,6 +233,9 @@ func WorkerDeployment(store v1.Store, consumeQueues []string) *appsv1.Deployment
 	if phpMemoryLimitMiB > 0 {
 		consume += fmt.Sprintf(" --memory-limit=%dM", phpMemoryLimitMiB)
 	}
+	if store.Spec.Worker.Keepalive > 0 {
+		consume += fmt.Sprintf(" --keepalive=%d", store.Spec.Worker.Keepalive)
+	}
 	workerScript := fmt.Sprintf(
 		`term() {
   trap - TERM INT QUIT

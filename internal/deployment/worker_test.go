@@ -425,3 +425,24 @@ func TestWorkerQueuesSkipFailureTransport(t *testing.T) {
 		assert.Empty(t, workers)
 	})
 }
+
+func TestWorkerDeploymentKeepalive(t *testing.T) {
+	store := v1.Store{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-store", Namespace: "test"},
+		Spec:       v1.StoreSpec{SecretName: "store-secret", Container: v1.ContainerSpec{Replicas: 1}},
+	}
+
+	t.Run("disabled by default", func(t *testing.T) {
+		result := deployment.WorkerDeployment(store, []string{"async"})
+		args := result.Spec.Template.Spec.Containers[len(result.Spec.Template.Spec.Containers)-1].Args[0]
+		assert.NotContains(t, args, "--keepalive")
+	})
+
+	t.Run("adds keepalive interval", func(t *testing.T) {
+		keepaliveStore := store
+		keepaliveStore.Spec.Worker.Keepalive = 10
+		result := deployment.WorkerDeployment(keepaliveStore, []string{"async"})
+		args := result.Spec.Template.Spec.Containers[len(result.Spec.Template.Spec.Containers)-1].Args[0]
+		assert.Contains(t, args, "messenger:consume async --time-limit=300 -vv --keepalive=10")
+	})
+}

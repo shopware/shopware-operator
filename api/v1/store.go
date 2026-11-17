@@ -383,6 +383,9 @@ type WorkerSpec struct {
 	// +kubebuilder:default=100
 	// +kubebuilder:validation:Minimum=1
 	TargetQueueLength int32 `json:"targetQueueLength,omitempty"`
+	// +kubebuilder:description="Interval in seconds for the messenger:consume --keepalive option. Requires a Symfony version and transport that support keepalive. 0 disables it."
+	// +kubebuilder:validation:Minimum=0
+	Keepalive int32 `json:"keepalive,omitempty"`
 
 	// +kubebuilder:validation:Enum=builtin;redis
 	Adapter string `json:"adapter"`
