@@ -375,3 +375,74 @@ func TestWorkerDeploymentQueueLabels(t *testing.T) {
 			"messenger:consume failed async low_priority --time-limit=300")
 	})
 }
+
+func TestWorkerQueuesSkipFailureTransport(t *testing.T) {
+	store := v1.Store{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-store", Namespace: "test"},
+		Spec:       v1.StoreSpec{SecretName: "store-secret", Container: v1.ContainerSpec{Replicas: 1}},
+	}
+	store.Status.QueueState.Transports = []v1.QueueTransportStats{
+		{Name: "async", Count: 1},
+		{Name: deployment.FailureTransportName, Count: 5},
+		{Name: "low_priority", Count: 0},
+	}
+
+	assert.Equal(t, []string{"async", "low_priority"}, deployment.WorkerQueues(store))
+
+	t.Run("single deployment without keda does not consume failed", func(t *testing.T) {
+		workers, err := deployment.WorkerDeployments(store)
+		require.NoError(t, err)
+		require.Len(t, workers, 1)
+		args := strings.Join(workers[0].Spec.Template.Spec.Containers[len(workers[0].Spec.Template.Spec.Containers)-1].Args, " ")
+		assert.Contains(t, args, "messenger:consume async low_priority --time-limit=300")
+		assert.NotContains(t, args, deployment.FailureTransportName)
+	})
+
+	t.Run("keda creates no deployment or scaled object for failed", func(t *testing.T) {
+		kedaStore := store
+		kedaStore.Spec.Worker.EnableKedaScaling = true
+
+		workers, err := deployment.WorkerDeployments(kedaStore)
+		require.NoError(t, err)
+		require.Len(t, workers, 2)
+		for _, w := range workers {
+			assert.NotEqual(t, deployment.FailureTransportName, w.Labels[util.ShopwareKey("worker.queue")])
+		}
+
+		objects, err := deployment.WorkerScaledObjects(kedaStore, "http://metrics")
+		require.NoError(t, err)
+		require.Len(t, objects, 2)
+		for _, o := range objects {
+			assert.NotEqual(t, deployment.FailureTransportName, o.Labels[util.ShopwareKey("worker.queue")])
+		}
+	})
+
+	t.Run("only failed transport yields no workers", func(t *testing.T) {
+		onlyFailed := store
+		onlyFailed.Status.QueueState.Transports = []v1.QueueTransportStats{{Name: deployment.FailureTransportName}}
+		workers, err := deployment.WorkerDeployments(onlyFailed)
+		require.NoError(t, err)
+		assert.Empty(t, workers)
+	})
+}
+
+func TestWorkerDeploymentKeepalive(t *testing.T) {
+	store := v1.Store{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-store", Namespace: "test"},
+		Spec:       v1.StoreSpec{SecretName: "store-secret", Container: v1.ContainerSpec{Replicas: 1}},
+	}
+
+	t.Run("disabled by default", func(t *testing.T) {
+		result := deployment.WorkerDeployment(store, []string{"async"})
+		args := result.Spec.Template.Spec.Containers[len(result.Spec.Template.Spec.Containers)-1].Args[0]
+		assert.NotContains(t, args, "--keepalive")
+	})
+
+	t.Run("adds keepalive interval", func(t *testing.T) {
+		keepaliveStore := store
+		keepaliveStore.Spec.Worker.Keepalive = 10
+		result := deployment.WorkerDeployment(keepaliveStore, []string{"async"})
+		args := result.Spec.Template.Spec.Containers[len(result.Spec.Template.Spec.Containers)-1].Args[0]
+		assert.Contains(t, args, "messenger:consume async --time-limit=300 -vv --keepalive=10")
+	})
+}
