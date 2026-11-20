@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strconv"
 
 	v1 "github.com/shopware/shopware-operator/api/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -19,6 +20,19 @@ const (
 	maxSpareServersRatio = 0.375
 	memoryPerChildMiB    = 80 // Every PHP-FPM process in an empty shop uses 70.6MiB
 )
+
+// requestTerminateTimeoutEnv is empty when unset or zero, so php-fpm keeps its default and
+// extraEnvs stay free to set the variable themselves.
+func requestTerminateTimeoutEnv(timeout *metav1.Duration) []corev1.EnvVar {
+	if timeout == nil || timeout.Duration <= 0 {
+		return nil
+	}
+
+	return []corev1.EnvVar{{
+		Name:  "FPM_REQUEST_TERMINATE_TIMEOUT",
+		Value: strconv.Itoa(int(timeout.Seconds())),
+	}}
+}
 
 func progressDeadlineExceeded(deployment *appsv1.Deployment) bool {
 	for _, con := range deployment.Status.Conditions {
