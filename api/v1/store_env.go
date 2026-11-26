@@ -267,49 +267,11 @@ func (f *FPMSpec) getFPMConfiguration() []corev1.EnvVar {
 
 // https://symfony.com/doc/current/messenger.html#transport-configuration
 func (s *Store) getWorker() []corev1.EnvVar {
-	if s.Spec.Worker.Adapter == "redis" {
-		// If DSN is provided, use it directly
-		if s.Spec.Worker.RedisDSN != "" {
-			return []corev1.EnvVar{
-				{
-					Name:  "MESSENGER_TRANSPORT_DSN",
-					Value: s.Spec.Worker.RedisDSN,
-				},
-				{
-					Name: "MESSENGER_CONSUMER_NAME",
-					ValueFrom: &corev1.EnvVarSource{
-						FieldRef: &corev1.ObjectFieldSelector{
-							APIVersion: "v1",
-							FieldPath:  "metadata.name",
-						},
-					},
-				},
-			}
-		}
-
-		// Otherwise build from individual fields
-		return []corev1.EnvVar{
-			{
-				Name: "MESSENGER_TRANSPORT_DSN",
-				Value: fmt.Sprintf(
-					"redis://%s:%d/messages/symfony?auto_setup=true&serializer=1&stream_max_entries=0&dbindex=%d",
-					s.Spec.Worker.RedisHost,
-					s.Spec.Worker.RedisPort,
-					s.Spec.Worker.RedisIndex,
-				),
-			},
-			{
-				Name: "MESSENGER_CONSUMER_NAME",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						APIVersion: "v1",
-						FieldPath:  "metadata.name",
-					},
-				},
-			},
-		}
+	transport := s.Spec.Worker.Transport()
+	if transport == nil {
+		return []corev1.EnvVar{}
 	}
-	return []corev1.EnvVar{}
+	return transport.EnvVars()
 }
 
 func (s *Store) getOpensearch() []corev1.EnvVar {

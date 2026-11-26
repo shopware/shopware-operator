@@ -36,6 +36,13 @@ func TestGetSecretRefs(t *testing.T) {
 				AccessKeyRef:       v1.SecretRef{Name: "s3", Key: "access"},
 				SecretAccessKeyRef: v1.SecretRef{Name: "s3", Key: "secret"},
 			},
+			Worker: v1.WorkerSpec{
+				SQS: v1.SQSSpec{
+					DSNSecretRef:       v1.SecretRef{Name: "sqs", Key: "dsn"},
+					AccessKeyRef:       v1.SecretRef{Name: "sqs", Key: "access"},
+					SecretAccessKeyRef: v1.SecretRef{Name: "sqs", Key: "secret"},
+				},
+			},
 		},
 	}
 
@@ -50,10 +57,13 @@ func TestGetSecretRefs(t *testing.T) {
 		{Name: "tideways", Key: "api-key"},
 		{Name: "s3", Key: "access"},
 		{Name: "s3", Key: "secret"},
+		{Name: "sqs", Key: "dsn"},
+		{Name: "sqs", Key: "access"},
+		{Name: "sqs", Key: "secret"},
 	}, util.GetSecretRefs(store))
 
 	assert.ElementsMatch(t,
-		[]string{"db", "opensearch", "fastly", "admin", "tideways", "s3"},
+		[]string{"db", "opensearch", "fastly", "admin", "tideways", "s3", "sqs"},
 		util.GetReferencedSecretNames(store),
 	)
 }
