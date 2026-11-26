@@ -357,8 +357,10 @@ type SessionCacheSpec struct {
 	SavePath string `json:"savePath,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="self.adapter != 'sqs' || has(self.sqs)",message="sqs is required when adapter is sqs"
 type WorkerSpec struct {
 	RedisSpec `json:",inline"`
+	SQS       SQSSpec `json:"sqs,omitempty"`
 
 	// +kubebuilder:description="This will enable Keda scaling and will create a scaledobject per queue and split the queues into separate deployments."
 	EnableKedaScaling bool `json:"enableKedaScaling,omitempty"`
@@ -387,7 +389,7 @@ type WorkerSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	Keepalive int32 `json:"keepalive,omitempty"`
 
-	// +kubebuilder:validation:Enum=builtin;redis
+	// +kubebuilder:validation:Enum=builtin;redis;sqs
 	Adapter string `json:"adapter"`
 }
 
