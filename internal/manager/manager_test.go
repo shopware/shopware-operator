@@ -449,10 +449,11 @@ func TestReconcileResourcesCreatesWorkerPerQueue(t *testing.T) {
 	}
 
 	staleWorker := deployment.WorkerDeployment(*store, []string{"mail"})
+	staleFailedWorker := deployment.WorkerDeployment(*store, []string{"failed"})
 	scheme := testScheme(t)
 	c := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(dbSecret(), staleWorker).
+		WithObjects(dbSecret(), staleWorker, staleFailedWorker).
 		Build()
 	m := manager.NewStoreStateManager(&base.Base{
 		Client:             c,
@@ -475,13 +476,11 @@ func TestReconcileResourcesCreatesWorkerPerQueue(t *testing.T) {
 	}
 	assert.ElementsMatch(t, []string{
 		"test-store-store-worker-async",
-		"test-store-store-worker-failed",
 		"test-store-store-worker-low-priority-e718f68a",
-	}, names, "one worker per transport, stale worker cleaned up")
+	}, names, "one worker per transport except failed, stale workers cleaned up")
 
 	queueByName := map[string]string{
 		"test-store-store-worker-async":                 "async",
-		"test-store-store-worker-failed":                "failed",
 		"test-store-store-worker-low-priority-e718f68a": "low_priority",
 	}
 	for _, d := range workers.Items {
@@ -515,7 +514,8 @@ func TestReconcileResourcesCombinedWorkerWithoutKeda(t *testing.T) {
 	require.NoError(t, c.Get(context.Background(),
 		types.NamespacedName{Namespace: "test", Name: "test-store-store-worker"}, worker))
 	assert.Contains(t, worker.Spec.Template.Spec.Containers[0].Args[0],
-		"messenger:consume failed async low_priority email --time-limit=300")
+		"messenger:consume async low_priority email --time-limit=300")
+	assert.NotContains(t, worker.Spec.Template.Spec.Containers[0].Args[0], "failed")
 }
 
 func TestReconcileResourcesCreatesScaledObjectsWhenKedaEnabled(t *testing.T) {

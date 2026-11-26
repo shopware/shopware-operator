@@ -20,6 +20,7 @@ import (
 
 const (
 	workerTimeLimitSeconds int64 = 300
+	FailureTransportName         = "failed"
 )
 
 func WorkerQueues(store v1.Store) []string {
@@ -29,6 +30,9 @@ func WorkerQueues(store v1.Store) []string {
 
 	queues := make([]string, 0, len(store.Status.QueueState.Transports))
 	for _, transport := range store.Status.QueueState.Transports {
+		if transport.Name == FailureTransportName {
+			continue
+		}
 		queues = append(queues, transport.Name)
 	}
 	return queues
@@ -228,6 +232,9 @@ func WorkerDeployment(store v1.Store, consumeQueues []string) *appsv1.Deployment
 	consume := fmt.Sprintf("bin/console messenger:consume %s --time-limit=%d -vv", strings.Join(consumeQueues, " "), workerTimeLimitSeconds)
 	if phpMemoryLimitMiB > 0 {
 		consume += fmt.Sprintf(" --memory-limit=%dM", phpMemoryLimitMiB)
+	}
+	if store.Spec.Worker.Keepalive > 0 {
+		consume += fmt.Sprintf(" --keepalive=%d", store.Spec.Worker.Keepalive)
 	}
 	workerScript := fmt.Sprintf(
 		`term() {
