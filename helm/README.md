@@ -31,6 +31,23 @@ helm install my-operator shopware/operator --namespace my-namespace --create-nam
 
 Checkout the [values.yaml](values.yaml) file to modify the operator deployment.
 
+## Extra objects
+
+Use `extraObjects` to install additional manifests (e.g. a `Store` resource, Secrets or ConfigMaps) with the chart.
+Each entry is either a YAML object or a multi-line string, and both are rendered through `tpl`, so
+templates like `{{ .Release.Namespace }}` work:
+
+```yaml
+extraObjects:
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: example
+      namespace: "{{ .Release.Namespace }}"
+    data:
+      key: value
+```
+
 ## Custom resource definitions
 
 The chart renders its Custom Resource Definitions (CRDs) as regular templates, so `helm install` and

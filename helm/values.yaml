@@ -164,3 +164,23 @@ metrics:
     #   additionalLabels:
     #     release: kube-prometheus-stack
     additionalLabels: {}
+
+# extraObjects: additional Kubernetes manifests rendered together with the chart.
+# Each entry is either a YAML object or a string. Both are passed through `tpl`,
+# so Helm templating (e.g. {{ .Release.Namespace }}) can be used.
+#   extraObjects:
+#     - apiVersion: v1
+#       kind: ConfigMap
+#       metadata:
+#         name: example
+#         namespace: "{{ .Release.Namespace }}"
+#       data:
+#         key: value
+#     - |
+#       apiVersion: v1
+#       kind: Secret
+#       metadata:
+#         name: {{ .Release.Name }}-example
+#       stringData:
+#         key: value
+extraObjects: []
