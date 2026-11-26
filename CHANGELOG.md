@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.13.0](https://github.com/shopware/shopware-operator/compare/1.12.4...v1.13.0) (2026-11-26)
+
+
+### Features
+
+* add keepalive feature ([65249d4](https://github.com/shopware/shopware-operator/commit/65249d41007351471bdc9b3a7abf62af003bae80))
+
+
+### Bug Fixes
+
+* remove failed queue ([9c822df](https://github.com/shopware/shopware-operator/commit/9c822dfcfc237596ac0f0c9b16775eaf18a5b3e3))
+* remove failed queue ([f1562f9](https://github.com/shopware/shopware-operator/commit/f1562f90dbe655eef7c841343ef336e8d2239447))
+
 ## [1.12.4](https://github.com/shopware/shopware-operator/compare/1.12.3...v1.12.4) (2026-11-12)
 
 
