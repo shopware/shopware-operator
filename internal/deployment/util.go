@@ -17,7 +17,11 @@ const (
 	startServersRatio    = 0.25
 	minSpareServersRatio = 0.2
 	maxSpareServersRatio = 0.375
-	memoryPerChildMiB    = 80 // Every PHP-FPM process in an empty shop uses 70.6MiB
+	memoryPerChildMiB    = 80  // Allowance for the heap of one request, an idle child only holds 10-15MiB of private memory
+	fpmOverheadMiB       = 350 // Opcache (up to 256MiB shared memory), Caddy, supervisord and kernel memory
+	minChildren          = 2
+	minPHPMemoryLimitMiB = 256
+	maxRequestsPerChild  = 500
 )
 
 func progressDeadlineExceeded(deployment *appsv1.Deployment) bool {
@@ -145,10 +149,12 @@ func GetStoreDeploymentImage(
 }
 
 func GetCalculatedPHPFPMValues(memoryLimitMiB int) []corev1.EnvVar {
-	maxChildren := int(math.Round(float64(memoryLimitMiB / memoryPerChildMiB)))
-	startServers := int(math.Round(float64(maxChildren) * startServersRatio))
-	minSpare := int(math.Round(float64(maxChildren) * minSpareServersRatio))
+	usableMiB := max(memoryLimitMiB-fpmOverheadMiB, 0)
+	maxChildren := max(usableMiB/memoryPerChildMiB, minChildren)
+	startServers := max(int(math.Round(float64(maxChildren)*startServersRatio)), 1)
+	minSpare := max(int(math.Round(float64(maxChildren)*minSpareServersRatio)), 1)
 	maxSpare := int(math.Round(float64(maxChildren)*maxSpareServersRatio) + 1)
+	phpMemoryLimitMiB := max(usableMiB, minPHPMemoryLimitMiB)
 
 	return []corev1.EnvVar{
 		{
@@ -170,6 +176,14 @@ func GetCalculatedPHPFPMValues(memoryLimitMiB int) []corev1.EnvVar {
 		{
 			Name:  "FPM_PM_MAX_SPARE_SERVERS",
 			Value: fmt.Sprintf("%d", maxSpare),
+		},
+		{
+			Name:  "FPM_PM_MAX_REQUESTS",
+			Value: fmt.Sprintf("%d", maxRequestsPerChild),
+		},
+		{
+			Name:  "PHP_MEMORY_LIMIT",
+			Value: fmt.Sprintf("%dM", phpMemoryLimitMiB),
 		},
 	}
 }
