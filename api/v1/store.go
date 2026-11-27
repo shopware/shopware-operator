@@ -317,6 +317,13 @@ type ContainerSpec struct {
 	// +kubebuilder:default=false
 	EnableServiceLinks *bool `json:"enableServiceLinks,omitempty"`
 
+	// RequestTerminateTimeout kills php-fpm workers stuck longer than this so they can serve
+	// new requests, e.g. "65s". Keep it slightly above the proxy timeout (60s by default), so
+	// the proxy answers with a timeout before the worker is killed.
+	// Only used by the admin and storefront deployments. Unset or "0s" disables it.
+	// A deployment can opt out of a value set in the shared container by setting "0s".
+	RequestTerminateTimeout *metav1.Duration `json:"requestTerminateTimeout,omitempty"`
+
 	// Configuration string `json:"configuration,omitempty"`
 	ExtraEnvs []corev1.EnvVar `json:"extraEnvs,omitempty"`
 }
@@ -347,6 +354,13 @@ type ContainerMergeSpec struct {
 	ExtraEnvs          []corev1.EnvVar             `json:"extraEnvs,omitempty"`
 	ServiceAccountName string                      `json:"serviceAccountName,omitempty"`
 	EnableServiceLinks *bool                       `json:"enableServiceLinks,omitempty"`
+
+	// RequestTerminateTimeout kills php-fpm workers stuck longer than this so they can serve
+	// new requests, e.g. "65s". Keep it slightly above the proxy timeout (60s by default), so
+	// the proxy answers with a timeout before the worker is killed.
+	// Only used by the admin and storefront deployments. Unset or "0s" disables it.
+	// A deployment can opt out of a value set in the shared container by setting "0s".
+	RequestTerminateTimeout *metav1.Duration `json:"requestTerminateTimeout,omitempty"`
 }
 
 type SessionCacheSpec struct {
@@ -617,6 +631,9 @@ func (c *ContainerSpec) Merge(from ContainerMergeSpec) {
 	}
 	if from.EnableServiceLinks != nil {
 		c.EnableServiceLinks = from.EnableServiceLinks
+	}
+	if from.RequestTerminateTimeout != nil {
+		c.RequestTerminateTimeout = from.RequestTerminateTimeout
 	}
 
 	// Initialize resources maps if nil
